@@ -1921,9 +1921,20 @@ export default function App() {
         {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-logo">
-            <div className="logo-title">OBLIVION</div>
-            <div className="logo-sub">Guild Manager</div>
-          </div>
+  <img
+    src="/oblivion-guild-manager/oblivion-logo.png"
+    alt="Oblivion Guild"
+    style={{
+      width: "100%",
+      maxWidth: 160,
+      height: "auto",
+      display: "block",
+      margin: "0 auto 8px",
+      borderRadius: 8,
+    }}
+  />
+  <div className="logo-sub" style={{textAlign:"center"}}>Guild Manager</div>
+</div>
           <div className="sidebar-nav">
             {NAV_ITEMS.map(item => {
               const counts = {
