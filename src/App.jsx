@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-
+import { db } from "./firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const INITIAL_MEMBERS = [
   { memberId: "OBL001", ign: "DarkReaper", class: "Assassin Cross", role: "DPS" },
@@ -2207,7 +2208,60 @@ export default function App() {
   const [toast, setToast] = useState(null);
   // Party state lifted here so it persists across tab switches
   const [parties, setParties] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+
+  // ── Load data from Firebase on startup
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const snap = await getDoc(doc(db, "guilddata", "main"));
+        if (snap.exists()) {
+          const data = snap.data();
+          setMembers(data.members || INITIAL_MEMBERS);
+          setEvents(data.events || INITIAL_EVENTS);
+          setAttendance(data.attendance || INITIAL_ATTENDANCE);
+          setPerformance(data.performance || INITIAL_PERFORMANCE);
+          setAbsences(data.absences || []);
+          setParties(data.parties || []);
+        } else {
+          await setDoc(doc(db, "guilddata", "main"), {
+            members: INITIAL_MEMBERS,
+            events: INITIAL_EVENTS,
+            attendance: INITIAL_ATTENDANCE,
+            performance: INITIAL_PERFORMANCE,
+            absences: [],
+            parties: [],
+          });
+          setMembers(INITIAL_MEMBERS);
+          setEvents(INITIAL_EVENTS);
+          setAttendance(INITIAL_ATTENDANCE);
+          setPerformance(INITIAL_PERFORMANCE);
+        }
+      } catch (err) {
+        console.error("Firebase load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // ── Auto-save to Firebase whenever data changes
+  useEffect(() => {
+    if (loading) return;
+    const saveData = async () => {
+      try {
+        await setDoc(doc(db, "guilddata", "main"), {
+          members, events, attendance, performance, absences, parties
+        });
+      } catch (err) {
+        console.error("Firebase save error:", err);
+      }
+    };
+    const timeout = setTimeout(saveData, 1000);
+    return () => clearTimeout(timeout);
+  }, [members, events, attendance, performance, absences, parties, loading]);
   const showToast = (message, type = "success") => {
     setToast({ message, type, key: Date.now() });
   };
