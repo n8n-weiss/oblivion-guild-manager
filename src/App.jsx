@@ -235,6 +235,8 @@ const styles = `
     color: var(--accent);
     border-color: var(--border-bright);
     box-shadow: 0 0 12px rgba(99,130,230,0.1);
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
   }
   .sidebar-footer {
     padding: 16px 20px;
@@ -306,12 +308,20 @@ const styles = `
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 18px 20px;
+    padding: 18px 20px 18px 24px;
     position: relative;
     overflow: hidden;
     transition: border-color 0.2s;
   }
   .stat-card:hover { border-color: var(--border-bright); }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--stat-accent, var(--accent));
+    border-radius: 12px 0 0 12px;
+  }
   .stat-label {
     font-size: 12px;
     letter-spacing: 2px;
@@ -361,6 +371,9 @@ const styles = `
   tbody tr {
     border-bottom: 1px solid var(--border);
     transition: background 0.15s;
+  }
+  tbody tr:nth-child(even) {
+    background: rgba(99,130,230,0.03);
   }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--bg-hover); }
@@ -786,22 +799,22 @@ function Dashboard({ members, events, attendance, performance }) {
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card" style={{"--stat-accent":"var(--accent)"}}>
           <div className="stat-label">Total Members</div>
           <div className="stat-value" style={{ color: "var(--accent)" }}>{members.length}</div>
           <div className="stat-change">Registered guild members</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" style={{"--stat-accent":"var(--green)"}}>
           <div className="stat-label">Active Members</div>
           <div className="stat-value" style={{ color: "var(--green)" }}>{activeMembers}</div>
           <div className="stat-change">Core + Active classification</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" style={{"--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)"}}>
           <div className="stat-label">Attendance Rate</div>
           <div className="stat-value" style={{ color: attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)" }}>{attRate}%</div>
           <div className="stat-change">All events combined</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" style={{"--stat-accent":"var(--gold)"}}>
           <div className="stat-label">Total Events</div>
           <div className="stat-value" style={{ color: "var(--gold)" }}>{events.length}</div>
           <div className="stat-change">{events.filter(e=>e.eventType==="Guild League").length} GL · {events.filter(e=>e.eventType==="Emperium Overrun").length} EO</div>
@@ -928,6 +941,28 @@ function Dashboard({ members, events, attendance, performance }) {
 }
 
 // ─── MEMBERS ──────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  {bg:"rgba(99,130,230,0.18)",color:"var(--accent)"},
+  {bg:"rgba(224,92,138,0.18)",color:"var(--accent2)"},
+  {bg:"rgba(64,201,122,0.18)",color:"var(--green)"},
+  {bg:"rgba(240,192,64,0.18)",color:"var(--gold)"},
+  {bg:"rgba(167,139,250,0.18)",color:"#a78bfa"},
+  {bg:"rgba(56,189,248,0.18)",color:"#38bdf8"},
+  {bg:"rgba(251,146,60,0.18)",color:"#fb923c"},
+  {bg:"rgba(244,114,182,0.18)",color:"#f472b6"},
+  {bg:"rgba(52,211,153,0.18)",color:"#34d399"},
+  {bg:"rgba(251,191,36,0.18)",color:"#fbbf24"},
+];
+function MemberAvatar({ ign, index, size=34 }) {
+  const c = AVATAR_COLORS[(index || 0) % AVATAR_COLORS.length];
+  const initials = ign ? ign.slice(0,2).toUpperCase() : "??";
+  return (
+    <div style={{width:size,height:size,borderRadius:8,background:c.bg,color:c.color,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Cinzel,serif",fontSize:size*0.38,fontWeight:700,flexShrink:0}}>
+      {initials}
+    </div>
+  );
+}
 function MembersPage({ members, setMembers, showToast }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
@@ -1005,7 +1040,12 @@ function MembersPage({ members, setMembers, showToast }) {
               {filtered.map(m => (
                 <tr key={m.memberId}>
                   <td><span className="font-cinzel text-xs text-muted">{m.memberId}</span></td>
-                  <td><span style={{fontWeight:700}}>{m.ign}</span></td>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <MemberAvatar ign={m.ign} index={members.indexOf(m)} size={34} />
+                      <span style={{fontWeight:700}}>{m.ign}</span>
+                    </div>
+                  </td>
                   <td><span className="text-secondary">{m.class}</span></td>
                   <td>
                     <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`}>
@@ -1197,7 +1237,11 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                                   disabled={m.att?.status !== "present"} />
                               </td>
                               <td>
-                                <span style={{fontFamily:"Cinzel,serif",fontSize:14,fontWeight:700,color:score<0?"var(--red)":score>20?"var(--gold)":"var(--green)"}}>{score}</span>
+                                <span style={{fontFamily:"Cinzel,serif",fontSize:15,fontWeight:700,
+                                  color:score<0?"var(--red)":score>=30?"var(--gold)":score>=15?"var(--green)":"var(--accent)",
+                                  textShadow:score<0?"0 0 8px rgba(224,80,80,0.4)":score>=30?"0 0 8px rgba(240,192,64,0.4)":"0 0 8px rgba(64,201,122,0.3)"}}>
+                                  {score>0?`+${score}`:score}
+                                </span>
                               </td>
                               <td>
                                 <button className="btn btn-ghost btn-sm" onClick={() => savePerformance(m.memberId, selectedEvent.eventId)}><Icon name="save" size={12}/></button>
@@ -1205,7 +1249,11 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                             </>
                           )}
                           {selectedEvent.eventType === "Emperium Overrun" && (
-                            <td><span style={{fontFamily:"Cinzel,serif",fontSize:14,fontWeight:700,color:score>0?"var(--green)":"var(--red)"}}>{score}</span></td>
+                            <td><span style={{fontFamily:"Cinzel,serif",fontSize:15,fontWeight:700,
+                              color:score>0?"var(--green)":"var(--red)",
+                              textShadow:score>0?"0 0 8px rgba(64,201,122,0.4)":"0 0 8px rgba(224,80,80,0.4)"}}>
+                              {score>0?`+${score}`:score}
+                            </span></td>
                           )}
                         </tr>
                       );
@@ -1400,8 +1448,13 @@ function LeaderboardPage({ members, events, attendance, performance }) {
                     </span>
                   </td>
                   <td>
-                    <div style={{fontWeight:700}}>{m.ign}</div>
-                    <div className="text-xs text-muted">{m.class}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <MemberAvatar ign={m.ign} index={m.rank-1} size={34} />
+                      <div>
+                        <div style={{fontWeight:700}}>{m.ign}</div>
+                        <div className="text-xs text-muted">{m.class}</div>
+                      </div>
+                    </div>
                   </td>
                   <td><span className={`badge ${m.role==="DPS"?"badge-dps":"badge-support"}`} style={{fontSize:10}}>{m.role}</span></td>
                   <td><span className="font-cinzel" style={{fontSize:15,fontWeight:700,color:m.totalScore>80?"var(--gold)":m.totalScore>60?"var(--green)":"var(--text-primary)"}}>{m.totalScore}</span></td>
@@ -1872,12 +1925,28 @@ export default function App() {
             <div className="logo-sub">Guild Manager</div>
           </div>
           <div className="sidebar-nav">
-            {NAV_ITEMS.map(item => (
-              <div key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => setPage(item.id)}>
-                <Icon name={item.icon} size={16} />
-                {item.label}
-              </div>
-            ))}
+            {NAV_ITEMS.map(item => {
+              const counts = {
+                members: members.length,
+                events: events.length,
+                absences: absences.length,
+              };
+              const count = counts[item.id];
+              return (
+                <div key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => setPage(item.id)}
+                  style={{justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <Icon name={item.icon} size={16} />
+                    {item.label}
+                  </div>
+                  {count !== undefined && (
+                    <span style={{background:"rgba(99,130,230,0.15)",color:"var(--accent)",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,minWidth:20,textAlign:"center"}}>
+                      {count}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="sidebar-footer">
             <div>⚔ Ragnarok Online</div>
