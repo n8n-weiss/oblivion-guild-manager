@@ -28,13 +28,14 @@ Error generating stack: `+e.message+`
     --text-primary: #e8eaf6;
     --text-secondary: #8892b0;
     --text-muted: #4a5568;
-    --sidebar-w: 220px;
+    --sidebar-w: 250px;
   }
 
   * { margin:0; padding:0; box-sizing:border-box; }
   
   body {
     font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
     background: var(--bg-deepest);
     color: var(--text-primary);
     min-height: 100vh;
@@ -64,7 +65,7 @@ Error generating stack: `+e.message+`
   }
   .logo-title {
     font-family: 'Cinzel', serif;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 900;
     letter-spacing: 1px;
     color: var(--accent);
@@ -72,7 +73,7 @@ Error generating stack: `+e.message+`
     line-height: 1.2;
   }
   .logo-sub {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 3px;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -92,7 +93,7 @@ Error generating stack: `+e.message+`
     padding: 10px 12px;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     letter-spacing: 0.5px;
     color: var(--text-secondary);
@@ -114,7 +115,7 @@ Error generating stack: `+e.message+`
   .sidebar-footer {
     padding: 16px 20px;
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text-muted);
     letter-spacing: 1px;
   }
@@ -123,7 +124,7 @@ Error generating stack: `+e.message+`
   .main-content {
     margin-left: var(--sidebar-w);
     flex: 1;
-    padding: 28px 32px;
+    padding: 36px 44px;
     min-height: 100vh;
     background: radial-gradient(ellipse at 20% 0%, rgba(99,130,230,0.05) 0%, transparent 60%);
   }
@@ -132,13 +133,13 @@ Error generating stack: `+e.message+`
   }
   .page-title {
     font-family: 'Cinzel', serif;
-    font-size: 22px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: 1px;
   }
   .page-subtitle {
-    font-size: 13px;
+    font-size: 15px;
     color: var(--text-secondary);
     margin-top: 4px;
     letter-spacing: 0.5px;
@@ -162,12 +163,12 @@ Error generating stack: `+e.message+`
   }
   .card-title {
     font-family: 'Cinzel', serif;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     letter-spacing: 1.5px;
     color: var(--text-secondary);
     text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
   }
 
   /* ── Stat Cards ── */
@@ -188,7 +189,7 @@ Error generating stack: `+e.message+`
   }
   .stat-card:hover { border-color: var(--border-bright); }
   .stat-label {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -197,12 +198,12 @@ Error generating stack: `+e.message+`
   }
   .stat-value {
     font-family: 'Cinzel', serif;
-    font-size: 32px;
+    font-size: 40px;
     font-weight: 700;
     line-height: 1;
   }
   .stat-change {
-    font-size: 11px;
+    font-size: 13px;
     margin-top: 6px;
     color: var(--text-muted);
   }
@@ -223,10 +224,10 @@ Error generating stack: `+e.message+`
     border-bottom: 1px solid var(--border);
   }
   thead th {
-    padding: 11px 16px;
+    padding: 14px 18px;
     text-align: left;
     font-family: 'Cinzel', serif;
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 1.5px;
     color: var(--text-muted);
     font-weight: 600;
@@ -240,9 +241,10 @@ Error generating stack: `+e.message+`
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--bg-hover); }
   tbody td {
-    padding: 12px 16px;
+    padding: 15px 18px;
     color: var(--text-primary);
     font-weight: 500;
+    font-size: 15px;
   }
 
   /* ── Badges ── */
@@ -250,9 +252,9 @@ Error generating stack: `+e.message+`
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 20px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
@@ -273,10 +275,10 @@ Error generating stack: `+e.message+`
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 16px;
+    padding: 10px 20px;
     border-radius: 8px;
     font-family: 'Rajdhani', sans-serif;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.5px;
     cursor: pointer;
@@ -310,7 +312,7 @@ Error generating stack: `+e.message+`
   .form-grid-2 { grid-template-columns: 1fr 1fr; }
   .form-group { display: flex; flex-direction: column; gap: 6px; }
   .form-label {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -320,10 +322,10 @@ Error generating stack: `+e.message+`
     background: var(--bg-deepest);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px 14px;
+    padding: 12px 16px;
     color: var(--text-primary);
     font-family: 'Rajdhani', sans-serif;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 500;
     transition: border-color 0.18s, box-shadow 0.18s;
     outline: none;
@@ -375,7 +377,7 @@ Error generating stack: `+e.message+`
   }
   .modal-title {
     font-family: 'Cinzel', serif;
-    font-size: 17px;
+    font-size: 20px;
     font-weight: 700;
     margin-bottom: 20px;
     color: var(--text-primary);
@@ -457,9 +459,9 @@ Error generating stack: `+e.message+`
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 0;
+    padding: 8px 0;
     border-bottom: 1px solid rgba(255,255,255,0.04);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 500;
   }
   .party-member:last-child { border-bottom: none; }
@@ -501,9 +503,9 @@ Error generating stack: `+e.message+`
     flex-shrink: 0;
   }
   .player-info { flex: 1; min-width: 0; }
-  .player-ign { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .player-class { font-size: 11px; color: var(--text-muted); }
-  .player-score { font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; }
+  .player-ign { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-class { font-size: 13px; color: var(--text-muted); }
+  .player-score { font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700; }
 
   /* ── Notifications / toasts ── */
   .toast {
@@ -588,8 +590,8 @@ Error generating stack: `+e.message+`
   .text-green { color: var(--green); }
   .text-red { color: var(--red); }
   .font-cinzel { font-family: 'Cinzel', serif; }
-  .text-sm { font-size: 12px; }
-  .text-xs { font-size: 11px; }
+  .text-sm { font-size: 14px; }
+  .text-xs { font-size: 13px; }
   .w-full { width: 100%; }
 
   @media (max-width: 900px) {
