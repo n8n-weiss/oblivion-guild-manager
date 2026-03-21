@@ -1164,7 +1164,7 @@ function MemberAvatar({ ign, index, size=34 }) {
     </div>
   );
 }
-function MembersPage({ members, setMembers, showToast }) {
+function MembersPage({ members, setMembers, showToast, onViewProfile }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
@@ -1244,7 +1244,8 @@ function MembersPage({ members, setMembers, showToast }) {
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
                       <MemberAvatar ign={m.ign} index={members.indexOf(m)} size={34} />
-                      <span style={{fontWeight:700}}>{m.ign}</span>
+                      <span style={{fontWeight:700,cursor:"pointer",color:"var(--accent)"}}
+                        onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</span>
                     </div>
                   </td>
                   <td><span className="text-secondary">{m.class}</span></td>
@@ -1643,7 +1644,7 @@ function AbsencesPage({ members, absences, setAbsences, showToast }) {
 }
 
 // ─── LEADERBOARD ──────────────────────────────────────────────────────────────
-function LeaderboardPage({ members, events, attendance, performance, eoRatings }) {
+function LeaderboardPage({ members, events, attendance, performance, eoRatings, onViewProfile }) {
   const [filter, setFilter] = useState("All");
   const [lbMode, setLbMode] = useState("gl"); // "gl" | "eo"
   const lb = useMemo(() => computeLeaderboard(members, events, attendance, performance), [members, events, attendance, performance]);
@@ -1756,7 +1757,8 @@ function LeaderboardPage({ members, events, attendance, performance, eoRatings }
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
                       <MemberAvatar ign={m.ign} index={m.rank-1} size={34} />
                       <div>
-                        <div style={{fontWeight:700}}>{m.ign}</div>
+                        <div style={{fontWeight:700,cursor:"pointer",color:"var(--accent)"}}
+                          onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</div>
                         <div className="text-xs text-muted">{m.class}</div>
                       </div>
                     </div>
@@ -2187,6 +2189,190 @@ function PartyBuilder({ members, events, attendance, parties, setParties }) {
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 
+
+// ─── MEMBER PROFILE ───────────────────────────────────────────────────────────
+function MemberProfilePage({ member, members, events, attendance, performance, absences, eoRatings, onBack }) {
+  if (!member) return null;
+
+  const memberIdx = members.findIndex(m => m.memberId === member.memberId);
+  const memberEvents = events.map(ev => {
+    const att = attendance.find(a => a.memberId === member.memberId && a.eventId === ev.eventId);
+    const perf = performance.find(p => p.memberId === member.memberId && p.eventId === ev.eventId);
+    const eoRating = eoRatings.find(r => r.memberId === member.memberId && r.eventId === ev.eventId);
+    const score = ev.eventType === "Guild League" && att?.status === "present"
+      ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0;
+    return { ...ev, att, perf, eoRating, score };
+  }).sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+
+  const glEvents = memberEvents.filter(e => e.eventType === "Guild League");
+  const eoEvents = memberEvents.filter(e => e.eventType === "Emperium Overrun");
+  const totalGLScore = glEvents.reduce((sum, e) => sum + e.score, 0);
+  const presentCount = memberEvents.filter(e => e.att?.status === "present").length;
+  const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
+  const avgGL = glEvents.filter(e => e.att?.status === "present").length > 0
+    ? Math.round((totalGLScore / glEvents.filter(e => e.att?.status === "present").length) * 10) / 10 : 0;
+  const eoRatingsList = eoRatings.filter(r => r.memberId === member.memberId);
+  const avgEoRating = eoRatingsList.length > 0
+    ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
+  const memberAbsences = absences.filter(a => a.memberId === member.memberId);
+
+  const attStatus = attPct >= 80 ? { label: "Reliable", badge: "badge-active" }
+    : attPct >= 60 ? { label: "Average", badge: "badge-casual" }
+    : { label: "At Risk", badge: "badge-atrisk" };
+
+  let scoreClass = "At Risk";
+  if (totalGLScore > 80) scoreClass = "Core";
+  else if (totalGLScore >= 60) scoreClass = "Active";
+  else if (totalGLScore >= 40) scoreClass = "Casual";
+  const scoreClassBadge = { Core:"badge-core", Active:"badge-active", Casual:"badge-casual", "At Risk":"badge-atrisk" };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <button className="btn btn-ghost" onClick={onBack}><Icon name="x" size={14}/> Back</button>
+          <div>
+            <h1 className="page-title">👤 Member Profile</h1>
+            <p className="page-subtitle">Full history and stats for {member.ign}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Header Card */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="flex items-center gap-4" style={{flexWrap:"wrap"}}>
+          <MemberAvatar ign={member.ign} index={memberIdx} size={72} />
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"Cinzel,serif",fontSize:22,fontWeight:700,color:"var(--text-primary)",marginBottom:8}}>{member.ign}</div>
+            <div className="flex gap-2" style={{flexWrap:"wrap",marginBottom:6}}>
+              <span className="text-secondary" style={{fontSize:14}}>{member.class}</span>
+              <span className={`badge ${member.role==="DPS"?"badge-dps":"badge-support"}`}>
+                {member.role==="DPS"?<Icon name="sword" size={10}/>:<Icon name="shield" size={10}/>} {member.role}
+              </span>
+              <span className={`badge ${attStatus.badge}`}>🎯 {attStatus.label}</span>
+              <span className={`badge ${scoreClassBadge[scoreClass]}`}>⚔ {scoreClass}</span>
+            </div>
+            <div className="text-xs text-muted">{member.memberId}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid" style={{marginBottom:20}}>
+        <div className="stat-card" style={{"--stat-accent":"var(--gold)"}}>
+          <div className="stat-icon">⚔</div>
+          <div className="stat-label">GL Score</div>
+          <div className="stat-value" style={{color:"var(--gold)"}}>{totalGLScore}</div>
+          <div className="stat-change">all time total</div>
+        </div>
+        <div className="stat-card" style={{"--stat-accent": attPct>=75?"var(--green)":attPct>=50?"var(--gold)":"var(--red)"}}>
+          <div className="stat-icon">📋</div>
+          <div className="stat-label">Attendance</div>
+          <div className="stat-value" style={{color: attPct>=75?"var(--green)":attPct>=50?"var(--gold)":"var(--red)"}}>{attPct}%</div>
+          <div className="stat-change">{presentCount}/{memberEvents.length} events</div>
+        </div>
+        <div className="stat-card" style={{"--stat-accent":"var(--accent)"}}>
+          <div className="stat-icon">📊</div>
+          <div className="stat-label">Avg / GL</div>
+          <div className="stat-value" style={{color:"var(--accent)"}}>{avgGL}</div>
+          <div className="stat-change">per event attended</div>
+        </div>
+        <div className="stat-card" style={{"--stat-accent":"var(--gold)"}}>
+          <div className="stat-icon">⭐</div>
+          <div className="stat-label">EO Rating</div>
+          <div className="stat-value" style={{color:"var(--gold)"}}>{avgEoRating > 0 ? `★${avgEoRating}` : "—"}</div>
+          <div className="stat-change">avg stars · {eoRatingsList.length} rated</div>
+        </div>
+      </div>
+
+      <div className="grid-2" style={{marginBottom:20}}>
+        {/* Event History */}
+        <div className="card" style={{gridColumn:"1/-1"}}>
+          <div className="card-title">📅 Event History</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Date</th><th>Type</th><th>Status</th><th>CTF</th><th>Perf Pts</th><th>Score / Rating</th>
+              </tr></thead>
+              <tbody>
+                {memberEvents.length === 0 && (
+                  <tr><td colSpan={6}><div className="empty-state"><div className="empty-state-text">No events yet</div></div></td></tr>
+                )}
+                {memberEvents.map(ev => (
+                  <tr key={ev.eventId}>
+                    <td><span style={{fontFamily:"Cinzel,serif",fontSize:13}}>{ev.eventDate}</span></td>
+                    <td>
+                      <span className={`badge ${ev.eventType==="Guild League"?"badge-gl":"badge-eo"}`} style={{fontSize:10}}>
+                        {ev.eventType==="Guild League"?"GL":"EO"}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{fontWeight:700,fontSize:13,color:ev.att?.status==="present"?"var(--green)":"var(--red)"}}>
+                        {ev.att?.status==="present"?"✓ Present":"✗ Absent"}
+                      </span>
+                    </td>
+                    <td className="text-secondary">
+                      {ev.eventType==="Guild League" && ev.att?.status==="present" ? (ev.perf?.ctfPoints ?? "—") : "—"}
+                    </td>
+                    <td className="text-secondary">
+                      {ev.eventType==="Guild League" && ev.att?.status==="present" ? (ev.perf?.performancePoints ?? "—") : "—"}
+                    </td>
+                    <td>
+                      {ev.eventType==="Guild League" && ev.att?.status==="present" ? (
+                        <span style={{fontFamily:"Cinzel,serif",fontWeight:700,color:"var(--green)",fontSize:14}}>{ev.score}</span>
+                      ) : ev.eventType==="Emperium Overrun" && ev.att?.status==="present" ? (
+                        <span style={{color:"var(--gold)"}}>
+                          {[1,2,3,4,5].map(s => (
+                            <span key={s} style={{fontSize:14,color:s<=(ev.eoRating?.rating||0)?"var(--gold)":"rgba(99,130,230,0.2)"}}>★</span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Absence Records */}
+      <div className="card">
+        <div className="card-title">⚠ Absence Records ({memberAbsences.length})</div>
+        {memberAbsences.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">✅</div>
+            <div className="empty-state-text">No absences on record</div>
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {memberAbsences.slice().reverse().map((a, i) => (
+              <div key={a.id||i} style={{
+                display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
+                background:"rgba(224,80,80,0.05)",borderRadius:10,
+                border:"1px solid rgba(224,80,80,0.2)"
+              }}>
+                <span style={{fontSize:18}}>⚠</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"var(--red)",marginBottom:2}}>
+                    {a.eventDate} · {a.eventType}
+                  </div>
+                  <div className="text-xs text-secondary" style={{fontStyle:"italic"}}>"{a.reason}"</div>
+                </div>
+                <span style={{fontSize:12,color:a.onlineStatus==="Yes"?"var(--green)":"var(--text-muted)"}}>
+                  Online: {a.onlineStatus}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── WEEKLY REPORT ────────────────────────────────────────────────────────────
 function WeeklyReportPage({ members, events, attendance, performance, eoRatings }) {
   const [copied, setCopied] = useState(false);
@@ -2580,6 +2766,7 @@ export default function App() {
   const [parties, setParties] = useState([]);
   const [eoRatings, setEoRatings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [profileMember, setProfileMember] = useState(null);
 
   // ── Load data from Firebase on startup
   useEffect(() => {
@@ -2679,7 +2866,7 @@ export default function App() {
               };
               const count = counts[item.id];
               return (
-                <div key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => setPage(item.id)}
+                <div key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => { setPage(item.id); setProfileMember(null); }}
                   style={{justifyContent:"space-between"}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <Icon name={item.icon} size={16} />
@@ -2703,10 +2890,12 @@ export default function App() {
         {/* Main */}
         <main className="main-content">
           {page === "dashboard" && <Dashboard members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
-          {page === "members" && <MembersPage members={members} setMembers={setMembers} showToast={showToast} />}
+          {page === "members" && !profileMember && <MembersPage members={members} setMembers={setMembers} showToast={showToast} onViewProfile={setProfileMember} />}
+          {page === "members" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
           {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} />}
           {page === "absences" && <AbsencesPage members={members} absences={absences} setAbsences={setAbsences} showToast={showToast} />}
-          {page === "leaderboard" && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
+          {page === "leaderboard" && !profileMember && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} onViewProfile={setProfileMember} />}
+          {page === "leaderboard" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
           {page === "party" && <PartyBuilder members={members} events={events} attendance={attendance} parties={parties} setParties={setParties} />}
           {page === "import" && <ImportPage members={members} setMembers={setMembers} showToast={showToast} />}
           {page === "report" && <WeeklyReportPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
