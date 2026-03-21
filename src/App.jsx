@@ -66,37 +66,60 @@ const INITIAL_PERFORMANCE = [
 ];
 
 // ─── SCORING ENGINE ───────────────────────────────────────────────────────────
-function computeScore({ member, event, att, perf }) {
+// ─── NEW SCORING: CTF + PP direct, attendance tracked separately
+function computeScore({ event, att, perf }) {
   const isPresent = att?.status === "present";
-  if (event.eventType === "Emperium Overrun") {
-    return isPresent ? 3 : -5;
-  }
-  if (!isPresent) return -5;
+  if (event.eventType === "Emperium Overrun") return 0; // EO = attendance only, no score
+  if (!isPresent) return 0; // absent = 0 score (tracked separately)
   const ctf = perf?.ctfPoints ?? 0;
   const pp = perf?.performancePoints ?? 0;
-  const isSupport = member?.role === "Support";
-  const weightedPP = isSupport ? pp * 1.5 : pp;
-  return ctf * 2 + weightedPP + 3;
+  return ctf + pp; // direct, no multiplier
+}
+
+function computeAttendanceStatus(attendancePct) {
+  if (attendancePct >= 80) return { label: "Reliable", color: "var(--green)", badge: "badge-active", icon: "✅" };
+  if (attendancePct >= 60) return { label: "Average", color: "var(--gold)", badge: "badge-casual", icon: "⚠" };
+  return { label: "At Risk", color: "var(--red)", badge: "badge-atrisk", icon: "🚨" };
 }
 
 function computeLeaderboard(members, events, attendance, performance) {
   return members.map((member) => {
     let totalScore = 0;
     let presentCount = 0;
+    let absentCount = 0;
+    let consecutiveAbsent = 0;
+    let tempConsecutive = 0;
+    const glEvents = events.filter(e => e.eventType === "Guild League");
     const eventCount = events.length;
+    const glCount = glEvents.length;
+
     events.forEach((event) => {
       const att = attendance.find((a) => a.memberId === member.memberId && a.eventId === event.eventId);
       const perf = performance.find((p) => p.memberId === member.memberId && p.eventId === event.eventId);
-      totalScore += computeScore({ member, event, att, perf });
-      if (att?.status === "present") presentCount++;
+      if (att?.status === "present") {
+        presentCount++;
+        tempConsecutive = 0;
+      } else {
+        absentCount++;
+        tempConsecutive++;
+        if (tempConsecutive > consecutiveAbsent) consecutiveAbsent = tempConsecutive;
+      }
+      if (event.eventType === "Guild League") {
+        totalScore += computeScore({ event, att, perf });
+      }
     });
+
     const attendancePct = eventCount > 0 ? Math.round((presentCount / eventCount) * 100) : 0;
-    const avgScore = eventCount > 0 ? Math.round((totalScore / eventCount) * 10) / 10 : 0;
+    const avgScore = glCount > 0 ? Math.round((totalScore / glCount) * 10) / 10 : 0;
+    const attStatus = computeAttendanceStatus(attendancePct);
+
+    // Score-based classification (for dashboard charts)
     let classification = "At Risk";
     if (totalScore > 80) classification = "Core";
     else if (totalScore >= 60) classification = "Active";
     else if (totalScore >= 40) classification = "Casual";
-    return { ...member, totalScore, attendancePct, avgScore, classification };
+
+    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 };
@@ -848,11 +871,11 @@ function Dashboard({ members, events, attendance, performance }) {
         </div>
         <div className="stat-card" style={{"--stat-accent":"var(--green)"}}>
           <div className="stat-icon">🛡</div>
-          <div className="stat-label">Active Members</div>
-          <div className="stat-value" style={{ color: "var(--green)" }}>{activeMembers}</div>
-          <div className="stat-change">Core + Active classification</div>
-          <div className={`stat-trend ${activeMembers / members.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
-            {activeMembers / members.length >= 0.5 ? "▲" : "▼"} {members.length > 0 ? Math.round(activeMembers/members.length*100) : 0}% of roster
+          <div className="stat-label">Reliable Members</div>
+          <div className="stat-value" style={{ color: "var(--green)" }}>{lb.filter(m=>m.attStatus?.label==="Reliable").length}</div>
+          <div className="stat-change">80%+ attendance · {lb.filter(m=>m.classification==="Core"||m.classification==="Active").length} high scorers</div>
+          <div className={`stat-trend ${lb.filter(m=>m.attStatus?.label==="Reliable").length / members.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
+            {lb.filter(m=>m.attStatus?.label==="Reliable").length / members.length >= 0.5 ? "▲" : "▼"} {members.length > 0 ? Math.round(lb.filter(m=>m.attStatus?.label==="Reliable").length/members.length*100) : 0}% of roster
           </div>
         </div>
         <div className="stat-card" style={{"--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)"}}>
@@ -1038,7 +1061,7 @@ function Dashboard({ members, events, attendance, performance }) {
               evPerf.forEach(p => {
                 const member = members.find(m => m.memberId === p.memberId);
                 const att = evAtt.find(a => a.memberId === p.memberId);
-                const s = computeScore({ member, event: ev, att, perf: p });
+                const s = computeScore({ event: ev, att, perf: p });
                 if (s > topScore) { topScore = s; topScorer = member; }
               });
 
@@ -1276,6 +1299,16 @@ function MembersPage({ members, setMembers, showToast }) {
 function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, showToast }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const deleteEvent = (eventId) => {
+    setEvents(prev => prev.filter(e => e.eventId !== eventId));
+    setAttendance(prev => prev.filter(a => a.eventId !== eventId));
+    setPerformance(prev => prev.filter(p => p.eventId !== eventId));
+    if (selectedEvent?.eventId === eventId) setSelectedEvent(null);
+    showToast("Event deleted", "success");
+    setConfirmDelete(null);
+  };
   const [form, setForm] = useState({ eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0] });
   const [perfEdits, setPerfEdits] = useState({});
 
@@ -1341,15 +1374,31 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
               const present = evAtt.filter(a => a.status === "present").length;
               const isActive = selectedEvent?.eventId === ev.eventId;
               return (
-                <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
+                <div key={ev.eventId}
                   className="card" style={{ cursor: "pointer", padding: "14px 16px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none" }}>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1" onClick={() => setSelectedEvent(ev)}>
                     <span className="font-cinzel" style={{fontSize:12,color:"var(--text-primary)",fontWeight:700}}>{ev.eventDate}</span>
                     <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{fontSize:9}}>
                       {ev.eventType === "Guild League" ? "GL" : "EO"}
                     </span>
                   </div>
-                  <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
+                  <div className="flex items-center justify-between" onClick={() => setSelectedEvent(ev)}>
+                    <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
+                  </div>
+                  <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid var(--border)"}}>
+                    {confirmDelete === ev.eventId ? (
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs text-muted">Delete?</span>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.eventId)}>Yes</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>No</button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-danger btn-sm" style={{width:"100%"}}
+                        onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
+                        <Icon name="trash" size={12}/> Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -1383,7 +1432,7 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                       const curPerf = perfEdits[key] || {};
                       const ctf = curPerf.ctfPoints !== undefined ? curPerf.ctfPoints : (m.perf?.ctfPoints ?? 0);
                       const pp = curPerf.performancePoints !== undefined ? curPerf.performancePoints : (m.perf?.performancePoints ?? 0);
-                      const score = computeScore({ member: m, event: selectedEvent, att: m.att, perf: { ctfPoints: ctf, performancePoints: pp } });
+                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctfPoints: ctf, performancePoints: pp } });
                       return (
                         <tr key={m.memberId}>
                           <td>
@@ -1672,8 +1721,25 @@ function LeaderboardPage({ members, events, attendance, performance }) {
                   <td>
                     <span style={{color:m.attendancePct>=75?"var(--green)":m.attendancePct>=50?"var(--gold)":"var(--red)",fontWeight:700}}>{m.attendancePct}%</span>
                   </td>
+                  <td>
+                    <span style={{color:m.absentCount>3?"var(--red)":m.absentCount>1?"var(--gold)":"var(--green)",fontWeight:700}}>{m.absentCount}</span>
+                    {m.consecutiveAbsent >= 2 && <span style={{marginLeft:6,fontSize:11,color:"var(--red)"}}>({m.consecutiveAbsent} streak)</span>}
+                  </td>
                   <td className="text-secondary">{m.avgScore}</td>
-                  <td><span className={`badge ${classColors[m.classification]}`}>{m.classification}</span></td>
+                  <td>
+                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{fontSize:10}}>
+                        🎯 {m.attStatus?.label || "Average"}
+                      </span>
+                      <span className={`badge ${
+                        m.classification==="Core"?"badge-core":
+                        m.classification==="Active"?"badge-active":
+                        m.classification==="Casual"?"badge-casual":"badge-atrisk"
+                      }`} style={{fontSize:10}}>
+                        ⚔ {m.classification}
+                      </span>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1683,13 +1749,41 @@ function LeaderboardPage({ members, events, attendance, performance }) {
 
       <div className="card mt-2" style={{marginTop:16}}>
         <div className="card-title">Classification Legend</div>
-        <div className="flex gap-4" style={{flexWrap:"wrap"}}>
-          {[["Core","badge-core","Score > 80"],["Active","badge-active","Score 60–80"],["Casual","badge-casual","Score 40–60"],["At Risk","badge-atrisk","Score < 40"]].map(([k,c,d])=>(
-            <div key={k} className="flex items-center gap-2">
-              <span className={`badge ${c}`}>{k}</span>
-              <span className="text-xs text-muted">{d}</span>
-            </div>
-          ))}
+
+        {/* Score Classification */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"var(--text-muted)",fontWeight:700,marginBottom:10}}>⚔ Score Classification</div>
+          <div className="flex gap-4" style={{flexWrap:"wrap"}}>
+            {[["Core","badge-core","Score > 80"],["Active","badge-active","Score 60–80"],["Casual","badge-casual","Score 40–60"],["At Risk","badge-atrisk","Score < 40"]].map(([k,c,d])=>(
+              <div key={k} className="flex items-center gap-2">
+                <span className={`badge ${c}`}>{k}</span>
+                <span className="text-xs text-muted">{d}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{borderTop:"1px solid var(--border)",marginBottom:14}}/>
+
+        {/* Attendance Classification */}
+        <div>
+          <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"var(--text-muted)",fontWeight:700,marginBottom:10}}>🎯 Attendance Classification</div>
+          <div className="flex gap-4" style={{flexWrap:"wrap"}}>
+            {[
+              ["✅ Reliable","badge-active","80%+ attendance","Dependable guild member"],
+              ["⚠ Average","badge-casual","60–79% attendance","Monitor closely"],
+              ["🚨 At Risk","badge-atrisk","Below 60%","Needs follow-up"],
+            ].map(([k,c,d,desc])=>(
+              <div key={k} className="flex items-center gap-2">
+                <span className={`badge ${c}`}>{k}</span>
+                <div>
+                  <div className="text-xs text-muted">{d}</div>
+                  <div style={{fontSize:11,color:"var(--text-muted)",opacity:0.7}}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
