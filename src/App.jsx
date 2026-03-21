@@ -307,39 +307,77 @@ const styles = `
   .stat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px 18px 24px;
+    border-radius: 14px;
+    padding: 24px 22px 20px 26px;
     position: relative;
     overflow: hidden;
-    transition: border-color 0.2s;
+    transition: all 0.25s;
+    min-height: 140px;
   }
-  .stat-card:hover { border-color: var(--border-bright); }
+  .stat-card:hover {
+    border-color: var(--stat-accent, var(--accent));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
   .stat-card::after {
     content: '';
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    width: 4px;
+    width: 5px;
     background: var(--stat-accent, var(--accent));
-    border-radius: 12px 0 0 12px;
+    border-radius: 14px 0 0 14px;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 120px; height: 120px;
+    background: radial-gradient(circle at top right, var(--stat-accent, var(--accent)), transparent 70%);
+    opacity: 0.07;
+    border-radius: 0 14px 0 0;
   }
   .stat-label {
-    font-size: 12px;
-    letter-spacing: 2px;
+    font-size: 11px;
+    letter-spacing: 2.5px;
     text-transform: uppercase;
     color: var(--text-muted);
-    margin-bottom: 8px;
-    font-weight: 600;
+    margin-bottom: 10px;
+    font-weight: 700;
   }
   .stat-value {
     font-family: 'Cinzel', serif;
-    font-size: 40px;
+    font-size: 48px;
     font-weight: 700;
     line-height: 1;
+    animation: countUp 0.6s ease-out;
+  }
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .stat-change {
     font-size: 13px;
-    margin-top: 6px;
+    margin-top: 8px;
     color: var(--text-muted);
+  }
+  .stat-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 6px;
+  }
+  .stat-trend-up { background: rgba(64,201,122,0.15); color: var(--green); }
+  .stat-trend-down { background: rgba(224,80,80,0.15); color: var(--red); }
+  .stat-trend-neutral { background: rgba(99,130,230,0.15); color: var(--accent); }
+  .stat-icon {
+    position: absolute;
+    top: 18px; right: 18px;
+    font-size: 28px;
+    opacity: 0.18;
   }
 
   /* ── Tables ── */
@@ -800,24 +838,40 @@ function Dashboard({ members, events, attendance, performance }) {
 
       <div className="stats-grid">
         <div className="stat-card" style={{"--stat-accent":"var(--accent)"}}>
+          <div className="stat-icon">⚔</div>
           <div className="stat-label">Total Members</div>
           <div className="stat-value" style={{ color: "var(--accent)" }}>{members.length}</div>
           <div className="stat-change">Registered guild members</div>
+          <div className={`stat-trend ${members.length >= 10 ? "stat-trend-up" : "stat-trend-neutral"}`}>
+            {members.length >= 10 ? "▲" : "●"} {members.length >= 10 ? "Full roster" : "Recruiting"}
+          </div>
         </div>
         <div className="stat-card" style={{"--stat-accent":"var(--green)"}}>
+          <div className="stat-icon">🛡</div>
           <div className="stat-label">Active Members</div>
           <div className="stat-value" style={{ color: "var(--green)" }}>{activeMembers}</div>
           <div className="stat-change">Core + Active classification</div>
+          <div className={`stat-trend ${activeMembers / members.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
+            {activeMembers / members.length >= 0.5 ? "▲" : "▼"} {members.length > 0 ? Math.round(activeMembers/members.length*100) : 0}% of roster
+          </div>
         </div>
         <div className="stat-card" style={{"--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)"}}>
+          <div className="stat-icon">📋</div>
           <div className="stat-label">Attendance Rate</div>
           <div className="stat-value" style={{ color: attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)" }}>{attRate}%</div>
           <div className="stat-change">All events combined</div>
+          <div className={`stat-trend ${attRate >= 75 ? "stat-trend-up" : attRate >= 50 ? "stat-trend-neutral" : "stat-trend-down"}`}>
+            {attRate >= 75 ? "▲ Excellent" : attRate >= 50 ? "● Good" : "▼ Needs work"}
+          </div>
         </div>
         <div className="stat-card" style={{"--stat-accent":"var(--gold)"}}>
+          <div className="stat-icon">🏆</div>
           <div className="stat-label">Total Events</div>
           <div className="stat-value" style={{ color: "var(--gold)" }}>{events.length}</div>
           <div className="stat-change">{events.filter(e=>e.eventType==="Guild League").length} GL · {events.filter(e=>e.eventType==="Emperium Overrun").length} EO</div>
+          <div className="stat-trend stat-trend-neutral">
+            ● This season
+          </div>
         </div>
       </div>
 
@@ -873,7 +927,7 @@ function Dashboard({ members, events, attendance, performance }) {
       </div>
 
       <div className="grid-2">
-        {/* Role Distribution */}
+        {/* Role Distribution + Class Breakdown */}
         <div className="card">
           <div className="card-title">⚔ Role Distribution</div>
           <div className="flex items-center gap-4" style={{ marginTop: 12 }}>
@@ -905,6 +959,63 @@ function Dashboard({ members, events, attendance, performance }) {
               </div>
             </div>
           </div>
+
+          {/* Class Breakdown */}
+          <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+            <div className="card-title" style={{marginBottom:12}}>🎭 Class Breakdown</div>
+            {(() => {
+              const ALL_CLASSES = [
+                {name:"Lord Knight", role:"DPS"},
+                {name:"Assassin Cross", role:"DPS"},
+                {name:"Sniper", role:"DPS"},
+                {name:"High Wizard", role:"DPS"},
+                {name:"Stalker", role:"DPS"},
+                {name:"Whitesmith", role:"DPS"},
+                {name:"Champion", role:"DPS"},
+                {name:"High Priest", role:"Support"},
+                {name:"Paladin", role:"Support"},
+                {name:"Professor", role:"Support"},
+                {name:"Creator", role:"Support"},
+                {name:"Minstrel", role:"Support"},
+                {name:"Diva", role:"Support"},
+              ];
+              const classCounts = ALL_CLASSES.map(c => ({
+                ...c,
+                count: members.filter(m => m.class === c.name).length
+              })).filter(c => c.count > 0);
+              const maxCount = Math.max(...classCounts.map(c => c.count), 1);
+              return (
+                <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                  {classCounts.length === 0 && (
+                    <div className="text-xs text-muted">No class data yet.</div>
+                  )}
+                  {classCounts.map(c => (
+                    <div key={c.name} style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:c.role==="DPS"?"var(--accent2)":"var(--accent)",flexShrink:0}}/>
+                      <span style={{fontSize:12,color:"var(--text-secondary)",width:130,flexShrink:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</span>
+                      <div style={{flex:1,height:6,background:"rgba(99,130,230,0.08)",borderRadius:3,overflow:"hidden"}}>
+                        <div style={{
+                          height:"100%",
+                          width:`${(c.count/maxCount)*100}%`,
+                          background:c.role==="DPS"?"var(--accent2)":"var(--accent)",
+                          borderRadius:3,
+                          transition:"width 0.5s ease",
+                          boxShadow:c.role==="DPS"?"0 0 6px rgba(224,92,138,0.4)":"0 0 6px rgba(99,130,230,0.4)"
+                        }}/>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--text-primary)",minWidth:16,textAlign:"right"}}>{c.count}</span>
+                    </div>
+                  ))}
+                  {classCounts.length > 0 && (
+                    <div style={{marginTop:6,display:"flex",gap:12}}>
+                      <span style={{fontSize:11,color:"var(--accent2)"}}>● DPS classes</span>
+                      <span style={{fontSize:11,color:"var(--accent)"}}>● Support classes</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         </div>
 
         {/* Recent Events */}
@@ -914,20 +1025,83 @@ function Dashboard({ members, events, attendance, performance }) {
             {events.slice(-5).reverse().map(ev => {
               const evAtt = attendance.filter(a => a.eventId === ev.eventId);
               const present = evAtt.filter(a => a.status === "present").length;
+              const absent = evAtt.length - present;
               const pct = evAtt.length ? Math.round((present / evAtt.length) * 100) : 0;
+              const isGL = ev.eventType === "Guild League";
+              const barColor = pct >= 75 ? "var(--green)" : pct >= 50 ? "var(--gold)" : "var(--red)";
+              const barGlow = pct >= 75 ? "rgba(64,201,122,0.5)" : pct >= 50 ? "rgba(240,192,64,0.5)" : "rgba(224,80,80,0.5)";
+
+              // top scorer for this event
+              const evPerf = performance.filter(p => p.eventId === ev.eventId);
+              let topScorer = null;
+              let topScore = -Infinity;
+              evPerf.forEach(p => {
+                const member = members.find(m => m.memberId === p.memberId);
+                const att = evAtt.find(a => a.memberId === p.memberId);
+                const s = computeScore({ member, event: ev, att, perf: p });
+                if (s > topScore) { topScore = s; topScorer = member; }
+              });
+
               return (
-                <div key={ev.eventId} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{ev.eventDate}</span>
-                    <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{fontSize:10}}>
-                      {ev.eventType === "Guild League" ? "GL" : "EO"}
-                    </span>
-                  </div>
-                  <div className="score-bar-wrap">
-                    <div className="score-bar-bg">
-                      <div className="score-bar-fill" style={{ width: `${pct}%`, background: pct >= 75 ? "var(--green)" : pct >= 50 ? "var(--gold)" : "var(--red)" }}/>
+                <div key={ev.eventId} style={{padding:"14px 0", borderBottom:"1px solid var(--border)"}}>
+                  {/* Header row */}
+                  <div className="flex items-center justify-between" style={{marginBottom:10}}>
+                    <div className="flex items-center gap-3">
+                      <div style={{
+                        width:38,height:38,borderRadius:8,
+                        background: isGL ? "rgba(240,192,64,0.12)" : "rgba(99,130,230,0.12)",
+                        border: `1px solid ${isGL ? "rgba(240,192,64,0.3)" : "rgba(99,130,230,0.3)"}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:18,flexShrink:0
+                      }}>
+                        {isGL ? "⚔" : "🏰"}
+                      </div>
+                      <div>
+                        <div style={{fontSize:15,fontWeight:700,color:"var(--text-primary)"}}>{ev.eventDate}</div>
+                        <div style={{fontSize:12,color:"var(--text-muted)"}}>{ev.eventType}</div>
+                      </div>
                     </div>
-                    <span className="text-xs text-muted">{present}/{evAtt.length} ({pct}%)</span>
+                    <div className="flex items-center gap-3">
+                      {/* Attendance count badge */}
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"Cinzel,serif",fontSize:20,fontWeight:700,color:barColor,lineHeight:1}}>{present}</div>
+                        <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:1}}>/ {evAtt.length}</div>
+                      </div>
+                      {/* Pct badge */}
+                      <div style={{
+                        padding:"4px 12px",borderRadius:20,
+                        background: pct>=75?"rgba(64,201,122,0.15)":pct>=50?"rgba(240,192,64,0.15)":"rgba(224,80,80,0.15)",
+                        border:`1px solid ${barColor}44`,
+                        color:barColor,fontSize:14,fontWeight:700,fontFamily:"Cinzel,serif"
+                      }}>{pct}%</div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar — thicker with glow */}
+                  <div style={{height:10,background:"rgba(99,130,230,0.08)",borderRadius:5,overflow:"hidden",marginBottom:8}}>
+                    <div style={{
+                      height:"100%",
+                      width:`${pct}%`,
+                      borderRadius:5,
+                      background:barColor,
+                      boxShadow:`0 0 10px ${barGlow}`,
+                      transition:"width 0.6s ease"
+                    }}/>
+                  </div>
+
+                  {/* Bottom row — absent count + top scorer */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span style={{fontSize:12,color:"var(--green)"}}>✓ {present} present</span>
+                      <span style={{fontSize:12,color:"var(--red)"}}>✗ {absent} absent</span>
+                    </div>
+                    {topScorer && (
+                      <div className="flex items-center gap-2">
+                        <span style={{fontSize:11,color:"var(--text-muted)"}}>Top:</span>
+                        <span style={{fontSize:12,fontWeight:700,color:"var(--gold)"}}>⭐ {topScorer.ign}</span>
+                        <span style={{fontSize:11,color:"var(--text-muted)"}}>+{topScore}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1406,19 +1580,46 @@ function LeaderboardPage({ members, events, attendance, performance }) {
       </div>
 
       {/* Top 3 podium */}
-      <div className="flex gap-3 mb-4 items-end" style={{maxWidth:600}}>
+      <div className="flex gap-4 mb-4 items-end" style={{maxWidth:700,marginBottom:24}}>
         {[lb[1], lb[0], lb[2]].map((m, i) => {
           if (!m) return <div key={i} style={{flex:1}}/>;
-          const podiumH = [100, 130, 85];
-          const idxInRank = m.rank - 1;
+          const podiumH = [120, 160, 95];
+          const medals = ["🥈","🥇","🥉"];
+          const labels = ["#2","#1","#3"];
           return (
-            <div key={m.memberId} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-              <div style={{fontFamily:"Cinzel,serif",fontSize:12,color:"var(--text-muted)"}}>{m.rank === 1 ? "👑" : m.rank === 2 ? "🥈" : "🥉"}</div>
-              <div style={{fontWeight:700,fontSize:13,textAlign:"center"}}>{m.ign}</div>
-              <div className="text-xs text-muted">{m.class}</div>
-              <div style={{fontFamily:"Cinzel,serif",fontSize:18,fontWeight:700,color:rankColors[m.rank-1]}}>{m.totalScore}</div>
-              <div style={{width:"100%",height:podiumH[i],background:`linear-gradient(to top, ${rankColors[m.rank-1]}33, ${rankColors[m.rank-1]}11)`,borderRadius:"8px 8px 0 0",border:`1px solid ${rankColors[m.rank-1]}44`,borderBottom:"none",display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:8}}>
-                <span style={{fontFamily:"Cinzel,serif",fontSize:22,color:rankColors[m.rank-1],opacity:0.4}}>#{m.rank}</span>
+            <div key={m.memberId} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+              <div style={{fontSize:28}}>{medals[i]}</div>
+              <MemberAvatar ign={m.ign} index={m.rank-1} size={46} />
+              <div style={{fontWeight:700,fontSize:15,textAlign:"center",color:"var(--text-primary)"}}>{m.ign}</div>
+              <div style={{fontSize:13,color:"var(--text-muted)",textAlign:"center"}}>{m.class}</div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <div style={{fontFamily:"Cinzel,serif",fontSize:22,fontWeight:700,color:rankColors[m.rank-1],textShadow:`0 0 12px ${rankColors[m.rank-1]}66`}}>{m.totalScore}</div>
+                <div style={{fontSize:12,color:"var(--text-muted)"}}>{m.attendancePct}% att</div>
+              </div>
+              <div style={{
+                width:"100%",height:podiumH[i],
+                background:`${rankColors[m.rank-1]}22`,
+                borderRadius:"10px 10px 0 0",
+                border:`2px solid ${rankColors[m.rank-1]}`,
+                borderBottom:"none",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                boxShadow:`inset 0 0 30px ${rankColors[m.rank-1]}22, 0 0 20px ${rankColors[m.rank-1]}33`,
+                position:"relative",
+                overflow:"hidden",
+              }}>
+                <div style={{
+                  position:"absolute",bottom:0,left:0,right:0,
+                  height:"60%",
+                  background:`linear-gradient(to top, ${rankColors[m.rank-1]}44, transparent)`,
+                }}/>
+                <span style={{
+                  fontFamily:"Cinzel,serif",
+                  fontSize:48,fontWeight:900,
+                  color:rankColors[m.rank-1],
+                  opacity:0.6,
+                  zIndex:1,
+                  textShadow:`0 0 20px ${rankColors[m.rank-1]}`,
+                }}>{labels[i]}</span>
               </div>
             </div>
           );
@@ -1443,9 +1644,12 @@ function LeaderboardPage({ members, events, attendance, performance }) {
               {filtered.map((m) => (
                 <tr key={m.memberId}>
                   <td>
-                    <span className={`font-cinzel`} style={{fontSize:14,fontWeight:700,color:rankColors[m.rank-1]||"var(--text-muted)"}}>
-                      {m.rank <= 3 ? ["🥇","🥈","🥉"][m.rank-1] : `#${m.rank}`}
-                    </span>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:40}}>
+                      {m.rank <= 3 && <span style={{fontSize:18}}>{["🥇","🥈","🥉"][m.rank-1]}</span>}
+                      <span className="font-cinzel" style={{fontSize:13,fontWeight:700,color:rankColors[m.rank-1]||"var(--text-muted)"}}>
+                        #{m.rank}
+                      </span>
+                    </div>
                   </td>
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
