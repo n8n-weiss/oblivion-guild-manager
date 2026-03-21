@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const INITIAL_MEMBERS = [
   { memberId: "OBL001", ign: "DarkReaper", class: "Assassin Cross", role: "DPS" },
@@ -1297,7 +1298,7 @@ function MembersPage({ members, setMembers, showToast }) {
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
-function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, showToast }) {
+function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, eoRatings, setEoRatings, showToast }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -1425,7 +1426,7 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                   <thead><tr>
                     <th>Member</th><th>Class</th><th>Attendance</th>
                     {selectedEvent.eventType === "Guild League" && <><th>CTF Pts</th><th>Perf Pts</th><th>Score</th><th></th></>}
-                    {selectedEvent.eventType === "Emperium Overrun" && <th>Score</th>}
+                    {selectedEvent.eventType === "Emperium Overrun" && <th>EO Rating</th>}
                   </tr></thead>
                   <tbody>
                     {evtMembers.map(m => {
@@ -1473,11 +1474,38 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                             </>
                           )}
                           {selectedEvent.eventType === "Emperium Overrun" && (
-                            <td><span style={{fontFamily:"Cinzel,serif",fontSize:15,fontWeight:700,
-                              color:score>0?"var(--green)":"var(--red)",
-                              textShadow:score>0?"0 0 8px rgba(64,201,122,0.4)":"0 0 8px rgba(224,80,80,0.4)"}}>
-                              {score>0?`+${score}`:score}
-                            </span></td>
+                            <td>
+                              {m.att?.status === "present" ? (
+                                <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                                  {[1,2,3,4,5].map(star => {
+                                    const currentRating = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
+                                    return (
+                                      <span key={star}
+                                        onClick={() => {
+                                          const newRating = star === currentRating ? 0 : star;
+                                          setEoRatings(prev => {
+                                            const exists = prev.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId);
+                                            if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? {...r, rating: newRating} : r);
+                                            return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: newRating }];
+                                          });
+                                        }}
+                                        style={{
+                                          fontSize:18,cursor:"pointer",
+                                          color: star <= currentRating ? "var(--gold)" : "rgba(99,130,230,0.2)",
+                                          textShadow: star <= currentRating ? "0 0 8px rgba(240,192,64,0.5)" : "none",
+                                          transition:"all 0.15s"
+                                        }}>★</span>
+                                    );
+                                  })}
+                                  {(() => {
+                                    const r = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
+                                    return r > 0 ? <span style={{fontSize:11,color:"var(--gold)",marginLeft:4,fontWeight:700}}>{r}/5</span> : null;
+                                  })()}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted">— absent</span>
+                              )}
+                            </td>
                           )}
                         </tr>
                       );
@@ -1613,11 +1641,24 @@ function AbsencesPage({ members, absences, setAbsences, showToast }) {
 }
 
 // ─── LEADERBOARD ──────────────────────────────────────────────────────────────
-function LeaderboardPage({ members, events, attendance, performance }) {
+function LeaderboardPage({ members, events, attendance, performance, eoRatings }) {
   const [filter, setFilter] = useState("All");
+  const [lbMode, setLbMode] = useState("gl"); // "gl" | "eo"
   const lb = useMemo(() => computeLeaderboard(members, events, attendance, performance), [members, events, attendance, performance]);
   const filtered = filter === "All" ? lb : lb.filter(m => m.classification === filter);
   const maxScore = Math.max(...lb.map(m => m.totalScore), 1);
+
+  // EO leaderboard
+  const eoEvents = events.filter(e => e.eventType === "Emperium Overrun");
+  const eoLb = useMemo(() => members.map(member => {
+    const memberRatings = eoRatings.filter(r => r.memberId === member.memberId);
+    const totalEoScore = memberRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
+    const eoPresent = eoEvents.filter(ev => attendance.find(a => a.memberId === member.memberId && a.eventId === ev.eventId && a.status === "present")).length;
+    const avgRating = memberRatings.length > 0 ? Math.round((totalEoScore / memberRatings.length) * 10) / 10 : 0;
+    return { ...member, totalEoScore, eoPresent, eoTotal: eoEvents.length, avgRating };
+  }).sort((a, b) => b.totalEoScore - a.totalEoScore).map((m, i) => ({ ...m, eoRank: i + 1 }))
+  , [members, eoRatings, eoEvents, attendance]);
+  const maxEoScore = Math.max(...eoLb.map(m => m.totalEoScore), 1);
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
   const classColors = { Core: "badge-core", Active: "badge-active", Casual: "badge-casual", "At Risk": "badge-atrisk" };
@@ -1625,12 +1666,20 @@ function LeaderboardPage({ members, events, attendance, performance }) {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">🏆 Leaderboard</h1>
-        <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="page-title">🏆 Leaderboard</h1>
+            <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
+          </div>
+          <div className="flex gap-2">
+            <button className={`btn ${lbMode==="gl"?"btn-primary":"btn-ghost"}`} onClick={() => setLbMode("gl")}>⚔ Guild League</button>
+            <button className={`btn ${lbMode==="eo"?"btn-primary":"btn-ghost"}`} onClick={() => setLbMode("eo")}>🏰 Emperium Overrun</button>
+          </div>
+        </div>
       </div>
 
-      {/* Top 3 podium */}
-      <div className="flex gap-4 mb-4 items-end" style={{maxWidth:700,marginBottom:24}}>
+      {/* Top 3 podium - GL only */}
+      {lbMode === "gl" && <div className="flex gap-4 mb-4 items-end" style={{maxWidth:700,marginBottom:24}}>
         {[lb[1], lb[0], lb[2]].map((m, i) => {
           if (!m) return <div key={i} style={{flex:1}}/>;
           const podiumH = [120, 160, 95];
@@ -1674,9 +1723,9 @@ function LeaderboardPage({ members, events, attendance, performance }) {
             </div>
           );
         })}
-      </div>
+      </div>}
 
-      <div className="card">
+      {lbMode === "gl" && <div className="card">
         <div className="section-header">
           <div className="font-cinzel text-xs text-muted" style={{letterSpacing:2,textTransform:"uppercase"}}>Full Rankings</div>
           <div className="flex gap-2">
@@ -1746,9 +1795,77 @@ function LeaderboardPage({ members, events, attendance, performance }) {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
-      <div className="card mt-2" style={{marginTop:16}}>
+      {/* EO Leaderboard */}
+      {lbMode === "eo" && (
+        <div className="card" style={{marginBottom:16}}>
+          <div className="section-header">
+            <div className="font-cinzel text-xs text-muted" style={{letterSpacing:2,textTransform:"uppercase"}}>🏰 Emperium Overrun Rankings</div>
+            <div className="text-xs text-muted">{eoEvents.length} EO events · Star ratings by officers</div>
+          </div>
+          {eoLb.every(m => m.totalEoScore === 0) ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">⭐</div>
+              <div className="empty-state-text">No EO ratings yet — go to Events tab and rate members on EO events</div>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>#</th><th>Player</th><th>Role</th><th>Total EO Score</th><th>Score Bar</th><th>EO Attended</th><th>Avg Rating</th>
+                </tr></thead>
+                <tbody>
+                  {eoLb.map((m) => (
+                    <tr key={m.memberId}>
+                      <td>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:40}}>
+                          {m.eoRank <= 3 && <span style={{fontSize:18}}>{["🥇","🥈","🥉"][m.eoRank-1]}</span>}
+                          <span className="font-cinzel" style={{fontSize:13,fontWeight:700,color:m.eoRank<=3?["var(--gold)","#c0c0c0","#cd7f32"][m.eoRank-1]:"var(--text-muted)"}}>#{m.eoRank}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <MemberAvatar ign={m.ign} index={m.eoRank-1} size={34} />
+                          <div>
+                            <div style={{fontWeight:700}}>{m.ign}</div>
+                            <div className="text-xs text-muted">{m.class}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span className={`badge ${m.role==="DPS"?"badge-dps":"badge-support"}`} style={{fontSize:10}}>{m.role}</span></td>
+                      <td>
+                        <span className="font-cinzel" style={{fontSize:15,fontWeight:700,color:"var(--gold)"}}>
+                          {m.totalEoScore} <span style={{fontSize:11,color:"var(--text-muted)"}}>pts</span>
+                        </span>
+                      </td>
+                      <td style={{minWidth:140}}>
+                        <div className="score-bar-wrap">
+                          <div className="score-bar-bg">
+                            <div className="score-bar-fill" style={{width:`${Math.max(2,(m.totalEoScore/maxEoScore)*100)}%`,background:"var(--gold)"}}/>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span style={{color:"var(--green)",fontWeight:700}}>{m.eoPresent}/{m.eoTotal}</span></td>
+                      <td>
+                        <div style={{display:"flex",gap:2,alignItems:"center"}}>
+                          {[1,2,3,4,5].map(s => (
+                            <span key={s} style={{fontSize:14,color:s<=Math.round(m.avgRating)?"var(--gold)":"rgba(99,130,230,0.2)"}}>★</span>
+                          ))}
+                          <span style={{fontSize:12,color:"var(--text-muted)",marginLeft:4}}>{m.avgRating}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* GL leaderboard - only show when in GL mode */}
+      {lbMode === "gl" && <div className="card mt-2" style={{marginTop:16}}>
         <div className="card-title">Classification Legend</div>
 
         {/* Score Classification */}
@@ -1786,7 +1903,7 @@ function LeaderboardPage({ members, events, attendance, performance }) {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -2200,16 +2317,15 @@ function ImportPage({ members, setMembers, showToast }) {
 
 export default function App() {
   const [page, setPage] = useState("dashboard");
-  const [members, setMembers] = useState(INITIAL_MEMBERS);
-  const [events, setEvents] = useState(INITIAL_EVENTS);
-  const [attendance, setAttendance] = useState(INITIAL_ATTENDANCE);
-  const [performance, setPerformance] = useState(INITIAL_PERFORMANCE);
+  const [members, setMembers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [performance, setPerformance] = useState([]);
   const [absences, setAbsences] = useState([]);
   const [toast, setToast] = useState(null);
-  // Party state lifted here so it persists across tab switches
   const [parties, setParties] = useState([]);
+  const [eoRatings, setEoRatings] = useState([]);
   const [loading, setLoading] = useState(true);
-
 
   // ── Load data from Firebase on startup
   useEffect(() => {
@@ -2224,6 +2340,7 @@ export default function App() {
           setPerformance(data.performance || INITIAL_PERFORMANCE);
           setAbsences(data.absences || []);
           setParties(data.parties || []);
+          setEoRatings(data.eoRatings || []);
         } else {
           await setDoc(doc(db, "guilddata", "main"), {
             members: INITIAL_MEMBERS,
@@ -2232,6 +2349,7 @@ export default function App() {
             performance: INITIAL_PERFORMANCE,
             absences: [],
             parties: [],
+            eoRatings: [],
           });
           setMembers(INITIAL_MEMBERS);
           setEvents(INITIAL_EVENTS);
@@ -2253,7 +2371,7 @@ export default function App() {
     const saveData = async () => {
       try {
         await setDoc(doc(db, "guilddata", "main"), {
-          members, events, attendance, performance, absences, parties
+          members, events, attendance, performance, absences, parties, eoRatings
         });
       } catch (err) {
         console.error("Firebase save error:", err);
@@ -2261,10 +2379,21 @@ export default function App() {
     };
     const timeout = setTimeout(saveData, 1000);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, loading]);
+  }, [members, events, attendance, performance, absences, parties, eoRatings, loading]);
+
   const showToast = (message, type = "success") => {
     setToast({ message, type, key: Date.now() });
   };
+
+  if (loading) return (
+    <>
+      <style>{styles}</style>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"var(--bg-deepest)",flexDirection:"column",gap:16}}>
+        <div style={{fontFamily:"Cinzel,serif",fontSize:28,color:"var(--accent)",textShadow:"0 0 20px rgba(99,130,230,0.5)"}}>OBLIVION</div>
+        <div style={{color:"var(--text-muted)",fontSize:13,letterSpacing:3,textTransform:"uppercase"}}>Loading Guild Data...</div>
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -2273,20 +2402,9 @@ export default function App() {
         {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-logo">
-  <img
-    src="/oblivion-guild-manager/oblivion-logo.png"
-    alt="Oblivion Guild"
-    style={{
-      width: "100%",
-      maxWidth: 160,
-      height: "auto",
-      display: "block",
-      margin: "0 auto 8px",
-      borderRadius: 8,
-    }}
-  />
-  <div className="logo-sub" style={{textAlign:"center"}}>Guild Manager</div>
-</div>
+            <div className="logo-title">OBLIVION</div>
+            <div className="logo-sub">Guild Manager</div>
+          </div>
           <div className="sidebar-nav">
             {NAV_ITEMS.map(item => {
               const counts = {
@@ -2319,11 +2437,11 @@ export default function App() {
 
         {/* Main */}
         <main className="main-content">
-          {page === "dashboard" && <Dashboard members={members} events={events} attendance={attendance} performance={performance} />}
+          {page === "dashboard" && <Dashboard members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
           {page === "members" && <MembersPage members={members} setMembers={setMembers} showToast={showToast} />}
-          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} showToast={showToast} />}
+          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} />}
           {page === "absences" && <AbsencesPage members={members} absences={absences} setAbsences={setAbsences} showToast={showToast} />}
-          {page === "leaderboard" && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} />}
+          {page === "leaderboard" && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
           {page === "party" && <PartyBuilder members={members} events={events} attendance={attendance} parties={parties} setParties={setParties} />}
           {page === "import" && <ImportPage members={members} setMembers={setMembers} showToast={showToast} />}
         </main>
