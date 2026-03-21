@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { db } from "./firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const INITIAL_MEMBERS = [
@@ -1724,18 +1726,81 @@ const NAV_ITEMS = [
 
 export default function App() {
   const [page, setPage] = useState("dashboard");
-  const [members, setMembers] = useState(INITIAL_MEMBERS);
-  const [events, setEvents] = useState(INITIAL_EVENTS);
-  const [attendance, setAttendance] = useState(INITIAL_ATTENDANCE);
-  const [performance, setPerformance] = useState(INITIAL_PERFORMANCE);
+  const [members, setMembers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [performance, setPerformance] = useState([]);
   const [absences, setAbsences] = useState([]);
   const [toast, setToast] = useState(null);
-  // Party state lifted here so it persists across tab switches
   const [parties, setParties] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ── Load data from Firebase on startup
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const snap = await getDoc(doc(db, "guilddata", "main"));
+        if (snap.exists()) {
+          const data = snap.data();
+          setMembers(data.members || INITIAL_MEMBERS);
+          setEvents(data.events || INITIAL_EVENTS);
+          setAttendance(data.attendance || INITIAL_ATTENDANCE);
+          setPerformance(data.performance || INITIAL_PERFORMANCE);
+          setAbsences(data.absences || []);
+          setParties(data.parties || []);
+        } else {
+          // First time — save initial data to Firebase
+          await setDoc(doc(db, "guilddata", "main"), {
+            members: INITIAL_MEMBERS,
+            events: INITIAL_EVENTS,
+            attendance: INITIAL_ATTENDANCE,
+            performance: INITIAL_PERFORMANCE,
+            absences: [],
+            parties: [],
+          });
+          setMembers(INITIAL_MEMBERS);
+          setEvents(INITIAL_EVENTS);
+          setAttendance(INITIAL_ATTENDANCE);
+          setPerformance(INITIAL_PERFORMANCE);
+        }
+      } catch (err) {
+        console.error("Firebase load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // ── Auto-save to Firebase whenever data changes
+  useEffect(() => {
+    if (loading) return;
+    const saveData = async () => {
+      try {
+        await setDoc(doc(db, "guilddata", "main"), {
+          members, events, attendance, performance, absences, parties
+        });
+      } catch (err) {
+        console.error("Firebase save error:", err);
+      }
+    };
+    const timeout = setTimeout(saveData, 1000);
+    return () => clearTimeout(timeout);
+  }, [members, events, attendance, performance, absences, parties, loading]);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type, key: Date.now() });
   };
+
+  if (loading) return (
+    <>
+      <style>{styles}</style>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"var(--bg-deepest)",flexDirection:"column",gap:16}}>
+        <div style={{fontFamily:"Cinzel,serif",fontSize:24,color:"var(--accent)"}}>OBLIVION</div>
+        <div style={{color:"var(--text-muted)",fontSize:13,letterSpacing:2}}>LOADING GUILD DATA...</div>
+      </div>
+    </>
+  );
 
   return (
     <>
