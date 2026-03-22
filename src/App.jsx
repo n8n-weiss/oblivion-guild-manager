@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { db, auth } from "./firebase";
-import { doc, setDoc, getDoc, collection, addDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -1165,7 +1165,7 @@ function MemberAvatar({ ign, index, size=34 }) {
     </div>
   );
 }
-function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin }) {
+function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin, currentUser }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
@@ -1193,8 +1193,10 @@ function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin })
   };
 
   const deleteMember = (id) => {
+    const m = members.find(x => x.memberId === id);
     setMembers(prev => prev.filter(m => m.memberId !== id));
     showToast("Member removed", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete", `Deleted member ${m?.ign} (${id})`);
   };
 
   const saveMember = () => {
@@ -1202,10 +1204,12 @@ function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin })
     if (editMember) {
       setMembers(prev => prev.map(m => m.memberId === editMember ? { ...form } : m));
       showToast("Member updated", "success");
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) — Class: ${form.class}, Role: ${form.role}`);
     } else {
       if (members.find(m => m.memberId === form.memberId)) { showToast("ID already exists", "error"); return; }
       setMembers(prev => [...prev, { ...form }]);
       showToast("Member added", "success");
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_add", `Added new member ${form.ign} (${form.memberId}) — ${form.class}, ${form.role}`);
     }
     setShowModal(false);
   };
@@ -1302,18 +1306,20 @@ function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin })
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
-function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, eoRatings, setEoRatings, showToast, isAdmin }) {
+function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, eoRatings, setEoRatings, showToast, isAdmin, currentUser }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const deleteEvent = (eventId) => {
+    const ev = events.find(e => e.eventId === eventId);
     setEvents(prev => prev.filter(e => e.eventId !== eventId));
     setAttendance(prev => prev.filter(a => a.eventId !== eventId));
     setPerformance(prev => prev.filter(p => p.eventId !== eventId));
     if (selectedEvent?.eventId === eventId) setSelectedEvent(null);
     showToast("Event deleted", "success");
     setConfirmDelete(null);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${ev?.eventType} — ${ev?.eventDate}`);
   };
   const [form, setForm] = useState({ eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0] });
   const [perfEdits, setPerfEdits] = useState({});
@@ -1330,15 +1336,21 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
     });
     setAttendance(prev => [...prev, ...newAtt]);
     showToast("Event created with attendance loaded", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
     setShowModal(false);
   };
 
   const toggleAtt = (memberId, eventId) => {
+    const current = attendance.find(a => a.memberId === memberId && a.eventId === eventId);
+    const newStatus = current?.status === "present" ? "absent" : "present";
+    const member = members.find(m => m.memberId === memberId);
+    const ev = events.find(e => e.eventId === eventId);
     setAttendance(prev => prev.map(a =>
       a.memberId === memberId && a.eventId === eventId
-        ? { ...a, status: a.status === "present" ? "absent" : "present" }
+        ? { ...a, status: newStatus }
         : a
     ));
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
   };
 
   const savePerformance = (memberId, eventId) => {
@@ -1349,7 +1361,10 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
       if (exists) return prev.map(p => p.memberId === memberId && p.eventId === eventId ? { ...p, ...edits } : p);
       return [...prev, { memberId, eventId, ctfPoints: 0, performancePoints: 0, ...edits }];
     });
+    const member = members.find(m => m.memberId === memberId);
+    const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctfPoints ?? 0}, Perf: ${edits.performancePoints ?? 0} (${ev?.eventDate})`);
   };
 
   const evt = selectedEvent;
@@ -1492,6 +1507,7 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                                             if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? {...r, rating: newRating} : r);
                                             return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: newRating }];
                                           });
+                                          if (newRating > 0) writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "eo_rating", `Rated ${m.ign} ${newRating}/5 stars — EO ${selectedEvent.eventDate}`);
                                         }}
                                         style={{
                                           fontSize:18,cursor:"pointer",
@@ -1555,20 +1571,25 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
 }
 
 // ─── ABSENCES ─────────────────────────────────────────────────────────────────
-function AbsencesPage({ members, absences, setAbsences, showToast }) {
+function AbsencesPage({ members, absences, setAbsences, showToast, currentUser }) {
   const [form, setForm] = useState({ memberId: members[0]?.memberId || "", eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0], reason: "", onlineStatus: "No" });
 
   const submitAbsence = () => {
     if (!form.memberId || !form.reason.trim()) { showToast("Fill all fields", "error"); return; }
     const id = `ABS${Date.now()}`;
     setAbsences(prev => [...prev, { ...form, id }]);
+    const member = members.find(m => m.memberId === form.memberId);
     showToast("Absence submitted successfully", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Submitted absence for ${member?.ign} — ${form.eventType} ${form.eventDate}: "${form.reason}"`);
     setForm(f => ({ ...f, reason: "" }));
   };
 
   const deleteAbsence = (id) => {
+    const absence = absences.find(a => a.id === id);
+    const member = members.find(m => m.memberId === absence?.memberId);
     setAbsences(prev => prev.filter(a => a.id !== id));
     showToast("Absence removed", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_delete", `Removed absence for ${member?.ign} — ${absence?.eventType} ${absence?.eventDate}`);
   };
 
   return (
@@ -3040,6 +3061,160 @@ function AuctionBuilder({ members, auctionSessions, setAuctionSessions, auctionT
 }
 
 
+
+// ─── AUDIT LOG PAGE ───────────────────────────────────────────────────────────
+async function writeAuditLog(userEmail, userName, action, details) {
+  try {
+    await addDoc(collection(db, "auditlogs"), {
+      userEmail,
+      userName,
+      action,
+      details,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Audit log error:", err);
+  }
+}
+
+function AuditLogPage() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterAction, setFilterAction] = useState("All");
+  const [filterUser, setFilterUser] = useState("All");
+
+  useEffect(() => {
+    const loadLogs = async () => {
+      try {
+        const q = query(collection(db, "auditlogs"), orderBy("timestamp", "desc"), limit(200));
+        const snap = await getDocs(q);
+        setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Load audit log error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadLogs();
+  }, []);
+
+  const actionIcons = {
+    "member_add": "➕",
+    "member_edit": "✏️",
+    "member_delete": "🗑️",
+    "event_create": "📅",
+    "event_delete": "🗑️",
+    "attendance_toggle": "✓",
+    "score_save": "⚔",
+    "eo_rating": "⭐",
+    "absence_submit": "⚠",
+    "absence_delete": "🗑️",
+  };
+
+  const actionColors = {
+    "member_add": "var(--green)",
+    "member_edit": "var(--accent)",
+    "member_delete": "var(--red)",
+    "event_create": "var(--gold)",
+    "event_delete": "var(--red)",
+    "attendance_toggle": "var(--accent)",
+    "score_save": "var(--gold)",
+    "eo_rating": "var(--gold)",
+    "absence_submit": "var(--accent2)",
+    "absence_delete": "var(--red)",
+  };
+
+  const allUsers = [...new Set(logs.map(l => l.userName))];
+  const allActions = [...new Set(logs.map(l => l.action))];
+
+  const filtered = logs.filter(l =>
+    (filterAction === "All" || l.action === filterAction) &&
+    (filterUser === "All" || l.userName === filterUser)
+  );
+
+  const formatTime = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleString("en-PH", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+  };
+
+  const actionLabel = (action) => action.replace(/_/g, " ").replace(/\w/g, c => c.toUpperCase());
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1 className="page-title">📋 Audit Log</h1>
+        <p className="page-subtitle">Track all changes made by officers and admins</p>
+      </div>
+
+      {/* Filters */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="flex gap-3 items-center" style={{flexWrap:"wrap"}}>
+          <div className="form-group" style={{marginBottom:0,gap:4}}>
+            <label className="form-label">Filter by Action</label>
+            <select className="form-select" style={{width:"auto"}} value={filterAction} onChange={e => setFilterAction(e.target.value)}>
+              <option value="All">All Actions</option>
+              {allActions.map(a => <option key={a} value={a}>{actionLabel(a)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{marginBottom:0,gap:4}}>
+            <label className="form-label">Filter by User</label>
+            <select className="form-select" style={{width:"auto"}} value={filterUser} onChange={e => setFilterUser(e.target.value)}>
+              <option value="All">All Users</option>
+              {allUsers.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div style={{paddingTop:18}} className="text-xs text-muted">{filtered.length} entries</div>
+        </div>
+      </div>
+
+      {/* Log entries */}
+      <div className="card">
+        {loading && <div className="empty-state"><div className="empty-state-text">Loading logs...</div></div>}
+        {!loading && filtered.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon">📋</div>
+            <div className="empty-state-text">No audit logs yet — changes will appear here</div>
+          </div>
+        )}
+        {!loading && filtered.map((log, i) => (
+          <div key={log.id} style={{
+            display:"flex",alignItems:"flex-start",gap:14,
+            padding:"14px 0",
+            borderBottom: i < filtered.length-1 ? "1px solid var(--border)" : "none"
+          }}>
+            {/* Icon */}
+            <div style={{
+              width:36,height:36,borderRadius:8,flexShrink:0,
+              background:`${actionColors[log.action] || "var(--accent)"}18`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:16
+            }}>
+              {actionIcons[log.action] || "📝"}
+            </div>
+
+            {/* Content */}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                <span style={{fontWeight:700,fontSize:14,color:"var(--text-primary)"}}>{log.userName}</span>
+                <span className="badge badge-support" style={{fontSize:9}}>{log.userEmail?.split("@")[0]}</span>
+                <span style={{fontSize:12,padding:"2px 10px",borderRadius:20,background:`${actionColors[log.action] || "var(--accent)"}18`,color:actionColors[log.action] || "var(--accent)",fontWeight:700}}>
+                  {actionLabel(log.action)}
+                </span>
+              </div>
+              <div style={{fontSize:13,color:"var(--text-secondary)"}}>{log.details}</div>
+            </div>
+
+            {/* Timestamp */}
+            <div style={{fontSize:11,color:"var(--text-muted)",whiteSpace:"nowrap",flexShrink:0}}>
+              {formatTime(log.timestamp)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -3260,6 +3435,7 @@ const NAV_ITEMS = [
   { id: "report", label: "Weekly Report", icon: "report" },
   { id: "auction", label: "Auction Builder", icon: "trophy" },
   { id: "users", label: "User Management", icon: "users" },
+  { id: "auditlog", label: "Audit Log", icon: "report" },
 ];
 
 
@@ -3535,7 +3711,7 @@ export default function App() {
             <div className="logo-sub" style={{textAlign:"center"}}>Guild Manager</div>
           </div>
           <div className="sidebar-nav">
-            {NAV_ITEMS.filter(item => item.id !== "users" || isAdmin).map(item => {
+            {NAV_ITEMS.filter(item => (item.id !== "users" && item.id !== "auditlog") || isAdmin).map(item => {
               const counts = {
                 members: members.length,
                 events: events.length,
@@ -3587,10 +3763,10 @@ export default function App() {
         {/* Main */}
         <main className="main-content">
           {page === "dashboard" && <Dashboard members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
-          {page === "members" && !profileMember && <MembersPage members={members} setMembers={setMembers} showToast={showToast} onViewProfile={setProfileMember} isAdmin={isAdmin} />}
+          {page === "members" && !profileMember && <MembersPage members={members} setMembers={setMembers} showToast={showToast} onViewProfile={setProfileMember} isAdmin={isAdmin} currentUser={currentUser} />}
           {page === "members" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
-          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} isAdmin={isAdmin} />}
-          {page === "absences" && <AbsencesPage members={members} absences={absences} setAbsences={setAbsences} showToast={showToast} />}
+          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} isAdmin={isAdmin} currentUser={currentUser} />}
+          {page === "absences" && <AbsencesPage members={members} absences={absences} setAbsences={setAbsences} showToast={showToast} currentUser={currentUser} />}
           {page === "leaderboard" && !profileMember && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} onViewProfile={setProfileMember} />}
           {page === "leaderboard" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
           {page === "party" && <PartyBuilder members={members} events={events} attendance={attendance} parties={parties} setParties={setParties} />}
@@ -3598,6 +3774,7 @@ export default function App() {
           {page === "report" && <WeeklyReportPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
           {page === "auction" && <AuctionBuilder members={members} auctionSessions={auctionSessions} setAuctionSessions={setAuctionSessions} auctionTemplates={auctionTemplates} setAuctionTemplates={setAuctionTemplates} showToast={showToast} />}
           {page === "users" && isAdmin && <UserManagementPage currentUser={currentUser} showToast={showToast} />}
+          {page === "auditlog" && isAdmin && <AuditLogPage />}
         </main>
 
         {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
