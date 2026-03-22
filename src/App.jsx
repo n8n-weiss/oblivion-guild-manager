@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { db } from "./firebase";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { db, auth } from "./firebase";
+import { doc, setDoc, getDoc, collection, addDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const INITIAL_MEMBERS = [
@@ -1164,7 +1165,7 @@ function MemberAvatar({ ign, index, size=34 }) {
     </div>
   );
 }
-function MembersPage({ members, setMembers, showToast, onViewProfile }) {
+function MembersPage({ members, setMembers, showToast, onViewProfile, isAdmin }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
@@ -1258,7 +1259,7 @@ function MembersPage({ members, setMembers, showToast, onViewProfile }) {
                   <td>
                     <div className="flex gap-2 justify-end">
                       <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14}/></button>
-                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteMember(m.memberId)} title="Delete"><Icon name="trash" size={14}/></button>
+                      {isAdmin && <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteMember(m.memberId)} title="Delete"><Icon name="trash" size={14}/></button>}
                     </div>
                   </td>
                 </tr>
@@ -1301,7 +1302,7 @@ function MembersPage({ members, setMembers, showToast, onViewProfile }) {
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
-function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, eoRatings, setEoRatings, showToast }) {
+function EventsPage({ members, events, setEvents, attendance, setAttendance, performance, setPerformance, absences, eoRatings, setEoRatings, showToast, isAdmin }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -1398,10 +1399,10 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>No</button>
                       </div>
                     ) : (
-                      <button className="btn btn-danger btn-sm" style={{width:"100%"}}
+                      isAdmin ? <button className="btn btn-danger btn-sm" style={{width:"100%"}}
                         onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
                         <Icon name="trash" size={12}/> Delete
-                      </button>
+                      </button> : null
                     )}
                   </div>
                 </div>
@@ -2469,7 +2470,7 @@ ${topPerformers.map((p, i) => `${["🥇","🥈","🥉"][i]} ${p.ign} — ${p.sco
 ${needsAttention.slice(0,3).map(m => `${m.consecutiveAbsent >= 3 ? "🔴" : "🟡"} ${m.ign} — ${m.consecutiveAbsent >= 2 ? `${m.consecutiveAbsent} consecutive absences` : `${m.absentCount} absences`} (${m.attPct}% att)`).join("\n")}` : ""}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📊`;
+📊 Full rankings: https://n8n-weiss.github.io/oblivion-guild-manager/`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(discordText).then(() => {
@@ -3038,6 +3039,216 @@ function AuctionBuilder({ members, auctionSessions, setAuctionSessions, auctionT
   );
 }
 
+
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+function LoginPage({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) { setError("Please fill in all fields."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      setError("Invalid email or password. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <style>{styles}</style>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"var(--bg-deepest)",padding:20}}>
+        <div style={{width:"100%",maxWidth:400,display:"flex",flexDirection:"column",alignItems:"center",gap:28}}>
+
+          {/* Logo */}
+          <div style={{textAlign:"center"}}>
+            <img
+              src={window.location.hostname === "localhost" ? "/oblivion-logo.png" : "/oblivion-guild-manager/oblivion-logo.png"}
+              alt="Oblivion Guild"
+              style={{width:180,height:180,objectFit:"cover",borderRadius:16,border:"1px solid rgba(99,130,230,0.25)",marginBottom:12,display:"block",margin:"0 auto 12px"}}
+            />
+            <div style={{fontSize:11,letterSpacing:4,color:"var(--text-muted)",textTransform:"uppercase"}}>Guild Manager</div>
+          </div>
+
+          {/* Card */}
+          <div style={{width:"100%",background:"var(--bg-card)",border:"1px solid var(--border-bright)",borderRadius:16,padding:32,position:"relative",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,var(--accent-glow),transparent)"}}/>
+
+            <div style={{fontFamily:"Cinzel,serif",fontSize:18,fontWeight:700,color:"var(--text-primary)",marginBottom:4}}>Welcome Back</div>
+            <div style={{fontSize:13,color:"var(--text-muted)",marginBottom:24}}>Sign in to access the guild system</div>
+
+            <div className="form-grid" style={{gap:16}}>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="form-input" type="email" placeholder="your@email.com"
+                  value={email} onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key==="Enter" && handleLogin()} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="form-input" type="password" placeholder="••••••••"
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key==="Enter" && handleLogin()} />
+              </div>
+            </div>
+
+            {error && (
+              <div style={{marginTop:12,padding:"10px 14px",background:"rgba(224,80,80,0.1)",border:"1px solid rgba(224,80,80,0.3)",borderRadius:8,fontSize:12,color:"var(--red)"}}>
+                ⚠ {error}
+              </div>
+            )}
+
+            <button className="btn btn-primary w-full" style={{marginTop:20,width:"100%",justifyContent:"center",padding:"12px",fontSize:14,letterSpacing:1}}
+              onClick={handleLogin} disabled={loading}>
+              {loading ? "Signing in..." : "Sign In ⚔"}
+            </button>
+          </div>
+
+          <div style={{fontSize:11,color:"var(--text-muted)",textAlign:"center",letterSpacing:1}}>
+            No account? Contact your Guild Master.
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── USER MANAGEMENT PAGE (Admin only) ────────────────────────────────────────
+function UserManagementPage({ currentUser, showToast }) {
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "officer" });
+  const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const snap = await getDoc(doc(db, "guildusers", "list"));
+        if (snap.exists()) setUsers(snap.data().users || []);
+      } catch (err) { console.error(err); }
+    };
+    loadUsers();
+  }, []);
+
+  const saveUsers = async (newUsers) => {
+    await setDoc(doc(db, "guildusers", "list"), { users: newUsers });
+    setUsers(newUsers);
+  };
+
+  const createUser = async () => {
+    if (!form.email.trim() || !form.password.trim() || !form.displayName.trim()) {
+      showToast("Fill all fields", "error"); return;
+    }
+    setCreating(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+      const newUser = { uid: cred.user.uid, email: form.email, displayName: form.displayName, role: form.role, createdAt: new Date().toISOString() };
+      // Save role to Firestore
+      await setDoc(doc(db, "userroles", cred.user.uid), { role: form.role, displayName: form.displayName, email: form.email });
+      const newUsers = [...users, newUser];
+      await saveUsers(newUsers);
+      setForm({ email: "", password: "", displayName: "", role: "officer" });
+      setShowForm(false);
+      showToast(`Account created for ${form.displayName}`, "success");
+      // Sign back in as admin (creating user signs in as new user)
+      await signInWithEmailAndPassword(auth, currentUser.email, "");
+    } catch (err) {
+      showToast(err.message || "Error creating account", "error");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const roleColors = { admin: "var(--gold)", officer: "var(--accent)" };
+  const roleBadge = { admin: "badge-core", officer: "badge-support" };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1 className="page-title">👥 User Management</h1>
+        <p className="page-subtitle">Manage officer accounts — Admin only</p>
+      </div>
+
+      <div className="card" style={{marginBottom:20}}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="card-title" style={{marginBottom:0}}>Guild Accounts ({users.length})</div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}><Icon name="plus" size={12}/> Create Account</button>
+        </div>
+
+        {showForm && (
+          <div style={{background:"rgba(99,130,230,0.05)",border:"1px solid var(--border)",borderRadius:10,padding:16,marginBottom:16}}>
+            <div className="form-grid form-grid-2" style={{marginBottom:12}}>
+              <div className="form-group">
+                <label className="form-label">Display Name</label>
+                <input className="form-input" placeholder="Officer name" value={form.displayName} onChange={e => setForm(f=>({...f,displayName:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Role</label>
+                <select className="form-select" value={form.role} onChange={e => setForm(f=>({...f,role:e.target.value}))}>
+                  <option value="officer">🛡 Officer</option>
+                  <option value="admin">⭐ Admin</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="form-input" type="email" placeholder="officer@oblivion.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="form-input" type="password" placeholder="Set initial password" value={form.password} onChange={e => setForm(f=>({...f,password:e.target.value}))} />
+              </div>
+            </div>
+            <div style={{background:"rgba(240,192,64,0.06)",border:"1px solid rgba(240,192,64,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--text-muted)",marginBottom:12}}>
+              ⚠ After creating, share the email and password with the officer. They can change their password later.
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={createUser} disabled={creating}>
+                {creating ? "Creating..." : <><Icon name="plus" size={12}/> Create Account</>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>Email</th><th>Role</th><th>Created</th>
+            </tr></thead>
+            <tbody>
+              {users.length === 0 && (
+                <tr><td colSpan={4}><div className="empty-state"><div className="empty-state-text">No accounts yet</div></div></td></tr>
+              )}
+              {users.map((u, i) => (
+                <tr key={u.uid || i}>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:u.role==="admin"?"rgba(240,192,64,0.18)":"rgba(99,130,230,0.18)",color:u.role==="admin"?"var(--gold)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Cinzel,serif",fontSize:12,fontWeight:700}}>
+                        {u.displayName?.slice(0,2).toUpperCase()}
+                      </div>
+                      <span style={{fontWeight:700}}>{u.displayName}</span>
+                      {u.uid === currentUser?.uid && <span style={{fontSize:10,color:"var(--text-muted)"}}>(you)</span>}
+                    </div>
+                  </td>
+                  <td className="text-secondary">{u.email}</td>
+                  <td><span className={`badge ${u.role==="admin"?"badge-core":"badge-support"}`}>{u.role==="admin"?"⭐ Admin":"🛡 Officer"}</span></td>
+                  <td className="text-muted" style={{fontSize:12}}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
   { id: "members", label: "Members", icon: "members" },
@@ -3048,6 +3259,7 @@ const NAV_ITEMS = [
   { id: "import", label: "Import CSV", icon: "save" },
   { id: "report", label: "Weekly Report", icon: "report" },
   { id: "auction", label: "Auction Builder", icon: "trophy" },
+  { id: "users", label: "User Management", icon: "users" },
 ];
 
 
@@ -3185,6 +3397,42 @@ export default function App() {
   const [auctionTemplates, setAuctionTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [profileMember, setProfileMember] = useState(null);
+  // Auth state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // ── Listen to auth state changes
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        // Load user role from Firestore
+        try {
+          const roleSnap = await getDoc(doc(db, "userroles", user.uid));
+          if (roleSnap.exists()) {
+            setUserRole(roleSnap.data().role);
+          } else {
+            setUserRole("admin"); // First user = admin
+            await setDoc(doc(db, "userroles", user.uid), { role: "admin", email: user.email, displayName: user.email });
+          }
+        } catch (err) { setUserRole("admin"); }
+      } else {
+        setCurrentUser(null);
+        setUserRole(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    setPage("dashboard");
+    showToast("Signed out successfully", "success");
+  };
+
+  const isAdmin = userRole === "admin";
 
   // ── Load data from Firebase on startup
   useEffect(() => {
@@ -3248,6 +3496,20 @@ export default function App() {
     setToast({ message, type, key: Date.now() });
   };
 
+  // Show auth loading
+  if (authLoading) return (
+    <>
+      <style>{styles}</style>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"var(--bg-deepest)",flexDirection:"column",gap:16}}>
+        <div style={{fontFamily:"Cinzel,serif",fontSize:28,color:"var(--accent)",textShadow:"0 0 20px rgba(99,130,230,0.5)"}}>OBLIVION</div>
+        <div style={{color:"var(--text-muted)",fontSize:13,letterSpacing:3,textTransform:"uppercase"}}>Initializing...</div>
+      </div>
+    </>
+  );
+
+  // Show login if not authenticated
+  if (!currentUser) return <LoginPage />;
+
   if (loading) return (
     <>
       <style>{styles}</style>
@@ -3265,22 +3527,15 @@ export default function App() {
         {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-logo">
-  <img
-    src="/oblivion-guild-manager/oblivion-logo.png"
-    alt="Oblivion Guild"
-    style={{
-      width: "100%",
-      maxWidth: 160,
-      height: "auto",
-      display: "block",
-      margin: "0 auto 8px",
-      borderRadius: 8,
-    }}
-  />
-  <div className="logo-sub" style={{textAlign:"center"}}>Guild Manager</div>
-</div>
+            <img
+              src={window.location.hostname === "localhost" ? "/oblivion-logo.png" : "/oblivion-guild-manager/oblivion-logo.png"}
+              alt="Oblivion Guild"
+              style={{width:"100%",maxWidth:160,height:"auto",display:"block",margin:"0 auto 8px",borderRadius:8}}
+            />
+            <div className="logo-sub" style={{textAlign:"center"}}>Guild Manager</div>
+          </div>
           <div className="sidebar-nav">
-            {NAV_ITEMS.map(item => {
+            {NAV_ITEMS.filter(item => item.id !== "users" || isAdmin).map(item => {
               const counts = {
                 members: members.length,
                 events: events.length,
@@ -3304,6 +3559,26 @@ export default function App() {
             })}
           </div>
           <div className="sidebar-footer">
+            {currentUser && (
+              <div style={{marginBottom:12,padding:"10px 10px",background:"rgba(99,130,230,0.08)",borderRadius:8,border:"1px solid var(--border)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <div style={{width:30,height:30,borderRadius:6,background:isAdmin?"rgba(240,192,64,0.18)":"rgba(99,130,230,0.18)",color:isAdmin?"var(--gold)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Cinzel,serif",fontSize:11,fontWeight:700,flexShrink:0}}>
+                    {(currentUser.displayName || currentUser.email || "").slice(0,2).toUpperCase()}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {currentUser.displayName || currentUser.email}
+                    </div>
+                    <div style={{fontSize:10,color:isAdmin?"var(--gold)":"var(--accent)",letterSpacing:1}}>
+                      {isAdmin ? "⭐ Admin" : "🛡 Officer"}
+                    </div>
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-sm" style={{width:"100%",justifyContent:"center",fontSize:11}} onClick={handleSignOut}>
+                  Sign Out
+                </button>
+              </div>
+            )}
             <div>⚔ Ragnarok Online</div>
             <div style={{marginTop:2}}>v1.0 · Guild System</div>
           </div>
@@ -3312,9 +3587,9 @@ export default function App() {
         {/* Main */}
         <main className="main-content">
           {page === "dashboard" && <Dashboard members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
-          {page === "members" && !profileMember && <MembersPage members={members} setMembers={setMembers} showToast={showToast} onViewProfile={setProfileMember} />}
+          {page === "members" && !profileMember && <MembersPage members={members} setMembers={setMembers} showToast={showToast} onViewProfile={setProfileMember} isAdmin={isAdmin} />}
           {page === "members" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
-          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} />}
+          {page === "events" && <EventsPage members={members} events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} performance={performance} setPerformance={setPerformance} absences={absences} eoRatings={eoRatings} setEoRatings={setEoRatings} showToast={showToast} isAdmin={isAdmin} />}
           {page === "absences" && <AbsencesPage members={members} absences={absences} setAbsences={setAbsences} showToast={showToast} />}
           {page === "leaderboard" && !profileMember && <LeaderboardPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} onViewProfile={setProfileMember} />}
           {page === "leaderboard" && profileMember && <MemberProfilePage member={profileMember} members={members} events={events} attendance={attendance} performance={performance} absences={absences} eoRatings={eoRatings} onBack={() => setProfileMember(null)} />}
@@ -3322,6 +3597,7 @@ export default function App() {
           {page === "import" && <ImportPage members={members} setMembers={setMembers} showToast={showToast} />}
           {page === "report" && <WeeklyReportPage members={members} events={events} attendance={attendance} performance={performance} eoRatings={eoRatings} />}
           {page === "auction" && <AuctionBuilder members={members} auctionSessions={auctionSessions} setAuctionSessions={setAuctionSessions} auctionTemplates={auctionTemplates} setAuctionTemplates={setAuctionTemplates} showToast={showToast} />}
+          {page === "users" && isAdmin && <UserManagementPage currentUser={currentUser} showToast={showToast} />}
         </main>
 
         {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
