@@ -2469,7 +2469,7 @@ ${topPerformers.map((p, i) => `${["🥇","🥈","🥉"][i]} ${p.ign} — ${p.sco
 ${needsAttention.slice(0,3).map(m => `${m.consecutiveAbsent >= 3 ? "🔴" : "🟡"} ${m.ign} — ${m.consecutiveAbsent >= 2 ? `${m.consecutiveAbsent} consecutive absences` : `${m.absentCount} absences`} (${m.attPct}% att)`).join("\n")}` : ""}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📊 Full rankings: https://n8n-weiss.github.io/oblivion-guild-manager/`;
+📊`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(discordText).then(() => {
