@@ -72,11 +72,14 @@ const INITIAL_PERFORMANCE = [
 // ─── NEW SCORING: CTF + PP direct, attendance tracked separately
 function computeScore({ event, att, perf }) {
   const isPresent = att?.status === "present";
-  if (event.eventType === "Emperium Overrun") return 0; // EO = attendance only, no score
-  if (!isPresent) return 0; // absent = 0 score (tracked separately)
-  const ctf = perf?.ctfPoints ?? 0;
+  if (event.eventType === "Emperium Overrun") return 0;
+  if (!isPresent) return 0;
+  const ctf1 = perf?.ctf1 ?? perf?.ctfPoints ?? 0;
+  const ctf2 = perf?.ctf2 ?? 0;
+  const ctf3 = perf?.ctf3 ?? 0;
+  const ctfTotal = ctf1 + ctf2 + ctf3;
   const pp = perf?.performancePoints ?? 0;
-  return ctf + pp; // direct, no multiplier
+  return ctfTotal + pp;
 }
 
 function computeAttendanceStatus(attendancePct) {
@@ -1359,12 +1362,13 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
     setPerformance(prev => {
       const exists = prev.find(p => p.memberId === memberId && p.eventId === eventId);
       if (exists) return prev.map(p => p.memberId === memberId && p.eventId === eventId ? { ...p, ...edits } : p);
-      return [...prev, { memberId, eventId, ctfPoints: 0, performancePoints: 0, ...edits }];
+      return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, ...edits }];
     });
     const member = members.find(m => m.memberId === memberId);
     const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctfPoints ?? 0}, Perf: ${edits.performancePoints ?? 0} (${ev?.eventDate})`);
+    const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0} (${ev?.eventDate})`);
   };
 
   const evt = selectedEvent;
@@ -1444,16 +1448,19 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                 <table>
                   <thead><tr>
                     <th>Member</th><th>Class</th><th>Attendance</th>
-                    {selectedEvent.eventType === "Guild League" && <><th>CTF Pts</th><th>Perf Pts</th><th>Score</th><th></th></>}
+                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>CTF Total</th><th>Perf Pts</th><th>Score</th><th></th></>}
                     {selectedEvent.eventType === "Emperium Overrun" && <th>EO Rating</th>}
                   </tr></thead>
                   <tbody>
                     {evtMembers.map(m => {
                       const key = `${m.memberId}_${selectedEvent.eventId}`;
                       const curPerf = perfEdits[key] || {};
-                      const ctf = curPerf.ctfPoints !== undefined ? curPerf.ctfPoints : (m.perf?.ctfPoints ?? 0);
+                      const ctf1 = curPerf.ctf1 !== undefined ? curPerf.ctf1 : (m.perf?.ctf1 ?? m.perf?.ctfPoints ?? 0);
+                      const ctf2 = curPerf.ctf2 !== undefined ? curPerf.ctf2 : (m.perf?.ctf2 ?? 0);
+                      const ctf3 = curPerf.ctf3 !== undefined ? curPerf.ctf3 : (m.perf?.ctf3 ?? 0);
+                      const ctfTotal = ctf1 + ctf2 + ctf3;
                       const pp = curPerf.performancePoints !== undefined ? curPerf.performancePoints : (m.perf?.performancePoints ?? 0);
-                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctfPoints: ctf, performancePoints: pp } });
+                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp } });
                       return (
                         <tr key={m.memberId}>
                           <td>
@@ -1469,10 +1476,29 @@ function EventsPage({ members, events, setEvents, attendance, setAttendance, per
                           {selectedEvent.eventType === "Guild League" && (
                             <>
                               <td>
-                                <input type="number" className="form-input" style={{width:64,padding:"4px 8px",fontSize:13}} min={0}
-                                  value={ctf}
-                                  onChange={e => setPerfEdits(prev => ({...prev,[key]:{...prev[key]||{},ctfPoints:+e.target.value}}))}
+                                <input type="number" className="form-input" style={{width:56,padding:"4px 8px",fontSize:13}} min={0}
+                                  value={ctf1}
+                                  onChange={e => setPerfEdits(prev => ({...prev,[key]:{...prev[key]||{},ctf1:+e.target.value}}))}
                                   disabled={m.att?.status !== "present"} />
+                              </td>
+                              <td>
+                                <input type="number" className="form-input" style={{width:56,padding:"4px 8px",fontSize:13}} min={0}
+                                  value={ctf2}
+                                  onChange={e => setPerfEdits(prev => ({...prev,[key]:{...prev[key]||{},ctf2:+e.target.value}}))}
+                                  disabled={m.att?.status !== "present"} />
+                              </td>
+                              <td>
+                                <input type="number" className="form-input" style={{width:56,padding:"4px 8px",fontSize:13}} min={0}
+                                  value={ctf3}
+                                  onChange={e => setPerfEdits(prev => ({...prev,[key]:{...prev[key]||{},ctf3:+e.target.value}}))}
+                                  disabled={m.att?.status !== "present"} />
+                              </td>
+                              <td>
+                                <span style={{fontFamily:"Cinzel,serif",fontSize:14,fontWeight:700,
+                                  color:ctfTotal>0?"var(--accent)":"var(--text-muted)",
+                                  background:"rgba(99,130,230,0.1)",padding:"3px 10px",borderRadius:6}}>
+                                  {ctfTotal}
+                                </span>
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{width:64,padding:"4px 8px",fontSize:13}} min={0}
@@ -2314,7 +2340,7 @@ function MemberProfilePage({ member, members, events, attendance, performance, a
           <div className="table-wrap">
             <table>
               <thead><tr>
-                <th>Date</th><th>Type</th><th>Status</th><th>CTF</th><th>Perf Pts</th><th>Score / Rating</th>
+                <th>Date</th><th>Type</th><th>Status</th><th>CTF Breakdown</th><th>Perf Pts</th><th>Score / Rating</th>
               </tr></thead>
               <tbody>
                 {memberEvents.length === 0 && (
@@ -2334,7 +2360,12 @@ function MemberProfilePage({ member, members, events, attendance, performance, a
                       </span>
                     </td>
                     <td className="text-secondary">
-                      {ev.eventType==="Guild League" && ev.att?.status==="present" ? (ev.perf?.ctfPoints ?? "—") : "—"}
+                      {ev.eventType==="Guild League" && ev.att?.status==="present" ? (
+                        <div>
+                          <div style={{fontSize:12,color:"var(--text-muted)"}}>{ev.perf?.ctf1 ?? ev.perf?.ctfPoints ?? 0} + {ev.perf?.ctf2 ?? 0} + {ev.perf?.ctf3 ?? 0}</div>
+                          <div style={{fontWeight:700,color:"var(--accent)",fontSize:13}}>= {(ev.perf?.ctf1 ?? ev.perf?.ctfPoints ?? 0) + (ev.perf?.ctf2 ?? 0) + (ev.perf?.ctf3 ?? 0)}</div>
+                        </div>
+                      ) : "—"}
                     </td>
                     <td className="text-secondary">
                       {ev.eventType==="Guild League" && ev.att?.status==="present" ? (ev.perf?.performancePoints ?? "—") : "—"}
