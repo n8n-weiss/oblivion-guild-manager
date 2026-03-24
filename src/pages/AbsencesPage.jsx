@@ -54,7 +54,7 @@ function AbsencesPage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Event Date</label>
+              <label className="form-label">Event Date <span style={{ fontSize: 10, opacity: 0.6 }}>(DD-MM-YYYY)</span></label>
               <input type="date" className="form-input" value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} />
             </div>
             <div className="form-group">

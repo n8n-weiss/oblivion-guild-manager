@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
@@ -16,7 +16,15 @@ import {
 } from 'recharts';
 
 function MemberProfilePage({ member, onBack, isOwnProfile }) {
-  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId } = useGuild();
+  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId, setAbsences, showToast, currentUser } = useGuild();
+  const [showAbsenceForm, setShowAbsenceForm] = useState(false);
+  const [absenceForm, setAbsenceForm] = useState({
+    eventType: "Guild League",
+    eventDate: new Date().toISOString().split("T")[0],
+    reason: "",
+    onlineStatus: "No"
+  });
+
   if (!member) return null;
 
   // Security: Members can only see their own profile
@@ -102,6 +110,17 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     return null;
   };
 
+  const submitAbsence = () => {
+    if (!absenceForm.reason.trim()) { showToast("Please provide a reason", "error"); return; }
+    const id = `ABS${Date.now()}`;
+    const newAbsence = { ...absenceForm, memberId: member.memberId, id };
+    setAbsences(prev => [...prev, newAbsence]);
+    showToast("Absence filed successfully!", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Member filed own absence: ${member.ign} — ${absenceForm.eventType} ${absenceForm.eventDate}`);
+    setShowAbsenceForm(false);
+    setAbsenceForm(f => ({ ...f, reason: "" }));
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -114,7 +133,54 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <p className="page-subtitle">{isOwnProfile ? "Your full history and stats" : `Full history and stats for ${member.ign}`}</p>
           </div>
         </div>
+        {isOwnProfile && (
+          <button className="btn btn-primary" onClick={() => setShowAbsenceForm(true)}>
+            <Icon name="absence" size={14} /> File Absence
+          </button>
+        )}
       </div>
+
+      {/* Absence Filing Form Modal-like */}
+      {showAbsenceForm && (
+        <div className="card shadow-2xl" style={{ border: "2px solid var(--accent)", background: "rgba(99,130,230,0.05)", marginBottom: 20 }}>
+          <div className="card-title">🚨 File Absence</div>
+          <p className="text-muted" style={{ fontSize: 13, marginBottom: 16 }}>Please let the officers know why you'll be absent.</p>
+
+          <div className="form-grid form-grid-2">
+            <div className="form-group">
+              <label className="form-label">Event Type</label>
+              <select className="form-select" value={absenceForm.eventType}
+                onChange={e => setAbsenceForm(f => ({ ...f, eventType: e.target.value }))}>
+                <option>Guild League</option>
+                <option>Emperium Overrun</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Event Date <span style={{ fontSize: 10, opacity: 0.6 }}>(DD-MM-YYYY)</span></label>
+              <input type="date" className="form-input" value={absenceForm.eventDate}
+                onChange={e => setAbsenceForm(f => ({ ...f, eventDate: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Will you be online?</label>
+              <select className="form-select" value={absenceForm.onlineStatus}
+                onChange={e => setAbsenceForm(f => ({ ...f, onlineStatus: e.target.value }))}>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ gridColumn: "1/-1" }}>
+              <label className="form-label">Reason</label>
+              <textarea className="form-input" rows={2} placeholder="Reason for absence..."
+                value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({ ...f, reason: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end mt-4">
+            <button className="btn btn-ghost" onClick={() => setShowAbsenceForm(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitAbsence}>Submit Absence</button>
+          </div>
+        </div>
+      )}
 
       {/* Header Card */}
       <div className="card" style={{ marginBottom: 20 }}>

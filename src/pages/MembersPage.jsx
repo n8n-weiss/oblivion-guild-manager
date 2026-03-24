@@ -115,10 +115,11 @@ function MembersPage({ onViewProfile }) {
                         <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14} /></button>
                       )}
                       {isAdmin && (
-                        <button className={`btn btn-sm btn-icon ${statusFilter === "active" ? "btn-ghost" : "btn-primary"}`} 
-                          onClick={() => toggleArchive(m.memberId)} 
+                        <button className={`btn btn-sm ${statusFilter === "active" ? "btn-archive" : "btn-restore"}`}
+                          onClick={() => toggleArchive(m.memberId)}
                           title={statusFilter === "active" ? "Archive (Left Guild)" : "Restore Member"}>
                           <Icon name={statusFilter === "active" ? "absence" : "plus"} size={14} />
+                          <span>{statusFilter === "active" ? "Archive" : "Restore"}</span>
                         </button>
                       )}
                     </div>

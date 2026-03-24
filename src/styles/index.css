@@ -380,7 +380,41 @@
   .form-select option { background: var(--bg-dark); }
 
   /* ── Search bar ── */
-  .search-bar {
+  .btn-archive {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-archive:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+}
+
+.btn-restore {
+  background: rgba(99, 130, 230, 0.08);
+  color: var(--accent);
+  border: 1px solid rgba(99, 130, 230, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-restore:hover {
+  background: rgba(99, 130, 230, 0.15);
+  border-color: rgba(99, 130, 230, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 130, 230, 0.1);
+}
+
+.search-bar {
     position: relative;
     flex: 1;
     max-width: 320px;

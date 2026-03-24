@@ -130,25 +130,25 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         });
 
-        const loadedAbsences = absSnap.docs.map(d => d.data());
+        const isNew = !metaSnap.exists();
         const metadata = metaSnap.exists() ? metaSnap.data() : {};
 
-        setMembers(loadedMembers.length ? loadedMembers : initialData.INITIAL_MEMBERS || []);
-        setEvents(loadedEvents.length ? loadedEvents : initialData.INITIAL_EVENTS || []);
-        setAttendance(flatAttendance.length ? flatAttendance : initialData.INITIAL_ATTENDANCE || []);
-        setPerformance(flatPerformance.length ? flatPerformance : initialData.INITIAL_PERFORMANCE || []);
+        setMembers(loadedMembers.length ? loadedMembers : (isNew ? initialData.INITIAL_MEMBERS || [] : []));
+        setEvents(loadedEvents.length ? loadedEvents : (isNew ? initialData.INITIAL_EVENTS || [] : []));
+        setAttendance(flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []));
+        setPerformance(flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []));
         setAbsences(loadedAbsences);
         setParties(metadata.parties || []);
         setEoRatings(flatEoRatings);
         setAuctionSessions(metadata.auctionSessions || []);
         setAuctionTemplates(metadata.auctionTemplates || []);
 
-        // Initialize prevData to avoid immediate trigger of auto-save
+        // Initialize prevData
         prevData.current = {
-          members: loadedMembers,
-          events: loadedEvents,
-          attendance: flatAttendance,
-          performance: flatPerformance,
+          members: loadedMembers.length ? loadedMembers : (isNew ? initialData.INITIAL_MEMBERS || [] : []),
+          events: loadedEvents.length ? loadedEvents : (isNew ? initialData.INITIAL_EVENTS || [] : []),
+          attendance: flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []),
+          performance: flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []),
           absences: loadedAbsences,
           parties: metadata.parties || [],
           eoRatings: flatEoRatings,
@@ -260,6 +260,46 @@ export const GuildProvider = ({ children, initialData }) => {
     return () => clearTimeout(timeout);
   }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, loading]);
 
+  const resetDatabase = async () => {
+    setLoading(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Get all docs in all collections
+      const collections = ["roster", "events", "attendance", "performance", "eoRatings", "absences"];
+      for (const collName of collections) {
+        const snap = await getDocs(collection(db, collName));
+        snap.forEach(d => batch.delete(d.ref));
+      }
+      
+      // Reset metadata
+      batch.set(doc(db, "metadata", "current"), { 
+        parties: [], auctionSessions: [], auctionTemplates: [], 
+        isInitialized: true, lastReset: new Date().toISOString() 
+      });
+      
+      await batch.commit();
+      
+      // Clear local state
+      setMembers([]);
+      setEvents([]);
+      setAttendance([]);
+      setPerformance([]);
+      setAbsences([]);
+      setParties([]);
+      setEoRatings([]);
+      setAuctionSessions([]);
+      setAuctionTemplates([]);
+      
+      showToast("Database reset successfully", "success");
+    } catch (err) {
+      console.error("Reset error:", err);
+      showToast("Error resetting database", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember,
     page, setPage,
@@ -272,7 +312,8 @@ export const GuildProvider = ({ children, initialData }) => {
     parties, setParties,
     eoRatings, setEoRatings,
     auctionSessions, setAuctionSessions,
-    auctionTemplates, setAuctionTemplates
+    auctionTemplates, setAuctionTemplates,
+    resetDatabase
   };
 
   return (

@@ -6,12 +6,13 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 
 function UserManagementPage() {
-  const { currentUser, showToast, members } = useGuild();
+  const { currentUser, showToast, members, isAdmin, resetDatabase } = useGuild();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingUid, setEditingUid] = useState(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -177,6 +178,30 @@ function UserManagementPage() {
           </table>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="card" style={{ border: "1px solid rgba(239, 68, 68, 0.2)", background: "rgba(239, 68, 68, 0.02)" }}>
+          <div className="card-title" style={{ color: "#ef4444" }}>⚠️ System Tools</div>
+          <p className="text-muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            Use these tools only if you need to wipe all guild data (roster, events, attendance) to start fresh.
+          </p>
+          
+          {showResetConfirm ? (
+            <div style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontWeight: 700, color: "#ef4444", marginBottom: 8, fontSize: 14 }}>ARE YOU ABSOLUTELY SURE?</div>
+              <p style={{ fontSize: 12, marginBottom: 12 }}>This will permanently delete all members, events, attendance, and analytics records. This cannot be undone.</p>
+              <div className="flex gap-2">
+                <button className="btn btn-danger btn-sm" onClick={() => { resetDatabase(); setShowResetConfirm(false); }}>Yes, Delete Everything</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowResetConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn btn-danger btn-sm" onClick={() => setShowResetConfirm(true)}>
+              <Icon name="trash" size={12} /> Reset Database
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
