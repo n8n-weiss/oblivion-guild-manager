@@ -16,8 +16,8 @@ function MembersPage({ onViewProfile }) {
   const filtered = members.filter(m =>
     (roleFilter === "All" || m.role === roleFilter) &&
     (m.ign.toLowerCase().includes(search.toLowerCase()) ||
-     m.memberId.toLowerCase().includes(search.toLowerCase()) ||
-     m.class.toLowerCase().includes(search.toLowerCase()))
+      m.memberId.toLowerCase().includes(search.toLowerCase()) ||
+      m.class.toLowerCase().includes(search.toLowerCase()))
   );
 
   const openAdd = () => {
@@ -45,23 +45,21 @@ function MembersPage({ onViewProfile }) {
     if (editMember) {
       setMembers(prev => prev.map(m => m.memberId === editMember ? { ...form } : m));
       showToast("Member updated", "success");
-      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) â€” Class: ${form.class}, Role: ${form.role}`);
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) — Class: ${form.class}, Role: ${form.role}`);
     } else {
       if (members.find(m => m.memberId === form.memberId)) { showToast("ID already exists", "error"); return; }
       setMembers(prev => [...prev, { ...form }]);
       showToast("Member added", "success");
-      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_add", `Added new member ${form.ign} (${form.memberId}) â€” ${form.class}, ${form.role}`);
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_add", `Added new member ${form.ign} (${form.memberId}) — ${form.class}, ${form.role}`);
     }
     setShowModal(false);
   };
 
-  const roleColors = { DPS: "var(--accent2)", "Support": "var(--accent)", "Support/Utility": "var(--accent)" };
-
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">âš” Members</h1>
-        <p className="page-subtitle">Manage all guild members â€” {members.length} registered</p>
+        <h1 className="page-title">👿 Members</h1>
+        <p className="page-subtitle">Manage all guild members — {members.length} registered</p>
       </div>
 
       <div className="card">
@@ -69,9 +67,9 @@ function MembersPage({ onViewProfile }) {
           <div className="flex gap-2 items-center">
             <div className="search-bar">
               <span className="search-icon"><Icon name="search" size={14} /></span>
-              <input className="form-input" placeholder="Search IGN, ID, classâ€¦" value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="form-input" placeholder="Search IGN, ID, class…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <select className="form-select" style={{width:"auto"}} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <select className="form-select" style={{ width: "auto" }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
               <option>All</option><option>DPS</option><option>Support</option>
             </select>
           </div>
@@ -81,35 +79,35 @@ function MembersPage({ onViewProfile }) {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th><th style={{textAlign:"right"}}>Actions</th>
+              <th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th><th style={{ textAlign: "right" }}>Actions</th>
             </tr></thead>
             <tbody>
               {filtered.map(m => (
                 <tr key={m.memberId}>
                   <td><span className="font-cinzel text-xs text-muted">{m.memberId}</span></td>
                   <td>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <MemberAvatar ign={m.ign} index={members.indexOf(m)} size={34} />
-                      <span style={{fontWeight:700,cursor:"pointer",color:"var(--accent)"}}
+                      <span style={{ fontWeight: 700, cursor: "pointer", color: "var(--accent)" }}
                         onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</span>
                     </div>
                   </td>
                   <td><span className="text-secondary">{m.class}</span></td>
                   <td>
                     <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`}>
-                      {m.role === "DPS" ? <Icon name="sword" size={10}/> : <Icon name="shield" size={10}/>}
+                      {m.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />}
                       {m.role}
                     </span>
                   </td>
                   <td>
                     <div className="flex gap-2 justify-end">
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14}/></button>
-                      {isAdmin && <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteMember(m.memberId)} title="Delete"><Icon name="trash" size={14}/></button>}
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14} /></button>
+                      {isAdmin && <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteMember(m.memberId)} title="Delete"><Icon name="trash" size={14} /></button>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={5}><div className="empty-state"><div className="empty-state-icon">âš”</div><div className="empty-state-text">No members found</div></div></td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={5}><div className="empty-state"><div className="empty-state-icon">⚔</div><div className="empty-state-text">No members found</div></div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -117,24 +115,24 @@ function MembersPage({ onViewProfile }) {
 
       {showModal && (
         <Modal title={editMember ? "Edit Member" : "Add Member"} onClose={() => setShowModal(false)}
-          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={saveMember}><Icon name="save" size={14}/> Save</button></>}
+          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={saveMember}><Icon name="save" size={14} /> Save</button></>}
         >
           <div className="form-grid form-grid-2">
             <div className="form-group">
               <label className="form-label">Member ID</label>
-              <input className="form-input" value={form.memberId} onChange={e => setForm(f=>({...f,memberId:e.target.value}))} disabled={!!editMember} />
+              <input className="form-input" value={form.memberId} onChange={e => setForm(f => ({ ...f, memberId: e.target.value }))} disabled={!!editMember} />
             </div>
             <div className="form-group">
               <label className="form-label">IGN</label>
-              <input className="form-input" placeholder="In-game name" value={form.ign} onChange={e => setForm(f=>({...f,ign:e.target.value}))} />
+              <input className="form-input" placeholder="In-game name" value={form.ign} onChange={e => setForm(f => ({ ...f, ign: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Class</label>
-              <input className="form-input" placeholder="e.g. Lord Knight" value={form.class} onChange={e => setForm(f=>({...f,class:e.target.value}))} />
+              <input className="form-input" placeholder="e.g. Lord Knight" value={form.class} onChange={e => setForm(f => ({ ...f, class: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Role</label>
-              <select className="form-select" value={form.role} onChange={e => setForm(f=>({...f,role:e.target.value}))}>
+              <select className="form-select" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
                 <option value="DPS">DPS</option>
                 <option value="Support">Support / Utility</option>
               </select>
