@@ -130,6 +130,7 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         });
 
+        const loadedAbsences = absSnap.docs.map(d => d.data());
         const isNew = !metaSnap.exists();
         const metadata = metaSnap.exists() ? metaSnap.data() : {};
 
@@ -242,7 +243,19 @@ export const GuildProvider = ({ children, initialData }) => {
 
         // 7. Save Absences
         if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
-          absences.forEach(a => batch.set(doc(db, "absences", a.id || `ABS_${Date.now()}`), a));
+          // Identify removed absences
+          const currentIds = new Set(absences.map(a => a.id));
+          const removedIds = prevData.current.absences.filter(a => !currentIds.has(a.id)).map(a => a.id);
+          
+          removedIds.forEach(rid => {
+            if (rid) batch.delete(doc(db, "absences", rid));
+          });
+
+          // Set existing/new absences
+          absences.forEach(a => {
+            if (a.id) batch.set(doc(db, "absences", a.id), a);
+          });
+          
           prevData.current.absences = [...absences];
           changesCount++;
         }

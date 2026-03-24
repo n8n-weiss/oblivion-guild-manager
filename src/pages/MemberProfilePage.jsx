@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import { writeAuditLog } from "./AuditLogPage";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -60,6 +61,48 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const avgEoRating = eoRatingsList.length > 0
     ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
   const memberAbsences = absences.filter(a => a.memberId === member.memberId);
+
+  // --- NEW CALCULATIONS ---
+  // 1. Guild Average GL
+  const activeMembers = members.filter(m => (m.status || "active") === "active");
+  const guildTotalGL = activeMembers.reduce((sum, m) => {
+    const mEvents = events.filter(e => e.eventType === "Guild League");
+    const mScore = mEvents.reduce((s, e) => {
+      const att = attendance.find(a => a.memberId === m.memberId && a.eventId === e.eventId);
+      const perf = performance.find(p => p.memberId === m.memberId && p.eventId === e.eventId);
+      return s + (att?.status === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0);
+    }, 0);
+    return sum + mScore;
+  }, 0);
+  const guildAvgGL = activeMembers.length > 0 ? Math.round(guildTotalGL / activeMembers.length) : 0;
+
+  // 2. Trend Logic (Last 3 vs Previous)
+  const glScores = glEvents.filter(e => e.att?.status === "present").map(e => e.score);
+  const currentAvg = glScores.slice(0, 3).reduce((a, b) => a + b, 0) / Math.max(1, Math.min(3, glScores.length));
+  const prevAvg = glScores.slice(3, 6).length > 0 ? glScores.slice(3, 6).reduce((a, b) => a + b, 0) / glScores.slice(3, 6).length : currentAvg;
+  const glTrend = currentAvg > prevAvg ? "up" : currentAvg < prevAvg ? "down" : "stable";
+
+  // 3. Badges Logic
+  const badges = [];
+  if (totalGLScore >= 80) badges.push({ icon: "🔥", label: "War Hero", color: "var(--color-assassin)" });
+  if (attPct === 100 && memberEvents.length >= 5) badges.push({ icon: "🛡️", label: "Iron Wall", color: "var(--color-knight)" });
+  if (avgGL > (guildAvgGL / (activeMembers.length || 1)) + 5) badges.push({ icon: "⚡", label: "Clutch", color: "var(--accent)" });
+  if (eoRatingsList.length >= 3 && avgEoRating >= 4.5) badges.push({ icon: "⭐", label: "MVP", color: "var(--color-priest)" });
+
+  // 4. Class Theme & Icon
+  const classThemes = {
+    "Lord Knight": { color: "var(--color-knight)", icon: "⚔️" },
+    "Paladin": { color: "var(--color-knight)", icon: "🛡️" },
+    "High Priest": { color: "var(--color-priest)", icon: "✨" },
+    "Professor": { color: "var(--color-priest)", icon: "📖" },
+    "High Wizard": { color: "var(--color-wizard)", icon: "🔮" },
+    "Sniper": { color: "var(--color-sniper)", icon: "🏹" },
+    "Assassin Cross": { color: "var(--color-assassin)", icon: "🔪" },
+    "Stalker": { color: "var(--color-assassin)", icon: "🎭" },
+    "Whitesmith": { color: "var(--color-blacksmith)", icon: "🔨" },
+    "Creator": { color: "var(--color-blacksmith)", icon: "🧪" },
+  };
+  const theme = classThemes[member.class] || { color: "var(--color-others)", icon: "👤" };
 
   const attStatus = attPct >= 80 ? { label: "Reliable", badge: "badge-active" }
     : attPct >= 60 ? { label: "Average", badge: "badge-casual" }
@@ -183,31 +226,58 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       )}
 
       {/* Header Card */}
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card animate-fade-in" style={{ marginBottom: 20, borderLeft: `4px solid ${theme.color}`, background: `linear-gradient(90deg, ${theme.color}05, transparent)` }}>
         <div className="flex items-center gap-4" style={{ flexWrap: "wrap" }}>
-          <MemberAvatar ign={member.ign} index={memberIdx} size={72} />
+          <div style={{ position: "relative" }}>
+            <MemberAvatar ign={member.ign} index={memberIdx} size={84} />
+            <div style={{ position: "absolute", bottom: -5, right: -5, background: "var(--bg-card)", borderRadius: "50%", padding: 4, border: `2px solid ${theme.color}`, fontSize: 16 }}>
+              {theme.icon}
+            </div>
+          </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>{member.ign}</div>
+            <div className="flex items-center gap-3 mb-2">
+              <div style={{ fontFamily: "Cinzel,serif", fontSize: 26, fontWeight: 700, color: "var(--text-primary)" }}>{member.ign}</div>
+              <div className="flex gap-1">
+                {badges.map((b, i) => (
+                  <span key={i} title={b.label} style={{ fontSize: 18, cursor: "help", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.2))" }}>
+                    {b.icon}
+                  </span>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2" style={{ flexWrap: "wrap", marginBottom: 6 }}>
-              <span className="text-secondary" style={{ fontSize: 14 }}>{member.class}</span>
+              <span style={{ fontSize: 14, color: theme.color, fontWeight: 600 }}>{member.class}</span>
               <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`}>
                 {member.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />} {member.role}
               </span>
               <span className={`badge ${attStatus.badge}`}>🎯 {attStatus.label}</span>
               <span className={`badge ${scoreClassBadge[scoreClass]}`}>⚔ {scoreClass}</span>
             </div>
-            <div className="text-xs text-muted">{member.memberId}</div>
+            <div className="text-xs text-muted">Member ID: {member.memberId}</div>
           </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="stats-grid" style={{ marginBottom: 20 }}>
+      <div className="stats-grid animate-slide-up" style={{ marginBottom: 20, animationDelay: "0.1s" }}>
         <div className="stat-card" style={{ "--stat-accent": "var(--gold)" }}>
           <div className="stat-icon">⚔</div>
           <div className="stat-label">GL Score</div>
-          <div className="stat-value" style={{ color: "var(--gold)" }}>{totalGLScore}</div>
-          <div className="stat-change">all time total</div>
+          <div className="stat-value" style={{ color: "var(--gold)", display: "flex", alignItems: "baseline", gap: 6 }}>
+            {totalGLScore}
+            {glTrend !== "stable" && (
+              <span className={glTrend === "up" ? "trend-up" : "trend-down"} style={{ fontSize: 14 }}>
+                {glTrend === "up" ? "▲" : "▼"}
+              </span>
+            )}
+          </div>
+          <div className="stat-change">
+            all time total
+            <div className="progress-bar-wrap" title={`Guild Avg: ${guildAvgGL}`}>
+              <div className="progress-bar-fill" style={{ width: `${Math.min(100, (totalGLScore / Math.max(1, guildAvgGL)) * 100)}%`, background: "var(--gold)" }} />
+            </div>
+            <div className="text-xs text-muted mt-1" style={{ fontSize: 9 }}>vs Guild Avg ({guildAvgGL})</div>
+          </div>
         </div>
         <div className="stat-card" style={{ "--stat-accent": attPct >= 75 ? "var(--green)" : attPct >= 50 ? "var(--gold)" : "var(--red)" }}>
           <div className="stat-icon">📋</div>
@@ -229,7 +299,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       </div>
 
-      <div className="card mb-4">
+      <div className="card mb-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
         <div className="card-title">📈 Performance History</div>
         <div style={{ height: 250, width: "100%", marginTop: 20 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -282,7 +352,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       </div>
 
-      <div className="grid-2" style={{ marginBottom: 20 }}>
+      <div className="grid-2 animate-slide-up" style={{ marginBottom: 20, animationDelay: "0.3s" }}>
         {/* Event History */}
         <div className="card" style={{ gridColumn: "1/-1" }}>
           <div className="card-title">📅 Event History</div>
