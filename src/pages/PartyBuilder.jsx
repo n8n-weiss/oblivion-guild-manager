@@ -5,7 +5,7 @@ import Icon from '../components/ui/icons';
 const PARTY_NAMES = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
 
 function PartyBuilder() {
-  const { members, events, attendance, parties, setParties } = useGuild();
+  const { members, events, attendance, parties, setParties, partyNames, setPartyNames } = useGuild();
   // source mode: "all" | "event:<eventId>"
   const [sourceMode, setSourceMode] = useState("all");
   // edit mode: dragging memberId and from-party index
@@ -13,7 +13,6 @@ function PartyBuilder() {
   const [dragOver, setDragOver] = useState(null);  // idx | "bench"
   const [editingName, setEditingName] = useState(null); // party index
   const [nameInput, setNameInput] = useState("");
-  const [partyNames, setPartyNames] = useState(PARTY_NAMES.slice());
   const [mode, setMode] = useState("auto"); // "auto" | "manual"
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
 

@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 
 function Dashboard() {
-  const { members, events, attendance, performance } = useGuild();
+  const { members, events, attendance, performance, parties } = useGuild();
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const totalPresences = attendance.filter(a => a.status === "present").length;
@@ -34,6 +34,34 @@ function Dashboard() {
 
   // Recent events for trend
   const recentEvents = events.slice(-5);
+
+  // Guild Composition Counts
+  const composition = {
+    Core: lb.filter(m => m.classification === "Core").length,
+    Active: lb.filter(m => m.classification === "Active").length,
+    Casual: lb.filter(m => m.classification === "Casual").length,
+    "At Risk": lb.filter(m => m.classification === "At Risk").length
+  };
+
+  // Party Strength Calculation
+  const partyPerformance = useMemo(() => {
+    if (!parties || parties.length === 0) return [];
+    const PARTY_NAMES_FALLBACK = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
+    
+    return parties.map((pMembers, idx) => {
+      const totalStrength = pMembers.reduce((sum, pm) => {
+        const lbEntry = lb.find(l => l.memberId === pm.memberId);
+        return sum + (lbEntry ? lbEntry.totalScore : 0);
+      }, 0);
+      const avgStrength = pMembers.length > 0 ? Math.round(totalStrength / pMembers.length) : 0;
+      return {
+        name: PARTY_NAMES_FALLBACK[idx] || `Team ${idx + 1}`,
+        total: totalStrength,
+        avg: avgStrength,
+        count: pMembers.length
+      };
+    }).sort((a, b) => b.total - a.total);
+  }, [parties, lb]);
 
   const chartData = useMemo(() => {
     return events.slice(-10).map(ev => {
@@ -76,7 +104,7 @@ function Dashboard() {
         <p className="page-subtitle">Guild overview & performance at a glance</p>
       </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid animate-slide-up">
         <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
           <div className="stat-icon">⚔️</div>
           <div className="stat-label">Active Members</div>
@@ -115,7 +143,7 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="grid-2 mb-4">
+      <div className="grid-2 mb-4 animate-slide-up" style={{ animationDelay: "0.1s" }}>
         {/* Top 5 Players */}
         <div className="card">
           <div className="card-title">🏆 Top Players</div>
@@ -139,34 +167,43 @@ function Dashboard() {
           ))}
         </div>
 
-        {/* Score Distribution Bar Chart */}
+        {/* Guild Composition */}
         <div className="card">
-          <div className="card-title">📊 Score Distribution</div>
-          <div className="chart-bars" style={{ marginTop: 12 }}>
-            {lb.map((m, i) => {
-              const pct = Math.max(2, (m.totalScore / maxScore) * 100);
-              const clrMap = { Core: "var(--gold)", Active: "var(--green)", Casual: "var(--accent)", "At Risk": "var(--red)" };
-              return (
-                <div className="chart-bar-wrap" key={m.memberId} style={{ position: "relative" }}>
-                  <div className="chart-bar" style={{ height: `${pct}%`, background: clrMap[m.classification] || "var(--accent)", opacity: 0.85 }}>
-                    <span className="chart-label">{m.ign.split(" ")[0]}</span>
+          <div className="card-title">🛡️ Guild Composition</div>
+          <p className="text-xs text-muted mb-4">Membership tier breakdown based on activity & score.</p>
+          <div className="flex flex-col gap-4">
+            {[
+              { label: "Core", count: composition.Core, color: "var(--gold)", icon: "👑" },
+              { label: "Active", count: composition.Active, color: "var(--green)", icon: "🔥" },
+              { label: "Casual", count: composition.Casual, color: "var(--accent)", icon: "🎮" },
+              { label: "At Risk", count: composition["At Risk"], color: "var(--red)", icon: "⚠️" }
+            ].map((tier, i) => (
+              <div key={tier.label} className="flex items-center gap-3">
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: `${tier.color}11`, border: `1px solid ${tier.color}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+                  {tier.icon}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div className="flex justify-between items-end mb-1">
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>{tier.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: tier.color }}>{tier.count} <span className="text-xs text-muted" style={{ fontWeight: 400 }}>members</span></span>
+                  </div>
+                  <div className="progress-bar-wrap" style={{ height: 4 }}>
+                    <div className="progress-bar-fill" style={{ width: `${(tier.count / total) * 100}%`, background: tier.color }} />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-3 mt-2" style={{ flexWrap: "wrap" }}>
-            {[["Core", "var(--gold)"], ["Active", "var(--green)"], ["Casual", "var(--accent)"], ["At Risk", "var(--red)"]].map(([k, c]) => (
-              <div className="flex items-center gap-1 text-xs text-muted" key={k}>
-                <div style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
-                {k}
               </div>
             ))}
+          </div>
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted">Guild Health</span>
+              <span style={{ color: "var(--green)", fontWeight: 700 }}>{Math.round(((composition.Core + composition.Active) / total) * 100)}% Stable</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="card mb-4">
+      <div className="card mb-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
         <div className="card-title">📈 Guild Attendance Trend</div>
         <div style={{ height: 220, width: "100%", marginTop: 20 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -207,36 +244,38 @@ function Dashboard() {
         <div className="text-xs text-muted mt-2">Attendance trend across last 10 guild events.</div>
       </div>
 
-      <div className="grid-2">
+      <div className="grid-2 animate-slide-up" style={{ animationDelay: "0.3s" }}>
         {/* Role Distribution + Class Breakdown */}
         <div className="card">
           <div className="card-title">📖 Role Distribution</div>
-          <div className="flex items-center gap-4" style={{ marginTop: 12 }}>
-            <svg width="110" height="110" viewBox="0 0 110 110">
-              <circle cx="55" cy="55" r="40" fill="none" stroke="rgba(99,130,230,0.08)" strokeWidth="18" />
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent2)" strokeWidth="18"
-                strokeDasharray={`${(dpsCount / total) * 251} 251`} strokeDashoffset="0"
-                transform="rotate(-90 55 55)" strokeLinecap="butt" />
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent)" strokeWidth="18"
-                strokeDasharray={`${(supCount / total) * 251} 251`} strokeDashoffset={`${-(dpsCount / total) * 251}`}
-                transform="rotate(-90 55 55)" strokeLinecap="butt" />
-              <text x="55" y="52" textAnchor="middle" fill="var(--text-primary)" style={{ fontFamily: "Cinzel,serif", fontSize: 13, fontWeight: 700 }}>{total}</text>
-              <text x="55" y="66" textAnchor="middle" fill="var(--text-muted)" style={{ fontSize: 10 }}>members</text>
-            </svg>
-            <div className="flex flex-col gap-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--accent2)" }} />
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>DPS</span>
+          <div className="flex items-center gap-6" style={{ marginTop: 12 }}>
+            <div style={{ position: "relative" }}>
+              <svg width="120" height="120" viewBox="0 0 120 120" style={{ filter: "drop-shadow(0 0 10px rgba(99,130,230,0.2))" }}>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="14" />
+                <circle cx="60" cy="60" r="45" fill="none" stroke="var(--accent2)" strokeWidth="14"
+                  strokeDasharray={`${(dpsCount / total) * 282.7} 282.7`} strokeDashoffset="0"
+                  transform="rotate(-90 60 60)" strokeLinecap="round" />
+                <circle cx="60" cy="60" r="45" fill="none" stroke="var(--accent)" strokeWidth="14"
+                  strokeDasharray={`${(supCount / total) * 282.7} 282.7`} strokeDashoffset={`${-(dpsCount / total) * 282.7}`}
+                  transform="rotate(-90 60 60)" strokeLinecap="round" />
+                <text x="60" y="58" textAnchor="middle" fill="var(--text-primary)" style={{ fontFamily: "Cinzel,serif", fontSize: 16, fontWeight: 700 }}>{total}</text>
+                <text x="60" y="72" textAnchor="middle" fill="var(--text-muted)" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 1 }}>Total</text>
+              </svg>
+            </div>
+            <div className="flex flex-col gap-4" style={{ flex: 1 }}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent2)", boxShadow: "0 0 8px var(--accent2)" }} />
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>DPS Units</span>
                 </div>
-                <div className="font-cinzel" style={{ fontSize: 22, color: "var(--accent2)" }}>{dpsCount} <span className="text-xs text-muted">({Math.round(dpsCount / total * 100)}%)</span></div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{dpsCount} <span className="text-xs text-muted">({Math.round(dpsCount / total * 100)}%)</span></span>
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--accent)" }} />
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Support</span>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Supports</span>
                 </div>
-                <div className="font-cinzel" style={{ fontSize: 22, color: "var(--accent)" }}>{supCount} <span className="text-xs text-muted">({Math.round(supCount / total * 100)}%)</span></div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{supCount} <span className="text-xs text-muted">({Math.round(supCount / total * 100)}%)</span></span>
               </div>
             </div>
           </div>
@@ -388,6 +427,38 @@ function Dashboard() {
               );
             })}
             {events.length === 0 && <div className="text-muted text-sm" style={{ padding: "16px 0" }}>No events yet.</div>}
+          </div>
+        </div>
+      </div>
+      <div className="grid-2 animate-slide-up" style={{ animationDelay: "0.4s", marginTop: 20 }}>
+        {/* Party Performance Comparison */}
+        <div className="card">
+          <div className="card-title">🛡️ Party Strength Comparison</div>
+          <div className="flex flex-col gap-4" style={{ marginTop: 12 }}>
+            {partyPerformance.map((pp, i) => {
+              const maxPartyScore = Math.max(...partyPerformance.map(p => p.total), 1);
+              const barPct = (pp.total / maxPartyScore) * 100;
+              return (
+                <div key={i}>
+                  <div className="flex justify-between items-center mb-1">
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{pp.name}</span>
+                      <span className="text-xs text-muted">({pp.count} members)</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>{pp.total} <span style={{ fontWeight: 400, opacity: 0.6 }}>(avg {pp.avg})</span></span>
+                  </div>
+                  <div className="progress-bar-wrap">
+                    <div className="progress-bar-fill" style={{ width: `${barPct}%`, background: `linear-gradient(90deg, var(--accent), var(--accent2))` }} />
+                  </div>
+                </div>
+              );
+            })}
+            {partyPerformance.length === 0 && (
+              <div className="empty-state">
+                <div className="empty-state-icon">🛡️</div>
+                <div className="empty-state-text">No parties built yet. Go to Party Builder to organize squads.</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -24,6 +24,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [performance, setPerformance] = useState([]);
   const [absences, setAbsences] = useState([]);
   const [parties, setParties] = useState([]);
+  const [partyNames, setPartyNames] = useState(["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]);
   const [eoRatings, setEoRatings] = useState([]);
   const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState([]);
@@ -140,6 +141,7 @@ export const GuildProvider = ({ children, initialData }) => {
         setPerformance(flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []));
         setAbsences(loadedAbsences);
         setParties(metadata.parties || []);
+        setPartyNames(metadata.partyNames || ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]);
         setEoRatings(flatEoRatings);
         setAuctionSessions(metadata.auctionSessions || []);
         setAuctionTemplates(metadata.auctionTemplates || []);
@@ -152,6 +154,7 @@ export const GuildProvider = ({ children, initialData }) => {
           performance: flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []),
           absences: loadedAbsences,
           parties: metadata.parties || [],
+          partyNames: metadata.partyNames || ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"],
           eoRatings: flatEoRatings,
           auctionSessions: metadata.auctionSessions || [],
           auctionTemplates: metadata.auctionTemplates || []
@@ -229,13 +232,15 @@ export const GuildProvider = ({ children, initialData }) => {
         // 6. Save metadata
         if (
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
+          JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
           JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
           JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates)
         ) {
           batch.set(doc(db, "metadata", "current"), {
-            parties, auctionSessions, auctionTemplates, lastUpdate: new Date().toISOString()
+            parties, partyNames, auctionSessions, auctionTemplates, lastUpdate: new Date().toISOString()
           });
           prevData.current.parties = [...parties];
+          prevData.current.partyNames = [...partyNames];
           prevData.current.auctionSessions = [...auctionSessions];
           prevData.current.auctionTemplates = [...auctionTemplates];
           changesCount++;
@@ -323,6 +328,7 @@ export const GuildProvider = ({ children, initialData }) => {
     performance, setPerformance,
     absences, setAbsences,
     parties, setParties,
+    partyNames, setPartyNames,
     eoRatings, setEoRatings,
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
