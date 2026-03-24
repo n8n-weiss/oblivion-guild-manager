@@ -6,19 +6,22 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from "./AuditLogPage";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, currentUser } = useGuild();
+  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, currentUser } = useGuild();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS" });
 
-  const filtered = members.filter(m =>
-    (roleFilter === "All" || m.role === roleFilter) &&
-    (m.ign.toLowerCase().includes(search.toLowerCase()) ||
-      m.memberId.toLowerCase().includes(search.toLowerCase()) ||
-      m.class.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = members.filter(m => {
+    const status = m.status || "active";
+    return (status === statusFilter) &&
+      (roleFilter === "All" || m.role === roleFilter) &&
+      (m.ign.toLowerCase().includes(search.toLowerCase()) ||
+        m.memberId.toLowerCase().includes(search.toLowerCase()) ||
+        m.class.toLowerCase().includes(search.toLowerCase()));
+  });
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
@@ -33,11 +36,12 @@ function MembersPage({ onViewProfile }) {
     setShowModal(true);
   };
 
-  const deleteMember = (id) => {
+  const toggleArchive = (id) => {
+    const isRestoring = statusFilter === "left";
+    setMembers(prev => prev.map(m => m.memberId === id ? { ...m, status: isRestoring ? "active" : "left" } : m));
+    showToast(isRestoring ? "Member restored" : "Member archived", "success");
     const m = members.find(x => x.memberId === id);
-    setMembers(prev => prev.filter(m => m.memberId !== id));
-    showToast("Member removed", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete", `Deleted member ${m?.ign} (${id})`);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isRestoring ? "member_restore" : "member_archive", `${isRestoring ? "Restored" : "Archived"} member ${m?.ign} (${id})`);
   };
 
   const saveMember = () => {
@@ -72,8 +76,14 @@ function MembersPage({ onViewProfile }) {
             <select className="form-select" style={{ width: "auto" }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
               <option>All</option><option>DPS</option><option>Support</option>
             </select>
+            <div className="flex gap-1 p-1 bg-deepest rounded-lg border border-border">
+              <button className={`btn btn-sm ${statusFilter === "active" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStatusFilter("active")} style={{ fontSize: 10 }}>Active</button>
+              <button className={`btn btn-sm ${statusFilter === "left" ? "btn-danger" : "btn-ghost"}`} onClick={() => setStatusFilter("left")} style={{ fontSize: 10 }}>Left</button>
+            </div>
           </div>
-          <button className="btn btn-primary" onClick={openAdd}><Icon name="plus" size={14} /> Add Member</button>
+          {isOfficer && (
+            <button className="btn btn-primary" onClick={openAdd}><Icon name="plus" size={14} /> Add Member</button>
+          )}
         </div>
 
         <div className="table-wrap">
@@ -101,8 +111,16 @@ function MembersPage({ onViewProfile }) {
                   </td>
                   <td>
                     <div className="flex gap-2 justify-end">
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14} /></button>
-                      {isAdmin && <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteMember(m.memberId)} title="Delete"><Icon name="trash" size={14} /></button>}
+                      {isOfficer && (
+                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={14} /></button>
+                      )}
+                      {isAdmin && (
+                        <button className={`btn btn-sm btn-icon ${statusFilter === "active" ? "btn-ghost" : "btn-primary"}`} 
+                          onClick={() => toggleArchive(m.memberId)} 
+                          title={statusFilter === "active" ? "Archive (Left Guild)" : "Restore Member"}>
+                          <Icon name={statusFilter === "active" ? "absence" : "plus"} size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

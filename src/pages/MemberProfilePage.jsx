@@ -1,11 +1,35 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  Cell
+} from 'recharts';
 
-function MemberProfilePage({ member, onBack }) {
-  const { members, events, attendance, performance, absences, eoRatings } = useGuild();
+function MemberProfilePage({ member, onBack, isOwnProfile }) {
+  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId } = useGuild();
   if (!member) return null;
+
+  // Security: Members can only see their own profile
+  if (isMember && member.memberId !== myMemberId) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🛡️</div>
+        <h2 className="page-title">Access Denied</h2>
+        <p className="text-muted">You are only permitted to view your own performance profile.</p>
+        <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Return to My Profile</button>
+      </div>
+    );
+  }
 
   const memberIdx = members.findIndex(m => m.memberId === member.memberId);
   const memberEvents = events.map(ev => {
@@ -39,14 +63,55 @@ function MemberProfilePage({ member, onBack }) {
   else if (totalGLScore >= 40) scoreClass = "Casual";
   const scoreClassBadge = { Core: "badge-core", Active: "badge-active", Casual: "badge-casual", "At Risk": "badge-atrisk" };
 
+  const chartData = useMemo(() => {
+    return [...memberEvents].reverse().map(ev => ({
+      date: ev.eventDate.split('-').slice(1).join('/'), // Concise date
+      fullDate: ev.eventDate,
+      score: ev.eventType === "Guild League" ? ev.score : null,
+      rating: ev.eventType === "Emperium Overrun" ? ev.eoRating?.rating : null,
+      present: ev.att?.status === "present",
+      type: ev.eventType
+    }));
+  }, [memberEvents]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
+          <p className="text-xs text-muted mb-1">{data.fullDate}</p>
+          <p className="font-cinzel text-sm mb-1" style={{ color: data.type === "Guild League" ? "var(--accent)" : "var(--gold)" }}>
+            {data.type}
+          </p>
+          {data.score !== null && (
+            <p className="text-sm font-bold" style={{ color: "var(--green)" }}>
+              Score: {data.score}
+            </p>
+          )}
+          {data.rating !== null && (
+            <p className="text-sm font-bold" style={{ color: "var(--gold)" }}>
+              Rating: ★{data.rating}
+            </p>
+          )}
+          <p className="text-xs mt-1" style={{ color: data.present ? "var(--green)" : "var(--red)" }}>
+            {data.present ? "✅ Present" : "❌ Absent"}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div>
       <div className="page-header">
         <div className="flex items-center gap-3">
-          <button className="btn btn-ghost" onClick={onBack}><Icon name="x" size={14} /> Back</button>
+          {onBack && !isOwnProfile && (
+            <button className="btn btn-ghost" onClick={onBack}><Icon name="x" size={14} /> Back</button>
+          )}
           <div>
-            <h1 className="page-title">👤 Member Profile</h1>
-            <p className="page-subtitle">Full history and stats for {member.ign}</p>
+            <h1 className="page-title">👤 {isOwnProfile ? "My Profile" : "Member Profile"}</h1>
+            <p className="page-subtitle">{isOwnProfile ? "Your full history and stats" : `Full history and stats for ${member.ign}`}</p>
           </div>
         </div>
       </div>
@@ -95,6 +160,59 @@ function MemberProfilePage({ member, onBack }) {
           <div className="stat-label">EO Rating</div>
           <div className="stat-value" style={{ color: "var(--gold)" }}>{avgEoRating > 0 ? `★${avgEoRating}` : "—"}</div>
           <div className="stat-change">avg stars · {eoRatingsList.length} rated</div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-title">📈 Performance History</div>
+        <div style={{ height: 250, width: "100%", marginTop: 20 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                dy={10}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+              <Legend verticalAlign="top" height={36} />
+              <Bar dataKey="score" name="GL Score" barSize={20} radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.present ? "var(--accent)" : "rgba(224,80,80,0.3)"} />
+                ))}
+              </Bar>
+              <Line
+                type="monotone"
+                dataKey="rating"
+                name="EO Rating"
+                stroke="var(--gold)"
+                strokeWidth={3}
+                dot={{ r: 4, fill: "var(--gold)", strokeWidth: 2, stroke: "#111" }}
+                connectNulls
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex gap-4 mt-2 justify-center">
+          <div className="flex items-center gap-1 text-xs text-muted">
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--accent)" }} />
+            Present (GL)
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted">
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: "rgba(224,80,80,0.3)" }} />
+            Absent
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted">
+            <div style={{ width: 10, height: 2, background: "var(--gold)" }} />
+            EO Stars
+          </div>
         </div>
       </div>
 

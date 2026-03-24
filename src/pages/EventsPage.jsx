@@ -11,6 +11,7 @@ function EventsPage() {
     performance, setPerformance, absences, eoRatings, setEoRatings,
     showToast, isAdmin, currentUser
   } = useGuild();
+  const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -33,8 +34,8 @@ function EventsPage() {
     const newEvent = { eventId, ...form };
     setEvents(prev => [...prev, newEvent]);
 
-    // auto-load members with absence-aware attendance
-    const newAtt = members.map(m => {
+    // auto-load active members with absence-aware attendance
+    const newAtt = activeMembers.map(m => {
       const hasAbsence = absences.find(a => a.memberId === m.memberId && a.eventType === form.eventType && a.eventDate === form.eventDate);
       return { memberId: m.memberId, eventId, status: hasAbsence ? "absent" : "present" };
     });
@@ -74,7 +75,11 @@ function EventsPage() {
 
   const evt = selectedEvent;
   const evtAtt = evt ? attendance.filter(a => a.eventId === evt.eventId) : [];
-  const evtMembers = evt ? members.map(m => ({
+  const evtMembers = evt ? members.filter(m => {
+    const hasAtt = attendance.some(a => a.eventId === evt.eventId && a.memberId === m.memberId);
+    const isActive = (m.status || "active") === "active";
+    return hasAtt || isActive;
+  }).map(m => ({
     ...m,
     att: evtAtt.find(a => a.memberId === m.memberId),
     perf: performance.find(p => p.memberId === m.memberId && p.eventId === evt.eventId)
@@ -293,7 +298,7 @@ function EventsPage() {
             </div>
           </div>
           <div className="text-xs text-muted mt-2" style={{ padding: "10px 14px", background: "rgba(99,130,230,0.05)", borderRadius: 8, border: "1px solid var(--border)" }}>
-            ℹ️ All {members.length} members will be auto-loaded as Present. Absence records will override to Absent.
+            ℹ️ All {activeMembers.length} active members will be auto-loaded as Present. Absence records will override to Absent.
           </div>
         </Modal>
       )}

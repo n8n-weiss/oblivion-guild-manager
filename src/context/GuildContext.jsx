@@ -13,6 +13,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [myMemberId, setMyMemberId] = useState(null);
   const [page, setPage] = useState("dashboard");
   const [toast, setToast] = useState(null);
 
@@ -35,6 +36,8 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const isAdmin = userRole === "admin";
+  const isOfficer = userRole === "admin" || userRole === "officer";
+  const isMember = userRole === "member";
 
   // Auth Listener
   useEffect(() => {
@@ -44,15 +47,20 @@ export const GuildProvider = ({ children, initialData }) => {
         try {
           const roleSnap = await getDoc(doc(db, "userroles", user.uid));
           if (roleSnap.exists()) {
-            setUserRole(roleSnap.data().role);
+            const data = roleSnap.data();
+            setUserRole(data.role);
+            setMyMemberId(data.memberId || null);
           } else {
-            setUserRole("admin"); 
-            await setDoc(doc(db, "userroles", user.uid), { role: "admin", email: user.email, displayName: user.email });
+            // Default to member for new signups
+            setUserRole("member");
+            setMyMemberId(null);
+            await setDoc(doc(db, "userroles", user.uid), { role: "member", email: user.email, displayName: user.email, memberId: null });
           }
-        } catch (err) { setUserRole("admin"); }
+        } catch (err) { setUserRole("member"); setMyMemberId(null); }
       } else {
         setCurrentUser(null);
         setUserRole(null);
+        setMyMemberId(null);
       }
       setAuthLoading(false);
     });
@@ -93,8 +101,8 @@ export const GuildProvider = ({ children, initialData }) => {
         ]);
 
         const loadedMembers = rosterSnap.docs.map(d => d.data());
-        const loadedEvents = eventsSnap.docs.map(d => d.data()).sort((a,b) => new Date(a.eventDate) - new Date(b.eventDate));
-        
+        const loadedEvents = eventsSnap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
+
         // Reconstruct flat attendance array from grouped docs
         const flatAttendance = [];
         attSnap.docs.forEach(d => {
@@ -253,7 +261,7 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, loading]);
 
   const value = {
-    loading, authLoading, currentUser, userRole, isAdmin,
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember,
     page, setPage,
     toast, setToast, showToast,
     members, setMembers,

@@ -11,6 +11,7 @@ function AuctionBuilder() {
   const [activeSession, setActiveSession] = useState(null);
   const [showNewSession, setShowNewSession] = useState(false);
   const [showNewTemplate, setShowNewTemplate] = useState(false);
+  const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const [newSessionForm, setNewSessionForm] = useState({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
   const [newTemplateName, setNewTemplateName] = useState("");
   const [editingCell, setEditingCell] = useState(null); // { memberId, colId }
@@ -23,9 +24,9 @@ function AuctionBuilder() {
   // Get active session data
   const session = auctionSessions.find(s => s.id === activeSession);
 
-  // Pool = members not in session
+  // Pool = active members not in session
   const sessionMemberIds = new Set((session?.members || []).map(m => m.memberId));
-  const pool = members.filter(m => !sessionMemberIds.has(m.memberId));
+  const pool = activeMembers.filter(m => !sessionMemberIds.has(m.memberId));
   const sessionMembers = (session?.members || []).map(sm => members.find(m => m.memberId === sm.memberId)).filter(Boolean);
 
   const createSession = () => {

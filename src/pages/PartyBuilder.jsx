@@ -15,16 +15,17 @@ function PartyBuilder() {
   const [nameInput, setNameInput] = useState("");
   const [partyNames, setPartyNames] = useState(PARTY_NAMES.slice());
   const [mode, setMode] = useState("auto"); // "auto" | "manual"
+  const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
 
   // derive pool of members for current source
   const poolMembers = useMemo(() => {
-    if (sourceMode === "all") return members;
+    if (sourceMode === "all") return activeMembers;
     const eventId = sourceMode.replace("event:", "");
     const presentIds = new Set(
       attendance.filter(a => a.eventId === eventId && a.status === "present").map(a => a.memberId)
     );
     return members.filter(m => presentIds.has(m.memberId));
-  }, [sourceMode, members, attendance]);
+  }, [sourceMode, activeMembers, members, attendance]);
 
   // bench = pool members not assigned to any party
   const assignedIds = useMemo(() => new Set(parties.flatMap(p => p.map(m => m.memberId))), [parties]);
@@ -116,7 +117,7 @@ function PartyBuilder() {
               <label className="form-label">Member Pool</label>
               <select className="form-select" style={{ width: "auto", fontSize: 13, padding: "6px 12px" }}
                 value={sourceMode} onChange={e => { setSourceMode(e.target.value); setParties([]); }}>
-                <option value="all">All Members ({members.length})</option>
+                <option value="all">Active Members ({activeMembers.length})</option>
                 {events.map(ev => {
                   const count = attendance.filter(a => a.eventId === ev.eventId && a.status === "present").length;
                   return (

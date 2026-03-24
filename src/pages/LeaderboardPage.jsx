@@ -8,20 +8,21 @@ function LeaderboardPage({ onViewProfile }) {
   const { members, events, attendance, performance, eoRatings } = useGuild();
   const [filter, setFilter] = useState("All");
   const [lbMode, setLbMode] = useState("gl"); // "gl" | "eo"
-  const lb = useMemo(() => computeLeaderboard(members, events, attendance, performance), [members, events, attendance, performance]);
+  const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const filtered = filter === "All" ? lb : lb.filter(m => m.classification === filter);
   const maxScore = Math.max(...lb.map(m => m.totalScore), 1);
 
   // EO leaderboard
   const eoEvents = events.filter(e => e.eventType === "Emperium Overrun");
-  const eoLb = useMemo(() => members.map(member => {
+  const eoLb = useMemo(() => activeMembers.map(member => {
     const memberRatings = eoRatings.filter(r => r.memberId === member.memberId);
     const totalEoScore = memberRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
     const eoPresent = eoEvents.filter(ev => attendance.find(a => a.memberId === member.memberId && a.eventId === ev.eventId && a.status === "present")).length;
     const avgRating = memberRatings.length > 0 ? Math.round((totalEoScore / memberRatings.length) * 10) / 10 : 0;
     return { ...member, totalEoScore, eoPresent, eoTotal: eoEvents.length, avgRating };
   }).sort((a, b) => b.totalEoScore - a.totalEoScore).map((m, i) => ({ ...m, eoRank: i + 1 }))
-    , [members, eoRatings, eoEvents, attendance]);
+    , [activeMembers, eoRatings, eoEvents, attendance]);
   const maxEoScore = Math.max(...eoLb.map(m => m.totalEoScore), 1);
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
@@ -36,8 +37,8 @@ function LeaderboardPage({ onViewProfile }) {
             <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
           </div>
           <div className="flex gap-2">
-            <button className={`btn ${lbMode === "gl" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("gl")}>⚔ Guild League</button>
-            <button className={`btn ${lbMode === "eo" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("eo")}>🐰 Emperium Overrun</button>
+            <button className={`btn ${lbMode === "gl" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("gl")}>⚔️ Guild League</button>
+            <button className={`btn ${lbMode === "eo" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("eo")}>🏰 Emperium Overrun</button>
           </div>
         </div>
       </div>
@@ -147,8 +148,8 @@ function LeaderboardPage({ onViewProfile }) {
                         🎯 {m.attStatus?.label || "Average"}
                       </span>
                       <span className={`badge ${m.classification === "Core" ? "badge-core" :
-                          m.classification === "Active" ? "badge-active" :
-                            m.classification === "Casual" ? "badge-casual" : "badge-atrisk"
+                        m.classification === "Active" ? "badge-active" :
+                          m.classification === "Casual" ? "badge-casual" : "badge-atrisk"
                         }`} style={{ fontSize: 10 }}>
                         ⚔ {m.classification}
                       </span>
@@ -165,7 +166,7 @@ function LeaderboardPage({ onViewProfile }) {
       {lbMode === "eo" && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="section-header">
-            <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>🐰 Emperium Overrun Rankings</div>
+            <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>🏰 Emperium Overrun Rankings</div>
             <div className="text-xs text-muted">{eoEvents.length} EO events · Star ratings by officers</div>
           </div>
           {eoLb.every(m => m.totalEoScore === 0) ? (

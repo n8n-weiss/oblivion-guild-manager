@@ -2,14 +2,24 @@ import React, { useMemo } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { computeScore, computeLeaderboard } from '../utils/scoring';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from 'recharts';
 
 function Dashboard() {
   const { members, events, attendance, performance } = useGuild();
-  const lb = useMemo(() => computeLeaderboard(members, events, attendance, performance), [members, events, attendance, performance]);
+  const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const totalPresences = attendance.filter(a => a.status === "present").length;
   const totalExpected = attendance.length;
   const attRate = totalExpected ? Math.round((totalPresences / totalExpected) * 100) : 0;
-  const activeMembers = lb.filter(m => m.classification === "Core" || m.classification === "Active").length;
+  const activeClassCount = lb.filter(m => m.classification === "Core" || m.classification === "Active").length;
   const top5 = lb.slice(0, 5);
 
   const avatarColors = ["#6382e6", "#e05c8a", "#40c97a", "#f0c040", "#a78bfa", "#38bdf8", "#fb923c", "#f472b6", "#34d399", "#fbbf24"];
@@ -18,12 +28,44 @@ function Dashboard() {
   const maxScore = Math.max(...lb.map(m => m.totalScore), 1);
 
   // Role distribution
-  const dpsCount = members.filter(m => m.role === "DPS").length;
-  const supCount = members.filter(m => m.role === "Support").length;
-  const total = members.length || 1;
+  const dpsCount = activeMembers.filter(m => m.role === "DPS").length;
+  const supCount = activeMembers.filter(m => m.role === "Support").length;
+  const total = activeMembers.length || 1;
 
   // Recent events for trend
   const recentEvents = events.slice(-5);
+
+  const chartData = useMemo(() => {
+    return events.slice(-10).map(ev => {
+      const evAtt = attendance.filter(a => a.eventId === ev.eventId);
+      const present = evAtt.filter(a => a.status === "present").length;
+      const pct = evAtt.length ? Math.round((present / evAtt.length) * 100) : 0;
+      return {
+        date: ev.eventDate,
+        attendance: pct,
+        present: present,
+        total: evAtt.length,
+        type: ev.eventType === "Guild League" ? "⚔️" : "🏰"
+      };
+    });
+  }, [events, attendance]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
+          <p className="text-xs text-muted mb-1">{label}</p>
+          <p className="font-cinzel text-sm" style={{ color: "var(--accent)" }}>
+            Attendance: <span className="text-white">{payload[0].value}%</span>
+          </p>
+          <p className="text-xs text-muted">
+            {payload[0].payload.present} / {payload[0].payload.total} Members
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div>
@@ -37,8 +79,8 @@ function Dashboard() {
       <div className="stats-grid">
         <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
           <div className="stat-icon">⚔️</div>
-          <div className="stat-label">Total Members</div>
-          <div className="stat-value" style={{ color: "var(--accent)" }}>{members.length}</div>
+          <div className="stat-label">Active Members</div>
+          <div className="stat-value" style={{ color: "var(--accent)" }}>{activeMembers.length}</div>
           <div className="stat-change">Registered guild members</div>
           <div className={`stat-trend ${members.length >= 10 ? "stat-trend-up" : "stat-trend-neutral"}`}>
             {members.length >= 10 ? "▲" : "●"} {members.length >= 10 ? "Full roster" : "Recruiting"}
@@ -48,9 +90,9 @@ function Dashboard() {
           <div className="stat-icon">🛡️</div>
           <div className="stat-label">Reliable Members</div>
           <div className="stat-value" style={{ color: "var(--green)" }}>{lb.filter(m => m.attStatus?.label === "Reliable").length}</div>
-          <div className="stat-change">80%+ attendance · {lb.filter(m => m.classification === "Core" || m.classification === "Active").length} high scorers</div>
-          <div className={`stat-trend ${lb.filter(m => m.attStatus?.label === "Reliable").length / members.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
-            {lb.filter(m => m.attStatus?.label === "Reliable").length / members.length >= 0.5 ? "▲" : "▼"} {members.length > 0 ? Math.round(lb.filter(m => m.attStatus?.label === "Reliable").length / members.length * 100) : 0}% of roster
+          <div className="stat-change">80%+ attendance · {activeClassCount} high scorers</div>
+          <div className={`stat-trend ${lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
+            {lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length >= 0.5 ? "▲" : "▼"} {activeMembers.length > 0 ? Math.round(lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length * 100) : 0}% of roster
           </div>
         </div>
         <div className="stat-card" style={{ "--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)" }}>
@@ -124,6 +166,47 @@ function Dashboard() {
         </div>
       </div>
 
+      <div className="card mb-4">
+        <div className="card-title">📈 Guild Attendance Trend</div>
+        <div style={{ height: 220, width: "100%", marginTop: 20 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                dy={10}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                domain={[0, 100]}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+              <Area
+                type="monotone"
+                dataKey="attendance"
+                stroke="var(--accent)"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#colorAtt)"
+                animationDuration={1500}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="text-xs text-muted mt-2">Attendance trend across last 10 guild events.</div>
+      </div>
+
       <div className="grid-2">
         {/* Role Distribution + Class Breakdown */}
         <div className="card">
@@ -179,7 +262,7 @@ function Dashboard() {
               ];
               const classCounts = ALL_CLASSES.map(c => ({
                 ...c,
-                count: members.filter(m => m.class === c.name).length
+                count: activeMembers.filter(m => m.class === c.name).length
               })).filter(c => c.count > 0);
               const maxCount = Math.max(...classCounts.map(c => c.count), 1);
               return (
@@ -234,7 +317,7 @@ function Dashboard() {
               let topScorer = null;
               let topScore = -Infinity;
               evPerf.forEach(p => {
-                const member = members.find(m => m.memberId === p.memberId);
+                const member = activeMembers.find(m => m.memberId === p.memberId);
                 const att = evAtt.find(a => a.memberId === p.memberId);
                 const s = computeScore({ event: ev, att, perf: p });
                 if (s > topScore) { topScore = s; topScorer = member; }

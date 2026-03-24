@@ -6,11 +6,12 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 
 function UserManagementPage() {
-  const { currentUser, showToast } = useGuild();
+  const { currentUser, showToast, members } = useGuild();
   const [users, setUsers] = useState([]);
-  const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "officer" });
+  const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingUid, setEditingUid] = useState(null);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -28,27 +29,44 @@ function UserManagementPage() {
   };
 
   const createUser = async () => {
-    if (!form.email.trim() || !form.password.trim() || !form.displayName.trim()) {
+    if (!form.email.trim() || (!editingUid && !form.password.trim()) || !form.displayName.trim()) {
       showToast("Fill all fields", "error"); return;
     }
     setCreating(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-      const newUser = { uid: cred.user.uid, email: form.email, displayName: form.displayName, role: form.role, createdAt: new Date().toISOString() };
-      // Save role to Firestore
-      await setDoc(doc(db, "userroles", cred.user.uid), { role: form.role, displayName: form.displayName, email: form.email });
-      const newUsers = [...users, newUser];
+      let uid = editingUid;
+      if (!editingUid) {
+        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+        uid = cred.user.uid;
+      }
+      
+      const userDoc = { role: form.role, displayName: form.displayName, email: form.email, memberId: form.memberId || null };
+      await setDoc(doc(db, "userroles", uid), userDoc);
+      
+      const newUser = { uid, ...userDoc, createdAt: new Date().toISOString() };
+      const newUsers = editingUid ? users.map(u => u.uid === uid ? { ...u, ...userDoc } : u) : [...users, newUser];
+      
       await saveUsers(newUsers);
-      setForm({ email: "", password: "", displayName: "", role: "officer" });
+      setForm({ email: "", password: "", displayName: "", role: "member", memberId: "" });
       setShowForm(false);
-      showToast(`Account created for ${form.displayName}`, "success");
-      // Sign back in as admin (creating user signs in as new user)
-      await signInWithEmailAndPassword(auth, currentUser.email, "");
+      setEditingUid(null);
+      showToast(editingUid ? "User updated" : `Account created for ${form.displayName}`, "success");
+      
+      if (!editingUid) {
+        // Sign back in as admin (creating user signs in as new user)
+        await signInWithEmailAndPassword(auth, currentUser.email, "");
+      }
     } catch (err) {
-      showToast(err.message || "Error creating account", "error");
+      showToast(err.message || "Error saving account", "error");
     } finally {
       setCreating(false);
     }
+  };
+
+  const openEdit = (u) => {
+    setForm({ email: u.email, password: "", displayName: u.displayName, role: u.role, memberId: u.memberId || "" });
+    setEditingUid(u.uid);
+    setShowForm(true);
   };
 
   return (
@@ -74,17 +92,29 @@ function UserManagementPage() {
               <div className="form-group">
                 <label className="form-label">Role</label>
                 <select className="form-select" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                  <option value="member">👤 Member</option>
                   <option value="officer">🛡️ Officer</option>
                   <option value="admin">⭐ Admin</option>
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Email</label>
-                <input className="form-input" type="email" placeholder="officer@oblivion.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                <input className="form-input" type="email" placeholder="user@oblivion.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} disabled={!!editingUid} />
               </div>
+              {!editingUid && (
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <input className="form-input" type="password" placeholder="Set initial password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                </div>
+              )}
               <div className="form-group">
-                <label className="form-label">Password</label>
-                <input className="form-input" type="password" placeholder="Set initial password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                <label className="form-label">Linked Member Profile</label>
+                <select className="form-select" value={form.memberId} onChange={e => setForm(f => ({ ...f, memberId: e.target.value }))}>
+                  <option value="">-- Not Linked --</option>
+                  {members.filter(m => (m.status || "active") === "active").map(m => (
+                    <option key={m.memberId} value={m.memberId}>{m.ign} ({m.memberId})</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div style={{ background: "rgba(240,192,64,0.06)", border: "1px solid rgba(240,192,64,0.2)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
@@ -102,11 +132,11 @@ function UserManagementPage() {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>Name</th><th>Email</th><th>Role</th><th>Created</th>
+              <th>Name</th><th>Email</th><th>Role</th><th>Linked Member</th><th style={{ textAlign: "right" }}>Actions</th>
             </tr></thead>
             <tbody>
               {users.length === 0 && (
-                <tr><td colSpan={4}><div className="empty-state"><div className="empty-state-text">No accounts yet</div></div></td></tr>
+                <tr><td colSpan={5}><div className="empty-state"><div className="empty-state-text">No accounts yet</div></div></td></tr>
               )}
               {users.map((u, i) => (
                 <tr key={u.uid || i}>
@@ -120,8 +150,27 @@ function UserManagementPage() {
                     </div>
                   </td>
                   <td className="text-secondary">{u.email}</td>
-                  <td><span className={`badge ${u.role === "admin" ? "badge-core" : "badge-support"}`}>{u.role === "admin" ? "⭐ Admin" : "🛡️ Officer"}</span></td>
-                  <td className="text-muted" style={{ fontSize: 12 }}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}</td>
+                  <td>
+                    <span className={`badge ${u.role === "admin" ? "badge-core" : u.role === "officer" ? "badge-active" : "badge-casual"}`}>
+                      {u.role === "admin" ? "⭐ Admin" : u.role === "officer" ? "🛡️ Officer" : "👤 Member"}
+                    </span>
+                  </td>
+                  <td>
+                    {u.memberId ? (
+                      <span className="text-secondary" style={{ fontSize: 13, fontWeight: 600 }}>
+                        🔗 {members.find(m => m.memberId === u.memberId)?.ign || u.memberId}
+                      </span>
+                    ) : (
+                      <span className="text-muted" style={{ fontSize: 11 }}>Not Linked</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="flex justify-end">
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(u)} title="Edit Account">
+                        <Icon name="edit" size={14} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
