@@ -1,3 +1,7 @@
+import React, { useState, useEffect } from 'react';
+import { db, auth } from '../firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 
