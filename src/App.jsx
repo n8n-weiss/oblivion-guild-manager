@@ -154,10 +154,21 @@ export default function App() {
 
         {page === "members" && (
           isMember ? (
-            <MemberProfilePage 
-              member={members.find(m => m.memberId === myMemberId)} 
-              isOwnProfile={true}
-            />
+            members.find(m => m.memberId === myMemberId) ? (
+              <MemberProfilePage 
+                member={members.find(m => m.memberId === myMemberId)} 
+                isOwnProfile={true}
+              />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-muted)", textAlign: "center", padding: 20 }}>
+                <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
+                <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
+                <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                  Your account is not linked to any active guild member in the current roster.<br/><br/>
+                  If the database was recently wiped for update, please wait for an Admin to upload the new roster.
+                </div>
+              </div>
+            )
           ) : (
             profileMember ? (
               <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
