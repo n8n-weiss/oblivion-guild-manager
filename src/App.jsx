@@ -11,6 +11,7 @@ import Toast from "./components/ui/Toast";
 import { MemberAvatar } from "./components/common/MemberAvatar";
 
 // Pages
+import TreasuryModal from "./components/common/TreasuryModal";
 import Dashboard from "./pages/Dashboard";
 import MembersPage from "./pages/MembersPage";
 import EventsPage from "./pages/EventsPage";
@@ -34,6 +35,7 @@ export default function App() {
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
+  const [showTreasury, setShowTreasury] = useState(false);
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -129,8 +131,17 @@ export default function App() {
               </button>
             </div>
           )}
+          
+          <button 
+            className="btn btn-primary" 
+            style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)" }} 
+            onClick={() => setShowTreasury(true)}
+          >
+            <Icon name="star" size={14} /> Guild Treasury
+          </button>
+
           <div>⚔ Ragnarok Online</div>
-          <div style={{ marginTop: 2 }}>v1.0 · Guild System</div>
+          <div style={{ marginTop: 2 }}>v1.0 · Oblivion System</div>
         </div>
       </nav>
 
@@ -194,6 +205,7 @@ export default function App() {
         )}
       </main>
 
+      {showTreasury && <TreasuryModal onClose={() => setShowTreasury(false)} />}
       {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
   );

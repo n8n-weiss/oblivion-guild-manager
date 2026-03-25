@@ -553,7 +553,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <div className="card">
               <div className="card-title">🛡️ Benchmark Comparison</div>
               <div style={{ height: 240, width: "100%", marginTop: 10 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1}>
                   <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                     <PolarGrid stroke="rgba(255,255,255,0.08)" />
                     <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 10 }} />
@@ -569,7 +569,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <div className="card">
               <div className="card-title">📈 Performance Chart</div>
               <div style={{ height: 240, width: "100%", marginTop: 10 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1}>
                   <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
