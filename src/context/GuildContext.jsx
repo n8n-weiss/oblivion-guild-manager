@@ -53,8 +53,16 @@ export const GuildProvider = ({ children, initialData }) => {
     setToast({ message, type, key: Date.now() });
   };
 
-  const isAdmin = userRole === "admin";
-  const isOfficer = userRole === "admin" || userRole === "officer";
+  // Derive rank from members if myMemberId is set
+  const myProfile = members.find(m => m.memberId === myMemberId);
+  const myRank = myProfile?.guildRank || "Member";
+  
+  const isArchitect = myRank === "System Architect" || myRank === "Creator" || userRole === "architect";
+  const hasAdminRank = ["Guild Master", "Vice Guild Master", "Commander"].includes(myRank) || isArchitect;
+  const hasOfficerRank = ["Charisma Baby", "Baby Charisma", "Officer"].includes(myRank) || hasAdminRank;
+
+  const isAdmin = userRole === "admin" || userRole === "architect" || hasAdminRank;
+  const isOfficer = isAdmin || userRole === "officer" || hasOfficerRank;
   const isMember = userRole === "member";
 
   // Auth Listener
@@ -394,7 +402,7 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const value = {
-    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember,
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
     page, setPage,
     toast, setToast, showToast,
     members, setMembers,

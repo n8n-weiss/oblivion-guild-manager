@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { computeScore, computeLeaderboard } from '../utils/scoring';
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -13,7 +15,7 @@ import {
 } from 'recharts';
 
 function Dashboard() {
-  const { members, events, attendance, performance, parties } = useGuild();
+  const { members, events, attendance, performance, parties, currentUser, userRole, showToast } = useGuild();
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const totalPresences = attendance.filter(a => a.status === "present").length;

@@ -21,10 +21,18 @@ function ImportPage() {
       const parsed = [];
       for (let i = 3; i < rows.length; i++) {
         const row = rows[i];
+        if (!row || row.length < 4) continue;
+        
+        // Skip summary tables and empty rows explicitly by checking if Column A (#) has a valid number
+        const rowNumStr = (row[0] || "").trim();
+        const rowNum = parseInt(rowNumStr, 10);
+        if (isNaN(rowNum) || rowNum <= 0) continue;
+
         const ign = row[1], cls = row[2], memberId = row[3], role = row[4];
+        const discord = row[7]; // Column H
         if (!ign || !memberId) continue;
         const normalizedRole = role?.toLowerCase().includes("support") || role?.toLowerCase().includes("utility") ? "Support" : "DPS";
-        parsed.push({ memberId, ign, class: cls || "", role: normalizedRole });
+        parsed.push({ memberId, ign, class: cls || "", role: normalizedRole, discord: discord || "" });
       }
       if (parsed.length === 0) { setError("Walang nahanap na data. I-check kung tama ang format ng CSV."); return; }
       setPreview(parsed);
@@ -71,6 +79,7 @@ function ImportPage() {
             <div>Column C: Class</div>
             <div>Column D: Member ID</div>
             <div>Column E: Role (DPS / Support)</div>
+            <div>Column H: Discord Username (for Login Access)</div>
           </div>
         </div>
       </div>
@@ -99,7 +108,7 @@ function ImportPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th></tr></thead>
+              <thead><tr><th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th><th>Discord</th></tr></thead>
               <tbody>
                 {preview.map((m, i) => (
                   <tr key={i}>
@@ -107,6 +116,7 @@ function ImportPage() {
                     <td><span style={{ fontWeight: 700 }}>{m.ign}</span></td>
                     <td className="text-secondary">{m.class}</td>
                     <td><span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`}>{m.role}</span></td>
+                    <td className="text-xs text-muted">{m.discord || <span style={{ opacity: 0.3 }}>N/A</span>}</td>
                   </tr>
                 ))}
               </tbody>

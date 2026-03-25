@@ -28,7 +28,7 @@ import UserManagementPage from "./pages/UserManagementPage";
 
 export default function App() {
   const {
-    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember,
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
     page, setPage,
     toast, setToast, showToast,
     members, events, absences
@@ -83,7 +83,10 @@ export default function App() {
         <div className="sidebar-nav">
           {NAV_ITEMS.filter(item => {
             if (isMember) return item.id === "members";
-            if (isAdmin) return true;
+            if (isAdmin) {
+              if (item.id === "users" && !isArchitect) return false;
+              return true;
+            }
             if (isOfficer) return item.id !== "users" && item.id !== "auditlog";
             return false;
           }).map(item => {
@@ -196,7 +199,7 @@ export default function App() {
           <AuctionBuilder />
         )}
 
-        {page === "users" && isAdmin && (
+        {page === "users" && isArchitect && (
           <UserManagementPage />
         )}
 

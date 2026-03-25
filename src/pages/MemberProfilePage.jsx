@@ -22,7 +22,7 @@ import {
 } from 'recharts';
 
 function MemberProfilePage({ member, onBack, isOwnProfile }) {
-  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId, setAbsences, setMembers, showToast, currentUser } = useGuild();
+  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [absenceForm, setAbsenceForm] = useState({
     eventType: "Guild League",
@@ -277,6 +277,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     showToast("Profile updated!", "success");
   };
 
+  const toggleDonator = () => {
+    const updatedMembers = members.map(m =>
+      m.memberId === member.memberId ? { ...m, isDonator: !m.isDonator } : m
+    );
+    setMembers(updatedMembers);
+    showToast(member.isDonator ? "Patron badge revoked." : "Patron badge granted!", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "patron_toggle", `${member.isDonator ? "Revoked" : "Granted"} Patron status for ${member.ign}`);
+  };
+
   return (
     <div>
       {/* Sticky mini-bar header */}
@@ -296,7 +305,21 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>{member.ign}</div>
             <div style={{ fontSize: 10, color: rankInfo.color, fontWeight: 700, letterSpacing: 1 }}>{rankInfo.rank} · LV.{level}</div>
           </div>
-          <div className="flex gap-1" style={{ marginLeft: 8 }}>
+          <div className="flex gap-1 flex-wrap items-center" style={{ marginLeft: 8 }}>
+            {member.guildRank && member.guildRank !== "Member" && (() => {
+               let badgeColor = "var(--text-muted)";
+               let badgeIcon = "🛡️";
+               let glow = "";
+               if (member.guildRank === "System Architect" || member.guildRank === "Creator") { badgeColor = "#00ffff"; badgeIcon = "⚡"; glow = "0 0 10px rgba(0,255,255,0.6)"; }
+               else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; glow = "0 0 10px rgba(240,192,64,0.6)"; }
+               else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; glow = "0 0 8px rgba(230,230,230,0.5)"; }
+               else if (member.guildRank === "Commander") { badgeColor = "#ff4d4d"; badgeIcon = "⚔️"; glow = "0 0 8px rgba(255,77,77,0.5)"; }
+               else if (member.guildRank === "Charisma Baby") { badgeColor = "var(--color-priest)"; badgeIcon = "💖"; glow = "0 0 8px rgba(255,105,180,0.5)"; }
+               else if (member.guildRank === "Officer") { badgeColor = "#4db8ff"; badgeIcon = "🛡️"; }
+               
+               return <span className="badge" style={{ background: `${badgeColor}22`, color: badgeColor, border: `1px solid ${badgeColor}`, boxShadow: glow, fontSize: 8, fontWeight: 800 }}>{badgeIcon} {member.guildRank.toUpperCase()}</span>
+            })()}
+            {member.isDonator && <span title="Oblivion Patron" style={{ fontSize: 12, filter: 'drop-shadow(0 0 4px var(--gold))', marginLeft: 2 }}>🌟</span>}
             <span className="badge badge-premium" style={{ background: theme.color, fontSize: 9 }}>{theme.icon} {member.class}</span>
             <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{member.role}</span>
           </div>
@@ -380,7 +403,21 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         <div className="portal-hero-content">
           <div className="flex justify-between items-start mb-3">
             <div>
-              <div className="flex gap-2 mb-2 flex-wrap">
+              <div className="flex gap-2 mb-2 flex-wrap items-center">
+                {member.guildRank && member.guildRank !== "Member" && (() => {
+                   let badgeColor = "var(--text-muted)";
+                   let badgeIcon = "🛡️";
+                   let glow = "";
+                   if (member.guildRank === "System Architect" || member.guildRank === "Creator") { badgeColor = "#00ffff"; badgeIcon = "⚡"; glow = "0 0 10px rgba(0,255,255,0.6)"; }
+                   else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; glow = "0 0 10px rgba(240,192,64,0.6)"; }
+                   else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; glow = "0 0 8px rgba(230,230,230,0.5)"; }
+                   else if (member.guildRank === "Commander") { badgeColor = "#ff4d4d"; badgeIcon = "⚔️"; glow = "0 0 8px rgba(255,77,77,0.5)"; }
+                   else if (member.guildRank === "Charisma Baby") { badgeColor = "var(--color-priest)"; badgeIcon = "💖"; glow = "0 0 8px rgba(255,105,180,0.5)"; }
+                   else if (member.guildRank === "Officer") { badgeColor = "#4db8ff"; badgeIcon = "🛡️"; }
+                   
+                   return <span className="badge" style={{ background: `${badgeColor}22`, color: badgeColor, border: `1px solid ${badgeColor}`, boxShadow: glow, fontSize: 10, fontWeight: 800 }}>{badgeIcon} {member.guildRank.toUpperCase()}</span>
+                })()}
+                {member.isDonator && <span title="Oblivion Patron (Donator)" style={{ fontSize: 18, filter: 'drop-shadow(0 0 6px var(--gold))' }}>🌟</span>}
                 <span className="badge badge-premium" style={{ background: theme.color }}>{theme.icon} {member.class}</span>
                 <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`}>
                   {member.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />} {member.role}
@@ -390,11 +427,18 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               </div>
               <div className="rank-label" style={{ color: "var(--text-muted)", fontSize: 12, letterSpacing: 2 }}>{rankInfo.label}</div>
             </div>
-            {isOwnProfile && (
-              <button className="btn btn-ghost btn-sm" onClick={() => isEditingBio ? saveSocialData() : setIsEditingBio(true)}>
-                {isEditingBio ? "💾 Save" : "✏️ Edit"}
-              </button>
-            )}
+            <div className="flex gap-2 items-center">
+              {isArchitect && (
+                <button className="btn btn-sm" style={{ background: "rgba(240,192,64,0.1)", color: "var(--gold)", border: "1px solid var(--gold)" }} onClick={toggleDonator}>
+                  {member.isDonator ? "Revoke Patron" : "Grant Patron 🌟"}
+                </button>
+              )}
+              {isOwnProfile && (
+                <button className="btn btn-ghost btn-sm" onClick={() => isEditingBio ? saveSocialData() : setIsEditingBio(true)}>
+                  {isEditingBio ? "💾 Save" : "✏️ Edit"}
+                </button>
+              )}
+            </div>
           </div>
 
           {!isEditingBio ? (

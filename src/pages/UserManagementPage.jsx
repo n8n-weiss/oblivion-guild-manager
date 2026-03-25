@@ -74,7 +74,7 @@ function UserManagementPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">👥 User Management</h1>
-        <p className="page-subtitle">Manage officer accounts — Admin only</p>
+        <p className="page-subtitle">Manage officer accounts — System Architect only</p>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>

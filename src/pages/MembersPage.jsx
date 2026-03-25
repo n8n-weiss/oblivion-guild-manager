@@ -6,13 +6,13 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from "./AuditLogPage";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, currentUser } = useGuild();
+  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, isArchitect, currentUser } = useGuild();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("active");
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS" });
+  const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member" });
 
   const filtered = members.filter(m => {
     const status = m.status || "active";
@@ -25,7 +25,7 @@ function MembersPage({ onViewProfile }) {
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
-    setForm({ memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS" });
+    setForm({ memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member" });
     setEditMember(null);
     setShowModal(true);
   };
@@ -216,6 +216,20 @@ function MembersPage({ onViewProfile }) {
                 <option value="Support">Support / Utility</option>
               </select>
             </div>
+            {isAdmin && (
+              <div className="form-group">
+                <label className="form-label">Guild Rank</label>
+                <select className="form-select" value={form.guildRank || "Member"} onChange={e => setForm(f => ({ ...f, guildRank: e.target.value }))}>
+                  <option value="Member">Member</option>
+                  <option value="Officer">Officer</option>
+                  <option value="Charisma Baby">Charisma Baby</option>
+                  <option value="Commander">Commander</option>
+                  <option value="Vice Guild Master">Vice Guild Master</option>
+                  <option value="Guild Master">Guild Master</option>
+                  {isAdmin && <option value="System Architect">System Architect (Creator)</option>}
+                </select>
+              </div>
+            )}
           </div>
         </Modal>
       )}
