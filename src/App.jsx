@@ -93,7 +93,7 @@ export default function App() {
             const activeMembersCount = members.filter(m => (m.status || "active") === "active").length;
             const counts = { members: activeMembersCount, events: events.length, absences: absences.length };
             const count = counts[item.id];
-            
+
             let label = item.label;
             if (isMember && item.id === "members") label = "My Profile";
 
@@ -134,17 +134,23 @@ export default function App() {
               </button>
             </div>
           )}
-          
-          <button 
-            className="btn btn-primary" 
-            style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)" }} 
+
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)" }}
             onClick={() => setShowTreasury(true)}
           >
-            <Icon name="star" size={14} /> Guild Treasury
+            <Icon name="star" size={14} /> Buy Me A Beer
           </button>
 
-          <div>⚔ Ragnarok Online</div>
-          <div style={{ marginTop: 2 }}>v1.0 · Oblivion System</div>
+          <div style={{ marginTop: 12, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase" }}>
+              Oblivion Guild Portal v1.0
+            </div>
+            <div style={{ fontSize: 14, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+              Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "var(--gold)", letterSpacing: 2, fontWeight: 800, textShadow: "0 0 10px rgba(240,192,64,0.6)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>
+            </div>
+          </div>
         </div>
       </nav>
 
@@ -155,8 +161,8 @@ export default function App() {
         {page === "members" && (
           isMember ? (
             members.find(m => m.memberId === myMemberId) ? (
-              <MemberProfilePage 
-                member={members.find(m => m.memberId === myMemberId)} 
+              <MemberProfilePage
+                member={members.find(m => m.memberId === myMemberId)}
                 isOwnProfile={true}
               />
             ) : (
@@ -164,7 +170,7 @@ export default function App() {
                 <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
                 <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
                 <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
-                  Your account is not linked to any active guild member in the current roster.<br/><br/>
+                  Your account is not linked to any active guild member in the current roster.<br /><br />
                   If the database was recently wiped for update, please wait for an Admin to upload the new roster.
                 </div>
               </div>

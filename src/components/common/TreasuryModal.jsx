@@ -37,8 +37,8 @@ export default function TreasuryModal({ onClose }) {
               <Icon name="trophy" />
             </div>
             <div>
-              <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', textShadow: '0 0 10px rgba(255,255,255,0.2)', margin: 0 }}>Guild Treasury</h2>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>Support Oblivion's growth and server maintenance</div>
+              <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', textShadow: '0 0 10px rgba(255,255,255,0.2)', margin: 0 }}>BUY ME A BEER!</h2>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>Support OBLIVION Portal and server maintenance</div>
             </div>
           </div>
           <button className="btn-icon" onClick={onClose} style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '20px' }}>
@@ -140,7 +140,7 @@ export default function TreasuryModal({ onClose }) {
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)', marginBottom: '4px' }}>Supporter Perks</div>
                 <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-                  Contributors receive the <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Oblivion Patron</span> badge and exclusive community roles. Please DM your transfer screenshot to an Admin on Discord to claim your rewards!
+                  Contributors receive the <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Oblivion Patron</span> badge to your OBLIVION Portal Profile. Please DM your transfer screenshot to @Ꮤ 𐌄 𐌉 𐌔 𐌔 on Discord to claim your badge!
                 </div>
               </div>
             </div>
