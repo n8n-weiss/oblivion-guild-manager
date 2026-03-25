@@ -247,8 +247,19 @@ export const GuildProvider = ({ children, initialData }) => {
 
         // 1. Save Members (Only if changed)
         if (JSON.stringify(members) !== JSON.stringify(prevData.current.members)) {
+          // Identify removed members
+          const currentMemberIds = new Set(members.map(m => m.memberId));
+          const removedMemberIds = prevData.current.members
+            .filter(m => !currentMemberIds.has(m.memberId))
+            .map(m => m.memberId);
+          
+          removedMemberIds.forEach(mid => {
+            if (mid) batch.delete(doc(db, "roster", mid));
+          });
+
+          // Update/Set existing members
           members.forEach(m => batch.set(doc(db, "roster", m.memberId), m));
-          // Note: Full sync for now, we could optimize further by tracking individual changes
+          
           prevData.current.members = [...members];
           changesCount++;
         }

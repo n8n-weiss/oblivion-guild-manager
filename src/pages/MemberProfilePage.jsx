@@ -310,7 +310,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                let badgeColor = "var(--text-muted)";
                let badgeIcon = "🛡️";
                let glow = "";
-               if (member.guildRank === "System Architect" || member.guildRank === "Creator") { badgeColor = "#00ffff"; badgeIcon = "⚡"; glow = "0 0 10px rgba(0,255,255,0.6)"; }
+               if (member.guildRank === "System Architect (Creator)" || member.guildRank === "System Architect" || member.guildRank === "Creator") { 
+                 badgeColor = "#ff4d4d"; badgeIcon = "👁️‍🗨️"; glow = "0 0 12px rgba(255,77,77,0.8)"; 
+               }
                else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; glow = "0 0 10px rgba(240,192,64,0.6)"; }
                else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; glow = "0 0 8px rgba(230,230,230,0.5)"; }
                else if (member.guildRank === "Commander") { badgeColor = "#ff4d4d"; badgeIcon = "⚔️"; glow = "0 0 8px rgba(255,77,77,0.5)"; }
@@ -408,7 +410,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                    let badgeColor = "var(--text-muted)";
                    let badgeIcon = "🛡️";
                    let glow = "";
-                   if (member.guildRank === "System Architect" || member.guildRank === "Creator") { badgeColor = "#00ffff"; badgeIcon = "⚡"; glow = "0 0 10px rgba(0,255,255,0.6)"; }
+                   if (member.guildRank === "System Architect (Creator)" || member.guildRank === "System Architect" || member.guildRank === "Creator") { 
+                     badgeColor = "#ff4d4d"; badgeIcon = "👁️‍🗨️"; glow = "0 0 15px rgba(255,77,77,0.9)"; 
+                   }
                    else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; glow = "0 0 10px rgba(240,192,64,0.6)"; }
                    else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; glow = "0 0 8px rgba(230,230,230,0.5)"; }
                    else if (member.guildRank === "Commander") { badgeColor = "#ff4d4d"; badgeIcon = "⚔️"; glow = "0 0 8px rgba(255,77,77,0.5)"; }

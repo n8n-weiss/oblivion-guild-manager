@@ -44,6 +44,15 @@ function MembersPage({ onViewProfile }) {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isRestoring ? "member_restore" : "member_archive", `${isRestoring ? "Restored" : "Archived"} member ${m?.ign} (${id})`);
   };
 
+  const deleteMemberRecord = (id) => {
+    const m = members.find(x => x.memberId === id);
+    if (!window.confirm(`PERMANENTLY DELETE ${m?.ign}? This cannot be undone and will remove them from the roster totally.`)) return;
+    
+    setMembers(prev => prev.filter(x => x.memberId !== id));
+    showToast(`Member ${m?.ign} deleted permanently`, "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
+  };
+
   const classThemes = {
     "Lord Knight": { color: "var(--color-knight)", icon: "⚔️" },
     "Paladin": { color: "var(--color-knight)", icon: "🛡️" },
@@ -184,6 +193,11 @@ function MembersPage({ onViewProfile }) {
                         {statusFilter === "active" ? "Archive" : "Restore"}
                       </button>
                     )}
+                    {isArchitect && (
+                      <button className="btn btn-ghost btn-sm btn-icon text-red" onClick={() => deleteMemberRecord(m.memberId)} title="Permanent Delete">
+                        <Icon name="trash" size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -199,7 +213,7 @@ function MembersPage({ onViewProfile }) {
           <div className="form-grid form-grid-2">
             <div className="form-group">
               <label className="form-label">Member ID</label>
-              <input className="form-input" value={form.memberId} onChange={e => setForm(f => ({ ...f, memberId: e.target.value }))} disabled={!!editMember} />
+              <input className="form-input" value={form.memberId} onChange={e => setForm(f => ({ ...f, memberId: e.target.value }))} disabled={!!editMember && !isAdmin} />
             </div>
             <div className="form-group">
               <label className="form-label">IGN</label>
@@ -226,7 +240,7 @@ function MembersPage({ onViewProfile }) {
                   <option value="Commander">Commander</option>
                   <option value="Vice Guild Master">Vice Guild Master</option>
                   <option value="Guild Master">Guild Master</option>
-                  {isAdmin && <option value="System Architect">System Architect (Creator)</option>}
+                  {isArchitect && <option value="System Architect (Creator)">System Architect (Creator)</option>}
                 </select>
               </div>
             )}

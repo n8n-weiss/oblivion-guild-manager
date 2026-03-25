@@ -117,15 +117,26 @@ export default function App() {
           {currentUser && (
             <div className="sidebar-user-profile">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 6, background: isAdmin ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", color: isAdmin ? "var(--gold)" : "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 700, flexShrink: 0, boxShadow: "inset 0 0 8px rgba(0,0,0,0.2)" }}>
+                <div style={{ 
+                  width: 30, height: 30, borderRadius: 6, 
+                  background: isArchitect ? "rgba(255,77,77,0.18)" : isAdmin ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", 
+                  color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : "var(--accent)", 
+                  display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 700, flexShrink: 0, 
+                  boxShadow: isArchitect ? "0 0 10px rgba(255,77,77,0.3)" : "inset 0 0 8px rgba(0,0,0,0.2)" 
+                }}>
                   {(currentUser.displayName || currentUser.email || "").slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {currentUser.displayName || currentUser.email}
                   </div>
-                  <div style={{ fontSize: 10, color: isAdmin ? "var(--gold)" : isOfficer ? "var(--accent)" : "var(--text-muted)", letterSpacing: 1 }}>
-                    {isAdmin ? "★ Admin" : isOfficer ? "🛡 Officer" : "👤 Member"}
+                  <div style={{ 
+                    fontSize: 10, 
+                    color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : isOfficer ? "var(--accent)" : "var(--text-muted)", 
+                    letterSpacing: 1,
+                    textShadow: isArchitect ? "0 0 8px rgba(255,77,77,0.4)" : "none"
+                  }}>
+                    {isArchitect ? "👁️‍🗨️ Architect" : isAdmin ? "★ Admin" : isOfficer ? "🛡 Officer" : "👤 Member"}
                   </div>
                 </div>
               </div>
@@ -147,8 +158,8 @@ export default function App() {
             <div style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase" }}>
               Oblivion Guild Portal v1.0
             </div>
-            <div style={{ fontSize: 14, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-              Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "var(--gold)", letterSpacing: 2, fontWeight: 800, textShadow: "0 0 10px rgba(240,192,64,0.6)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+              Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "#ff4d4d", letterSpacing: 2, fontWeight: 800, textShadow: "0 0 12px rgba(255,77,77,0.7)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>
             </div>
           </div>
         </div>

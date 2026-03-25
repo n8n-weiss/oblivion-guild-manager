@@ -96,6 +96,7 @@ function UserManagementPage() {
                   <option value="member">👤 Member</option>
                   <option value="officer">🛡️ Officer</option>
                   <option value="admin">⭐ Admin</option>
+                  <option value="architect">👁️‍🗨️ System Architect</option>
                 </select>
               </div>
               <div className="form-group">
@@ -143,7 +144,7 @@ function UserManagementPage() {
                 <tr key={u.uid || i}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: u.role === "admin" ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", color: u.role === "admin" ? "var(--gold)" : "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 12, fontWeight: 700 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: u.role === "architect" ? "rgba(255,77,77,0.18)" : u.role === "admin" ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", color: u.role === "architect" ? "#ff4d4d" : u.role === "admin" ? "var(--gold)" : "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 12, fontWeight: 700, boxShadow: u.role === "architect" ? "0 0 10px rgba(255,77,77,0.3)" : "none" }}>
                         {u.displayName?.slice(0, 2).toUpperCase()}
                       </div>
                       <span style={{ fontWeight: 700 }}>{u.displayName}</span>
@@ -152,8 +153,8 @@ function UserManagementPage() {
                   </td>
                   <td className="text-secondary">{u.email}</td>
                   <td>
-                    <span className={`badge ${u.role === "admin" ? "badge-core" : u.role === "officer" ? "badge-active" : "badge-casual"}`}>
-                      {u.role === "admin" ? "⭐ Admin" : u.role === "officer" ? "🛡️ Officer" : "👤 Member"}
+                    <span className={`badge ${u.role === "architect" ? "badge-dps" : u.role === "admin" ? "badge-core" : u.role === "officer" ? "badge-active" : "badge-casual"}`} style={u.role === "architect" ? { background: "rgba(255,77,77,0.15)", color: "#ff4d4d", border: "1px solid rgba(255,77,77,0.5)", boxShadow: "0 0 8px rgba(255,77,77,0.4)" } : {}}>
+                      {u.role === "architect" ? "👁️‍🗨️ Architect" : u.role === "admin" ? "⭐ Admin" : u.role === "officer" ? "🛡️ Officer" : "👤 Member"}
                     </span>
                   </td>
                   <td>
