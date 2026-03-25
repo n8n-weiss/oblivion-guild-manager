@@ -11,12 +11,137 @@ export const AVATAR_COLORS = [
   {bg:"rgba(251,191,36,0.18)",color:"#fbbf24"},
 ];
 
-export function MemberAvatar({ ign, index, size=34 }) {
+const CLASS_THEMES = {
+  "Lord Knight":    { color: "var(--color-knight)",     icon: "⚔️" },
+  "Paladin":        { color: "var(--color-knight)",     icon: "🛡️" },
+  "High Priest":    { color: "var(--color-priest)",     icon: "✨" },
+  "Professor":      { color: "var(--color-priest)",     icon: "📖" },
+  "High Wizard":    { color: "var(--color-wizard)",     icon: "🔮" },
+  "Sniper":         { color: "var(--color-sniper)",     icon: "🏹" },
+  "Assassin Cross": { color: "var(--color-assassin)",   icon: "🔪" },
+  "Stalker":        { color: "var(--color-assassin)",   icon: "🎭" },
+  "Whitesmith":     { color: "var(--color-blacksmith)", icon: "🔨" },
+  "Creator":        { color: "var(--color-blacksmith)", icon: "🧪" },
+  "Champion":       { color: "var(--color-knight)",     icon: "👊" },
+  "Minstrel":       { color: "var(--color-priest)",     icon: "🎵" },
+  "Diva":           { color: "var(--color-priest)",     icon: "🎤" },
+};
+
+const RANK_RING = {
+  LEGEND:  { color: "#ff4d4d",  glow: "#ff4d4d66",  animate: true  },
+  ELITE:   { color: "#ffcc00",  glow: "#ffcc0066",  animate: false },
+  VETERAN: { color: "#33cc33",  glow: "#33cc3366",  animate: false },
+  SOLDIER: { color: "#4db8ff",  glow: "#4db8ff66",  animate: false },
+  NOVICE:  { color: "#666666",  glow: "#66666644",  animate: false },
+};
+
+function getRank(glScore) {
+  if (glScore >= 200) return "LEGEND";
+  if (glScore >= 150) return "ELITE";
+  if (glScore >= 100) return "VETERAN";
+  if (glScore >= 50)  return "SOLDIER";
+  return "NOVICE";
+}
+
+/**
+ * MemberAvatar
+ * @param {string}  ign        - In-game name (used for initials)
+ * @param {number}  index      - Member index (for fallback color)
+ * @param {number}  size       - Avatar size in px (default 34)
+ * @param {string}  memberClass - Member class string (e.g. "Lord Knight")
+ * @param {number}  glScore    - Total GL score for rank ring
+ * @param {boolean} hexagon    - Use hexagonal clip path (default false)
+ */
+export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexagon = false }) {
   const c = AVATAR_COLORS[(index || 0) % AVATAR_COLORS.length];
-  const initials = ign ? ign.slice(0,2).toUpperCase() : "??";
+  const initials = ign ? ign.slice(0, 2).toUpperCase() : "??";
+  const classTheme = CLASS_THEMES[memberClass] || null;
+  const rank = (glScore !== undefined && glScore !== null) ? getRank(glScore) : null;
+  const ring = rank ? RANK_RING[rank] : null;
+
+  // Hexagonal clip path
+  const hexClip = "polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)";
+
+  const ringColor = classTheme?.color || ring?.color || c.color;
+  const showRing = !!(classTheme || ring);
+  const ringSize = size + (hexagon ? 8 : 6);
+  const iconSize = Math.max(10, Math.round(size * 0.32));
+
   return (
-    <div style={{width:size,height:size,borderRadius:8,background:c.bg,color:c.color,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Cinzel,serif",fontSize:size*0.38,fontWeight:700,flexShrink:0}}>
-      {initials}
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      {/* Rank / class ring */}
+      {showRing && (
+        <div
+          style={{
+            position: "absolute",
+            top: -(ringSize - size) / 2,
+            left: -(ringSize - size) / 2,
+            width: ringSize,
+            height: ringSize,
+            borderRadius: hexagon ? 0 : "50%",
+            clipPath: hexagon ? hexClip : undefined,
+            background: `${ringColor}22`,
+            border: `2px solid ${ringColor}`,
+            boxShadow: `0 0 ${ring?.animate ? 14 : 8}px ${ring?.glow || ringColor + "44"}`,
+            animation: ring?.animate ? "pulse-glow 2s infinite ease-in-out" : undefined,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      {/* Avatar body */}
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: hexagon ? 0 : size < 48 ? 8 : 12,
+          clipPath: hexagon ? hexClip : undefined,
+          background: classTheme ? `${classTheme.color}22` : c.bg,
+          color: classTheme?.color || c.color,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Cinzel,serif",
+          fontSize: size * 0.38,
+          fontWeight: 700,
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Subtle glow top-right inside avatar */}
+        {classTheme && (
+          <div style={{
+            position: "absolute", top: 0, right: 0, width: "60%", height: "60%",
+            background: `radial-gradient(circle at top right, ${classTheme.color}44, transparent)`,
+            pointerEvents: "none",
+          }} />
+        )}
+        {initials}
+      </div>
+
+      {/* Class icon badge — bottom-right corner */}
+      {classTheme && size >= 40 && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: -2,
+            right: -4,
+            background: "var(--bg-deep, #0a0e18)",
+            border: `1.5px solid ${classTheme.color}`,
+            borderRadius: "50%",
+            width: iconSize + 4,
+            height: iconSize + 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: iconSize,
+            lineHeight: 1,
+            boxShadow: `0 0 6px ${classTheme.color}66`,
+          }}
+        >
+          {classTheme.icon}
+        </div>
+      )}
     </div>
   );
 }
