@@ -80,6 +80,19 @@
     animation: slideInUp 0.5s ease-out forwards;
   }
 
+  @keyframes floatUpDown {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  .animate-float {
+    animation: floatUpDown 4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+
   .badge-premium {
     background: linear-gradient(135deg, var(--accent), #8b5cf6);
     color: white;
@@ -110,6 +123,44 @@
     transition: width 1s ease-out;
   }
 
+  /* ── Login ── */
+  .login-page-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: var(--bg-deepest);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .login-ambient-glow {
+    position: absolute;
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, rgba(99, 130, 230, 0.12) 0%, transparent 60%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .login-card {
+    width: 100%;
+    background: rgba(13, 16, 23, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-bright);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.8), inset 0 0 16px rgba(99, 130, 230, 0.05);
+    z-index: 1;
+  }
+
   body {
     font-family: 'Rajdhani', sans-serif;
     font-size: 16px;
@@ -127,8 +178,11 @@
   /* ── Sidebar ── */
   .sidebar {
     width: var(--sidebar-w);
-    background: var(--bg-dark);
-    border-right: 1px solid var(--border);
+    background: rgba(13, 16, 23, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-right: 1px solid var(--border-bright);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -142,6 +196,28 @@
   .sidebar-logo {
     padding: 24px 20px 20px;
     border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar-logo::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, var(--accent-light) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .sidebar-logo img, .sidebar-logo .logo-sub {
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
   }
 
   .logo-title {
@@ -181,24 +257,32 @@
     font-weight: 600;
     letter-spacing: 0.5px;
     color: var(--text-secondary);
-    transition: all 0.18s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid transparent;
     text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
   }
 
   .nav-item:hover {
-    background: var(--bg-hover);
+    background: rgba(99, 130, 230, 0.08);
     color: var(--text-primary);
     border-color: var(--border);
+    transform: translateX(4px);
   }
 
   .nav-item.active {
-    background: linear-gradient(135deg, rgba(99, 130, 230, 0.15), rgba(99, 130, 230, 0.05));
-    color: var(--accent);
+    background: linear-gradient(135deg, rgba(99, 130, 230, 0.25), rgba(99, 130, 230, 0.05));
+    color: #fff;
     border-color: var(--border-bright);
-    box-shadow: 0 0 12px rgba(99, 130, 230, 0.1);
+    box-shadow: 0 4px 16px rgba(99, 130, 230, 0.2), inset 0 0 12px rgba(99, 130, 230, 0.1);
     border-left: 3px solid var(--accent);
     padding-left: 9px;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+  }
+
+  .nav-item.active svg {
+    filter: drop-shadow(0 0 6px var(--accent));
   }
 
   .sidebar-footer {
@@ -207,6 +291,26 @@
     font-size: 13px;
     color: var(--text-muted);
     letter-spacing: 1px;
+    position: relative;
+    background: rgba(8, 10, 15, 0.4);
+  }
+
+  .sidebar-user-profile {
+    margin-bottom: 12px;
+    padding: 10px 10px;
+    background: rgba(13, 16, 23, 0.4);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(8px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-user-profile:hover {
+    background: rgba(99, 130, 230, 0.1);
+    border-color: var(--border-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 130, 230, 0.15);
   }
 
   /* ── Main ── */

@@ -110,9 +110,9 @@ export default function App() {
         </div>
         <div className="sidebar-footer">
           {currentUser && (
-            <div style={{ marginBottom: 12, padding: "10px 10px", background: "rgba(99,130,230,0.08)", borderRadius: 8, border: "1px solid var(--border)" }}>
+            <div className="sidebar-user-profile">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 6, background: isAdmin ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", color: isAdmin ? "var(--gold)" : "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 6, background: isAdmin ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", color: isAdmin ? "var(--gold)" : "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 700, flexShrink: 0, boxShadow: "inset 0 0 8px rgba(0,0,0,0.2)" }}>
                   {(currentUser.displayName || currentUser.email || "").slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -124,7 +124,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11 }} onClick={handleSignOut}>
+              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid rgba(255,255,255,0.05)" }} onClick={handleSignOut}>
                 Sign Out
               </button>
             </div>
