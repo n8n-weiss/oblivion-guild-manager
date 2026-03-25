@@ -23,8 +23,25 @@ export const GuildProvider = ({ children, initialData }) => {
   const [attendance, setAttendance] = useState([]);
   const [performance, setPerformance] = useState([]);
   const [absences, setAbsences] = useState([]);
-  const [parties, setParties] = useState([]);
-  const [partyNames, setPartyNames] = useState(["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]);
+  const [parties, setParties] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_parties');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      const data = Array.isArray(parsed) ? parsed : (parsed.data || []);
+      // Ensure we always return a plain array of arrays to the component
+      return data.map(p => Array.isArray(p) ? p : (p.members || []));
+    } catch { return []; }
+  });
+  const [partyNames, setPartyNames] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_partyNames');
+      const defaultNames = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
+      if (!saved) return defaultNames;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : (parsed.data || defaultNames);
+    } catch { return ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]; }
+  });
   const [eoRatings, setEoRatings] = useState([]);
   const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState([]);
@@ -140,25 +157,67 @@ export const GuildProvider = ({ children, initialData }) => {
         setAttendance(flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []));
         setPerformance(flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []));
         setAbsences(loadedAbsences);
-        setParties(metadata.parties || []);
-        setPartyNames(metadata.partyNames || ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]);
+        
+        const localPartiesStr = localStorage.getItem('guild_parties');
+        let localPartiesJson = null;
+        try { localPartiesJson = localPartiesStr ? JSON.parse(localPartiesStr) : null; } catch(e){}
+        
+        const localNamesStr = localStorage.getItem('guild_partyNames');
+        let localNamesJson = null;
+        try { localNamesJson = localNamesStr ? JSON.parse(localNamesStr) : null; } catch(e){}
+
+        const firestoreTs = metadata.lastUpdate ? new Date(metadata.lastUpdate).getTime() : 0;
+        const localPartiesTs = (localPartiesJson && typeof localPartiesJson === 'object' && !Array.isArray(localPartiesJson)) ? localPartiesJson.ts || 0 : 0;
+        const localNamesTs = (localNamesJson && typeof localNamesJson === 'object' && !Array.isArray(localNamesJson)) ? localNamesJson.ts || 0 : 0;
+
+        const cloudPartiesRaw = metadata.parties || [];
+        const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
+        const localPartiesRaw = localPartiesJson?.data || (Array.isArray(localPartiesJson) ? localPartiesJson : []);
+        const localParties = localPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
+        
+        const hasCloud = cloudParties.length > 0;
+        const hasLocal = localParties.length > 0;
+
+
+        // Decide parties
+        if (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) {
+          setParties(cloudParties);
+          localStorage.setItem('guild_parties', JSON.stringify({ data: cloudParties, ts: firestoreTs }));
+        } else if (hasLocal) {
+          setParties(localParties);
+        } else {
+          setParties([]);
+        }
+
+        // Decide partyNames
+        const cloudNames = metadata.partyNames || [];
+        const localNames = localNamesJson?.data || (Array.isArray(localNamesJson) ? localNamesJson : []);
+        if (cloudNames.length > 0 && (firestoreTs >= localNamesTs || localNames.length === 0)) {
+          setPartyNames(cloudNames);
+          localStorage.setItem('guild_partyNames', JSON.stringify({ data: cloudNames, ts: firestoreTs }));
+        }
+        
         setEoRatings(flatEoRatings);
         setAuctionSessions(metadata.auctionSessions || []);
         setAuctionTemplates(metadata.auctionTemplates || []);
 
         // Initialize prevData
+        const finalParties = (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) ? cloudParties : localParties;
+        const finalNames = (cloudNames.length > 0 && (firestoreTs >= localNamesTs || localNames.length === 0)) ? cloudNames : localNames;
+
         prevData.current = {
           members: loadedMembers.length ? loadedMembers : (isNew ? initialData.INITIAL_MEMBERS || [] : []),
           events: loadedEvents.length ? loadedEvents : (isNew ? initialData.INITIAL_EVENTS || [] : []),
           attendance: flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []),
           performance: flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []),
           absences: loadedAbsences,
-          parties: metadata.parties || [],
-          partyNames: metadata.partyNames || ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"],
+          parties: finalParties,
+          partyNames: finalNames,
           eoRatings: flatEoRatings,
           auctionSessions: metadata.auctionSessions || [],
           auctionTemplates: metadata.auctionTemplates || []
         };
+
 
       } catch (err) {
         console.error("Firebase load error:", err);
@@ -236,8 +295,10 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
           JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates)
         ) {
+          // Wrap nested arrays for Firestore
+          const wrappedParties = parties.map(p => ({ members: p }));
           batch.set(doc(db, "metadata", "current"), {
-            parties, partyNames, auctionSessions, auctionTemplates, lastUpdate: new Date().toISOString()
+            parties: wrappedParties, partyNames, auctionSessions, auctionTemplates, lastUpdate: new Date().toISOString()
           });
           prevData.current.parties = [...parties];
           prevData.current.partyNames = [...partyNames];
@@ -274,9 +335,20 @@ export const GuildProvider = ({ children, initialData }) => {
       }
     };
 
-    const timeout = setTimeout(saveData, 2000);
+    const timeout = setTimeout(saveData, 1000); // Reduced from 2000 to 1000 for faster sync
     return () => clearTimeout(timeout);
   }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, loading]);
+
+  // Immediate localStorage backup with timestamp
+  useEffect(() => {
+    if (loading) return;
+    localStorage.setItem('guild_parties', JSON.stringify({ data: parties, ts: Date.now() }));
+  }, [parties, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    localStorage.setItem('guild_partyNames', JSON.stringify({ data: partyNames, ts: Date.now() }));
+  }, [partyNames, loading]);
 
   const resetDatabase = async () => {
     setLoading(true);
@@ -308,6 +380,9 @@ export const GuildProvider = ({ children, initialData }) => {
       setEoRatings([]);
       setAuctionSessions([]);
       setAuctionTemplates([]);
+      
+      localStorage.removeItem('guild_parties');
+      localStorage.removeItem('guild_partyNames');
       
       showToast("Database reset successfully", "success");
     } catch (err) {

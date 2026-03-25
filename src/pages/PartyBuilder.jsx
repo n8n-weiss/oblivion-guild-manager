@@ -115,7 +115,12 @@ function PartyBuilder() {
             <div className="form-group" style={{ gap: 4, marginBottom: 0 }}>
               <label className="form-label">Member Pool</label>
               <select className="form-select" style={{ width: "auto", fontSize: 13, padding: "6px 12px" }}
-                value={sourceMode} onChange={e => { setSourceMode(e.target.value); setParties([]); }}>
+                value={sourceMode} onChange={e => { 
+                  if (e.target.value !== sourceMode) {
+                    setSourceMode(e.target.value); 
+                    setParties([]); 
+                  }
+                }}>
                 <option value="all">Active Members ({activeMembers.length})</option>
                 {events.map(ev => {
                   const count = attendance.filter(a => a.eventId === ev.eventId && a.status === "present").length;
