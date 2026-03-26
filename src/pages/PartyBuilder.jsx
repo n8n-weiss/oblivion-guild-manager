@@ -29,6 +29,8 @@ function PartyBuilder() {
   // bench = pool members not assigned to any party
   const assignedIds = useMemo(() => new Set(parties.flatMap(p => p.map(m => m.memberId))), [parties]);
   const bench = useMemo(() => poolMembers.filter(m => !assignedIds.has(m.memberId)), [poolMembers, assignedIds]);
+  const benchDPS = useMemo(() => bench.filter(m => m.role === "DPS"), [bench]);
+  const benchSUP = useMemo(() => bench.filter(m => m.role !== "DPS"), [bench]);
 
   const autoGenerate = () => {
     const dps = [...poolMembers.filter(m => m.role === "DPS")].sort(() => Math.random() - 0.5);
@@ -163,28 +165,68 @@ function PartyBuilder() {
             <span className="text-xs text-muted">Drag members between parties or back here</span>
           </div>
           <div
-            style={{ ...dropTargetStyle("bench"), display: "flex", flexWrap: "wrap", gap: 8, padding: bench.length === 0 ? "12px 0" : 4 }}
+            style={{ ...dropTargetStyle("bench"), padding: 12 }}
             onDragOver={e => { e.preventDefault(); setDragOver("bench"); }}
             onDragLeave={() => setDragOver(null)}
             onDrop={() => onDrop("bench")}
           >
-            {bench.length === 0 && <span className="text-xs text-muted" style={{ padding: "8px 12px" }}>All members are assigned to a party</span>}
-            {bench.map(m => (
-              <div key={m.memberId}
-                draggable
-                onDragStart={() => onDragStart(m.memberId, "bench")}
-                onDragEnd={onDragEnd}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
-                  background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 8,
-                  cursor: "grab", userSelect: "none", fontSize: 13, fontWeight: 600,
-                  opacity: dragging?.memberId === m.memberId ? 0.4 : 1,
-                }}>
-                <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{m.role === "DPS" ? "DPS" : "SUP"}</span>
-                {m.ign}
-                <span className="text-xs text-muted">{m.class}</span>
+            {bench.length === 0 && <div className="text-xs text-muted" style={{ textAlign: "center", padding: "12px 0" }}>All members are assigned to a party</div>}
+            
+            {bench.length > 0 && (
+              <div className="grid-2 gap-6">
+                {/* DPS Column */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--accent2)", marginBottom: 10, letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
+                    ⚔️ DPS UNITS ({benchDPS.length})
+                    <div style={{ flex: 1, height: 1, background: "rgba(224,92,138,0.15)" }} />
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {benchDPS.map(m => (
+                      <div key={m.memberId}
+                        draggable
+                        onDragStart={() => onDragStart(m.memberId, "bench")}
+                        onDragEnd={onDragEnd}
+                        className="bench-item"
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                          background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 8,
+                          cursor: "grab", userSelect: "none", fontSize: 12, fontWeight: 600,
+                          opacity: dragging?.memberId === m.memberId ? 0.4 : 1,
+                        }}>
+                        {m.ign} <span style={{ opacity: 0.5, fontWeight: 400, fontSize: 10 }}>{m.class}</span>
+                      </div>
+                    ))}
+                    {benchDPS.length === 0 && <div className="text-[10px] text-muted italic">No DPS on bench</div>}
+                  </div>
+                </div>
+
+                {/* Support Column */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--accent)", marginBottom: 10, letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
+                    🛡️ SUPPORTS ({benchSUP.length})
+                    <div style={{ flex: 1, height: 1, background: "rgba(99,130,230,0.15)" }} />
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {benchSUP.map(m => (
+                      <div key={m.memberId}
+                        draggable
+                        onDragStart={() => onDragStart(m.memberId, "bench")}
+                        onDragEnd={onDragEnd}
+                        className="bench-item"
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                          background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 8,
+                          cursor: "grab", userSelect: "none", fontSize: 12, fontWeight: 600,
+                          opacity: dragging?.memberId === m.memberId ? 0.4 : 1,
+                        }}>
+                        {m.ign} <span style={{ opacity: 0.5, fontWeight: 400, fontSize: 10 }}>{m.class}</span>
+                      </div>
+                    ))}
+                    {benchSUP.length === 0 && <div className="text-[10px] text-muted italic">No Supports on bench</div>}
+                  </div>
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
