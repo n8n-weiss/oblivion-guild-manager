@@ -15,17 +15,29 @@ import { JOB_CLASSES } from '../../utils/constants';
 
 const CLASS_THEMES = (() => {
   const themes = {};
+  const branchMaps = {
+    "Swordsman Branch": "knight",
+    "Acolyte Branch": "priest",
+    "Mage Branch": "wizard",
+    "Archer Branch": "archer",
+    "Thief Branch": "assassin",
+    "Merchant Branch": "blacksmith"
+  };
   JOB_CLASSES.forEach(branch => {
     branch.jobs.forEach(job => {
-      themes[job.name] = { color: job.color, icon: job.emoji };
+      themes[job.name] = { 
+        color: job.color, 
+        icon: job.emoji, 
+        portrait: `avatars/branch_${branchMaps[branch.branch]}.png` 
+      };
     });
   });
-  // Fallbacks for any legacy data
-  themes["Professor"] = { color: "var(--color-priest)", icon: "📖" };
-  themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨" };
-  themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
-  themes["Minstrel"] = { color: "var(--color-priest)", icon: "🎵" };
-  themes["Diva"] = { color: "var(--color-priest)", icon: "🎤" };
+  // Fallbacks
+  themes["Professor"] = { color: "var(--color-priest)", icon: "📖", portrait: "avatars/branch_wizard.png" };
+  themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨", portrait: "avatars/branch_blacksmith.png" };
+  themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪", portrait: "avatars/branch_blacksmith.png" };
+  themes["Minstrel"] = { color: "var(--color-priest)", icon: "🎵", portrait: "avatars/branch_archer.png" };
+  themes["Diva"] = { color: "var(--color-priest)", icon: "🎤", portrait: "avatars/branch_archer.png" };
   return themes;
 })();
 
@@ -98,7 +110,10 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
           height: size,
           borderRadius: hexagon ? 0 : size < 48 ? 8 : 12,
           clipPath: hexagon ? hexClip : undefined,
-          background: classTheme ? `${classTheme.color}22` : c.bg,
+          background: classTheme?.portrait 
+            ? `url(${classTheme.portrait}) center/cover no-repeat` 
+            : (classTheme ? `${classTheme.color}22` : c.bg),
+          backgroundColor: classTheme ? `${classTheme.color}44` : c.bg,
           color: classTheme?.color || c.color,
           display: "flex",
           alignItems: "center",
@@ -108,8 +123,18 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
           fontWeight: 700,
           position: "relative",
           overflow: "hidden",
+          border: classTheme?.portrait ? `1px solid ${ringColor}44` : "none",
         }}
       >
+        {/* Shadow Overlay for portraits to make initials/text readable if needed, or just for style */}
+        {classTheme?.portrait && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: `linear-gradient(to top, rgba(10,14,24,0.6), transparent)`,
+            pointerEvents: "none"
+          }} />
+        )}
+
         {/* Subtle glow top-right inside avatar */}
         {classTheme && (
           <div style={{
@@ -118,7 +143,7 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
             pointerEvents: "none",
           }} />
         )}
-        {initials}
+        {!classTheme?.portrait && initials}
       </div>
 
       {/* Class icon badge — bottom-right corner */}

@@ -13,7 +13,7 @@ function MembersPage({ onViewProfile }) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member" });
+  const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
 
   const filtered = members.filter(m => {
     const status = m.status || "active";
@@ -26,13 +26,13 @@ function MembersPage({ onViewProfile }) {
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
-    setForm({ memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member" });
+    setForm({ memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
     setEditMember(null);
     setShowModal(true);
   };
 
   const openEdit = (m) => {
-    setForm({ ...m });
+    setForm({ joinDate: new Date().toISOString().split("T")[0], ...m });
     setEditMember(m.memberId);
     setShowModal(true);
   };
@@ -239,6 +239,10 @@ function MembersPage({ onViewProfile }) {
                 <option value="DPS">DPS</option>
                 <option value="Support">Support / Utility</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Join Date</label>
+              <input type="date" className="form-input" value={form.joinDate} onChange={e => setForm(f => ({ ...f, joinDate: e.target.value }))} />
             </div>
             {isAdmin && (
               <div className="form-group">

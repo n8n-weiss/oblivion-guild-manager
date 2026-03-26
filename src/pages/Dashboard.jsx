@@ -298,8 +298,8 @@ function Dashboard() {
 
       <div className="card mb-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
         <div className="card-title">📈 Guild Attendance Trend</div>
-        <div style={{ height: 220, width: "100%", marginTop: 20 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={1}>
+        <div style={{ minHeight: 220, width: "100%", marginTop: 20 }}>
+          <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">

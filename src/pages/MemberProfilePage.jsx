@@ -23,7 +23,11 @@ import {
 } from 'recharts';
 
 function MemberProfilePage({ member, onBack, isOwnProfile }) {
-  const { members, events, attendance, performance, absences, eoRatings, isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser } = useGuild();
+  const { 
+    members, events, attendance, performance, absences, eoRatings, 
+    notifications, markNotifRead,
+    isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser 
+  } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [absenceForm, setAbsenceForm] = useState({
     eventType: "Guild League",
@@ -35,7 +39,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const [tempBio, setTempBio] = useState(member.bio || "");
   const [tempSocial, setTempSocial] = useState({
     discord: member.discord || "",
-    motto: member.motto || ""
+    motto: member.motto || "",
+    joinDate: member.joinDate || ""
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
@@ -62,10 +67,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     const score = ev.eventType === "Guild League" && att?.status === "present"
       ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0;
     return { ...ev, att, perf, eoRating, score };
-  }).sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+  }).sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
+    .filter(e => !member.joinDate || new Date(e.eventDate) >= new Date(member.joinDate));
 
   const glEvents = memberEvents.filter(e => e.eventType === "Guild League");
   const eoEvents = memberEvents.filter(e => e.eventType === "Emperium Overrun");
+  const memberAbsences = absences.filter(a => a.memberId === member.memberId);
+  const myNotifs = notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId);
+  const unreadCount = myNotifs.filter(n => !n.isRead && n.targetId !== "all").length;
+  
   const totalGLScore = glEvents.reduce((sum, e) => sum + e.score, 0);
   const presentCount = memberEvents.filter(e => e.att?.status === "present").length;
   const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
@@ -74,7 +84,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const eoRatingsList = eoRatings.filter(r => r.memberId === member.memberId);
   const avgEoRating = eoRatingsList.length > 0
     ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
-  const memberAbsences = absences.filter(a => a.memberId === member.memberId);
 
   // --- NEW CALCULATIONS ---
   // 1. Guild Average GL
@@ -131,10 +140,10 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
   // Support-specific stats
   const isSupport = member.role === "Support";
-  // B: Support Index — composite of EO rating quality × attendance reliability (0–100)
-  const supportIndex = Math.round((avgEoRating / 5) * (attPct / 100) * 100);
-  // D: Guild Pillar Score — rewards presence, penalizes absences, rewards EO performance
-  const pillarScore = Math.max(0, Math.round((attPct * 0.5) + (avgEoRating * 10) - (memberAbsences.length * 5)));
+  // SPI: Support Performance Index (0–100)
+  const supportIndex = Math.round((attPct * 0.5) + (avgEoRating * 10));
+  // Pillar Score (SPI - Absence Penalties)
+  const pillarScore = Math.max(0, Math.round(supportIndex - (memberAbsences.length * 5)));
 
   // 5. RPG Rankings & Levels
   const getRankInfo = (score) => {
@@ -182,7 +191,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     };
     setAbsences(prev => [...prev, newAbsence]);
     showToast(`Absence filed for ${nextEvent.eventDate}`, "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_quick", `Quick absence: ${member.ign} for ${nextEvent.eventDate}`);
+    // writeAuditLog removed (member-initiated)
   };
 
   // 8. Performance Summary
@@ -263,7 +272,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     const newAbsence = { ...absenceForm, memberId: member.memberId, id };
     setAbsences(prev => [...prev, newAbsence]);
     showToast("Absence filed successfully!", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Member filed own absence: ${member.ign} — ${absenceForm.eventType} ${absenceForm.eventDate}`);
+    // writeAuditLog removed (member-initiated)
     setShowAbsenceForm(false);
     setAbsenceForm(f => ({ ...f, reason: "" }));
   };
@@ -271,7 +280,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const saveSocialData = () => {
     const updatedMembers = members.map(m =>
       m.memberId === member.memberId
-        ? { ...m, bio: tempBio, discord: tempSocial.discord, motto: tempSocial.motto }
+        ? { ...m, bio: tempBio, discord: tempSocial.discord, motto: tempSocial.motto, joinDate: tempSocial.joinDate }
         : m
     );
     setMembers(updatedMembers);
@@ -458,6 +467,11 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   <span style={{ color: "var(--accent)", fontWeight: 700 }}>ID:</span> {member.memberId}
                 </div>
+                {member.joinDate && (
+                  <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, background: "rgba(99,130,230,0.1)", padding: "2px 6px", borderRadius: 4 }}>
+                    JOINED: {member.joinDate}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -465,6 +479,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               <input className="form-input" placeholder="Battle motto..." value={tempSocial.motto} onChange={e => setTempSocial({ ...tempSocial, motto: e.target.value })} />
               <textarea className="form-input" rows={2} placeholder="Bio / notes..." value={tempBio} onChange={e => setTempBio(e.target.value)} />
               <input className="form-input" placeholder="Discord Username#0000" value={tempSocial.discord} onChange={e => setTempSocial({ ...tempSocial, discord: e.target.value })} />
+              {isArchitect && (
+                <div className="form-group mb-0" style={{ marginTop: 4 }}>
+                  <label className="form-label" style={{ fontSize: 10, color: "var(--gold)", marginBottom: 4 }}>🛡️ JOIN DATE (ADMIN ONLY)</label>
+                  <input type="date" className="form-input" value={tempSocial.joinDate} onChange={e => setTempSocial({ ...tempSocial, joinDate: e.target.value })} />
+                </div>
+              )}
             </div>
           )}
 
@@ -516,7 +536,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <div className="stat-value" style={{ color: "var(--color-priest)" }}>
               {avgEoRating > 0 || attPct > 0 ? supportIndex : "—"}
             </div>
-            <div className="stat-change">EO quality × attendance</div>
+            <div className="stat-change">Attendance (50%) + EO Quality (50%)</div>
           </div>
         ) : (
           <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
@@ -553,6 +573,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           { id: "overview", label: "📊 Overview" },
           { id: "history", label: "📅 History" },
           { id: "achievements", label: "🏆 Achievements" },
+          { id: "notifications", label: `🔔 Alerts ${unreadCount > 0 ? `(${unreadCount})` : ''}` },
           { id: "absences", label: `⚠️ Absences (${memberAbsences.length})` },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -752,6 +773,27 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tab: Notifications */}
+      {activeTab === "notifications" && (
+        <div className="animate-fade-in flex flex-col gap-3">
+          {myNotifs.length === 0 && <div className="card p-12 text-center text-muted italic">No notifications found for this profile.</div>}
+          {myNotifs.map(n => (
+            <div key={n.id} className={`card p-4 border animate-slide-up ${n.isRead ? 'opacity-60 border-white/5' : 'border-accent/30 bg-accent/5 shadow-[0_4px_20px_rgba(99,130,230,0.08)]'}`}
+              onClick={() => n.targetId !== 'all' && markNotifRead(n.id)}
+              style={{ cursor: n.targetId !== 'all' ? 'pointer' : 'default' }}>
+              <div className="flex justify-between items-start mb-2">
+                <div style={{ color: n.type === 'warning' ? 'var(--red)' : n.type === 'success' ? 'var(--green)' : 'var(--accent)', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {n.type === 'warning' ? '⚠️' : n.type === 'success' ? '✅' : '🔔'} {n.title}
+                  {!n.isRead && n.targetId !== 'all' && <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
+                </div>
+                <div className="text-[10px] text-muted">{new Date(n.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+              <p className="text-xs text-secondary leading-relaxed">{n.message}</p>
+            </div>
+          ))}
         </div>
       )}
 

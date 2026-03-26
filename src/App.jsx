@@ -10,8 +10,9 @@ import Icon from "./components/ui/icons";
 import Toast from "./components/ui/Toast";
 import { MemberAvatar } from "./components/common/MemberAvatar";
 
-// Pages
+// Components
 import TreasuryModal from "./components/common/TreasuryModal";
+import { NotificationCenter } from "./components/common/NotificationCenter";
 import Dashboard from "./pages/Dashboard";
 import MembersPage from "./pages/MembersPage";
 import EventsPage from "./pages/EventsPage";
@@ -31,11 +32,15 @@ export default function App() {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
     page, setPage,
     toast, setToast, showToast,
-    members, events, absences
+    members, events, absences,
+    notifications
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
   const [showTreasury, setShowTreasury] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -74,11 +79,26 @@ export default function App() {
       <nav className="sidebar">
         <div className="sidebar-logo">
           <img
-            src={window.location.hostname === "localhost" ? "/oblivion-logo.png" : "/oblivion-guild-manager/oblivion-logo.png"}
+            src="oblivion-logo.png"
             alt="Oblivion Guild"
             style={{ width: "100%", maxWidth: 160, height: "auto", display: "block", margin: "0 auto 8px", borderRadius: 8 }}
           />
           <div className="logo-sub" style={{ textAlign: "center" }}>Guild Manager</div>
+          
+          <div 
+            className="absolute top-4 right-4 cursor-pointer hover:scale-110 transition-transform" 
+            onClick={() => setShowNotifications(true)}
+            style={{ zIndex: 10 }}
+          >
+            <div className="relative">
+              <Icon name="bell" size={20} color={unreadCount > 0 ? "var(--gold)" : "var(--text-muted)"} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="sidebar-nav">
           {NAV_ITEMS.filter(item => {
@@ -167,6 +187,7 @@ export default function App() {
 
       {/* Main Content Areas */}
       <main className="main-content">
+        <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
         {page === "dashboard" && <Dashboard />}
 
         {page === "members" && (

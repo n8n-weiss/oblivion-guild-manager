@@ -50,11 +50,15 @@ function EventsPage() {
     const newStatus = current?.status === "present" ? "absent" : "present";
     const member = members.find(m => m.memberId === memberId);
     const ev = events.find(e => e.eventId === eventId);
-    setAttendance(prev => prev.map(a =>
-      a.memberId === memberId && a.eventId === eventId
-        ? { ...a, status: newStatus }
-        : a
-    ));
+    
+    setAttendance(prev => {
+      const exists = prev.some(a => a.memberId === memberId && a.eventId === eventId);
+      if (exists) {
+        return prev.map(a => a.memberId === memberId && a.eventId === eventId ? { ...a, status: newStatus } : a);
+      }
+      return [...prev, { memberId, eventId, status: newStatus }];
+    });
+
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
   };
 
@@ -105,15 +109,15 @@ function EventsPage() {
               const present = evAtt.filter(a => a.status === "present").length;
               const isActive = selectedEvent?.eventId === ev.eventId;
               return (
-                <div key={ev.eventId}
+                <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
                   className="card" style={{ cursor: "pointer", padding: "14px 16px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none" }}>
-                  <div className="flex items-center justify-between mb-1" onClick={() => setSelectedEvent(ev)}>
+                  <div className="flex items-center justify-between mb-1">
                     <span className="font-cinzel" style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 700 }}>{ev.eventDate}</span>
                     <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 9 }}>
                       {ev.eventType === "Guild League" ? "GL" : "EO"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between" onClick={() => setSelectedEvent(ev)}>
+                  <div className="flex items-center justify-between">
                     <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
                   </div>
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>

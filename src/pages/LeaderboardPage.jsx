@@ -7,11 +7,39 @@ import { computeLeaderboard } from '../utils/scoring';
 function LeaderboardPage({ onViewProfile }) {
   const { members, events, attendance, performance, eoRatings } = useGuild();
   const [filter, setFilter] = useState("All");
-  const [lbMode, setLbMode] = useState("gl"); // "gl" | "eo"
+  const [lbMode, setLbMode] = useState("Combat"); // "Combat" | "Duty" | "Consistency" | "Support"
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
-  const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
+  
+  const lb = useMemo(() => {
+    const rawLb = computeLeaderboard(activeMembers, events, attendance, performance, eoRatings);
+    
+    // Sort based on mode
+    let sorted = [...rawLb];
+    if (lbMode === "Duty") {
+      sorted.sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore);
+    } else if (lbMode === "Consistency") {
+      // Consistency score = Attendance Pct * 0.6 + (Score / MaxScore * 100) * 0.4
+      const maxScore = Math.max(...rawLb.map(m => m.totalScore), 1);
+      sorted.sort((a, b) => {
+        const scoreA = (a.attendancePct * 0.6) + ((a.totalScore / maxScore) * 40);
+        const scoreB = (b.attendancePct * 0.6) + ((b.totalScore / maxScore) * 40);
+        return scoreB - scoreA;
+      });
+    } else if (lbMode === "Support") {
+      sorted.sort((a, b) => b.supportIndex - a.supportIndex || b.totalScore - a.totalScore);
+    } else {
+      sorted.sort((a, b) => b.totalScore - a.totalScore);
+    }
+    
+    return sorted.map((m, i) => ({ ...m, dynamicRank: i + 1 }));
+  }, [activeMembers, events, attendance, performance, eoRatings, lbMode]);
+
   const filtered = filter === "All" ? lb : lb.filter(m => m.classification === filter);
-  const maxScore = Math.max(...lb.map(m => m.totalScore), 1);
+  const maxVal = Math.max(...lb.map(m => 
+    lbMode === "Duty" ? m.attendancePct : 
+    lbMode === "Support" ? m.avgEoRating * 20 : 
+    m.totalScore
+  ), 1);
 
   // EO leaderboard
   const eoEvents = events.filter(e => e.eventType === "Emperium Overrun");
@@ -37,10 +65,41 @@ function LeaderboardPage({ onViewProfile }) {
             <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
           </div>
           <div className="flex gap-2">
-            <button className={`btn ${lbMode === "gl" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("gl")}>⚔️ Guild League</button>
-            <button className={`btn ${lbMode === "eo" ? "btn-primary" : "btn-ghost"}`} onClick={() => setLbMode("eo")}>🏰 Emperium Overrun</button>
+            {[
+              { id: "Combat", label: "Combat", icon: "⚔️" },
+              { id: "Duty", label: "Duty", icon: "🛡️" },
+              { id: "Consistency", label: "Stability", icon: "⚖️" },
+              { id: "Support", label: "Support", icon: "✨" }
+            ].map(cat => (
+              <button 
+                key={cat.id} 
+                className={`btn btn-sm ${lbMode === cat.id ? "btn-primary" : "btn-ghost"}`} 
+                onClick={() => setLbMode(cat.id)}
+              >
+                {cat.icon} {cat.label}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
+
+      {/* Hall of Fame Highlights */}
+      <div className="grid-4 gap-4 mb-6">
+        {[
+          { label: "Top Striker", member: lb.sort((a,b) => b.totalScore - a.totalScore)[0], icon: "🔥", color: "var(--red)" },
+          { label: "Reliable Wall", member: lb.sort((a,b) => b.attendancePct - a.attendancePct)[0], icon: "🛡️", color: "var(--green)" },
+          { label: "Elite Support", member: lb.sort((a,b) => b.avgEoRating - a.avgEoRating)[0], icon: "✨", color: "var(--accent)" },
+          { label: "Consistency King", member: lb.sort((a, b) => {
+              const maxS = Math.max(...lb.map(m => m.totalScore), 1);
+              return ((b.attendancePct * 0.6) + ((b.totalScore / maxS) * 40)) - ((a.attendancePct * 0.6) + ((a.totalScore / maxS) * 40));
+            })[0], icon: "⚖️", color: "var(--gold)" }
+        ].map(hl => (
+          <div key={hl.label} className="card p-3 flex flex-col items-center text-center" style={{ background: `${hl.color}08`, border: `1px solid ${hl.color}22` }}>
+            <div style={{ fontSize: 24, marginBottom: 4 }}>{hl.icon}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", letterSpacing: 1 }}>{hl.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: hl.color }}>{hl.member?.ign || "---"}</div>
+          </div>
+        ))}
       </div>
 
       {/* Top 3 podium - GL only */}
@@ -90,9 +149,11 @@ function LeaderboardPage({ onViewProfile }) {
         })}
       </div>}
 
-      {lbMode === "gl" && <div className="card">
+      <div className="card">
         <div className="section-header">
-          <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Full Rankings</div>
+          <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>
+            {lbMode} Rankings
+          </div>
           <div className="flex gap-2">
             {["All", "Core", "Active", "Casual", "At Risk"].map(f => (
               <button key={f} className={`btn btn-sm ${filter === f ? "btn-primary" : "btn-ghost"}`} onClick={() => setFilter(f)}>{f}</button>
@@ -102,22 +163,26 @@ function LeaderboardPage({ onViewProfile }) {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>#</th><th>Player</th><th>Role</th><th>Total Score</th><th>Score Bar</th><th>Attendance</th><th>Avg/Event</th><th>Status</th>
+              <th>#</th><th>Player</th><th>Role</th>
+              <th>{lbMode === "Combat" ? "Total Score" : lbMode === "Duty" ? "Attendance" : lbMode === "Support" ? "SPI Score" : "Stability"}</th>
+              <th>Intensity</th>
+              <th>Metrics</th>
+              <th>Classification</th>
             </tr></thead>
             <tbody>
-              {filtered.map((m) => (
+              {filtered.map((m, i) => (
                 <tr key={m.memberId}>
                   <td>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 40 }}>
-                      {m.rank <= 3 && <span style={{ fontSize: 18 }}>{["🥇", "🥈", "🥉"][m.rank - 1]}</span>}
-                      <span className="font-cinzel" style={{ fontSize: 13, fontWeight: 700, color: rankColors[m.rank - 1] || "var(--text-muted)" }}>
-                        #{m.rank}
+                      {i < 3 && <span style={{ fontSize: 18 }}>{["🥇", "🥈", "🥉"][i]}</span>}
+                      <span className="font-cinzel" style={{ fontSize: 13, fontWeight: 700, color: rankColors[i] || "var(--text-muted)" }}>
+                        #{i + 1}
                       </span>
                     </div>
                   </td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <MemberAvatar ign={m.ign} index={m.rank - 1} size={34} />
+                      <MemberAvatar ign={m.ign} index={i} size={34} />
                       <div>
                         <div style={{ fontWeight: 700, cursor: "pointer", color: "var(--accent)" }}
                           onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</div>
@@ -126,22 +191,34 @@ function LeaderboardPage({ onViewProfile }) {
                     </div>
                   </td>
                   <td><span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 10 }}>{m.role}</span></td>
-                  <td><span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: m.totalScore > 80 ? "var(--gold)" : m.totalScore > 60 ? "var(--green)" : "var(--text-primary)" }}>{m.totalScore}</span></td>
+                  <td>
+                    <span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
+                      {lbMode === "Combat" ? m.totalScore : 
+                       lbMode === "Duty" ? `${m.attendancePct}%` : 
+                       lbMode === "Support" ? m.supportIndex : 
+                       Math.round((m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40))}
+                    </span>
+                  </td>
                   <td style={{ minWidth: 140 }}>
                     <div className="score-bar-wrap">
                       <div className="score-bar-bg">
-                        <div className="score-bar-fill" style={{ width: `${Math.max(2, (m.totalScore / maxScore) * 100)}%`, background: m.totalScore > 80 ? "var(--gold)" : m.totalScore > 60 ? "var(--green)" : "var(--accent)" }} />
+                        <div className="score-bar-fill" style={{ 
+                          width: `${Math.max(2, (
+                            (lbMode === "Combat" ? m.totalScore : 
+                             lbMode === "Duty" ? m.attendancePct : 
+                             lbMode === "Support" ? m.supportIndex : 
+                             (m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40)) / maxVal) * 100)}%`, 
+                          background: lbMode === "Combat" ? "var(--accent)" : lbMode === "Duty" ? "var(--green)" : lbMode === "Support" ? "var(--gold)" : "var(--accent2)" 
+                        }} />
                       </div>
                     </div>
                   </td>
                   <td>
-                    <span style={{ color: m.attendancePct >= 75 ? "var(--green)" : m.attendancePct >= 50 ? "var(--gold)" : "var(--red)", fontWeight: 700 }}>{m.attendancePct}%</span>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      <div>Score: {m.totalScore}</div>
+                      <div>Att: {m.attendancePct}%</div>
+                    </div>
                   </td>
-                  <td>
-                    <span style={{ color: m.absentCount > 3 ? "var(--red)" : m.absentCount > 1 ? "var(--gold)" : "var(--green)", fontWeight: 700 }}>{m.absentCount}</span>
-                    {m.consecutiveAbsent >= 2 && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--red)" }}>({m.consecutiveAbsent} streak)</span>}
-                  </td>
-                  <td className="text-secondary">{m.avgScore}</td>
                   <td>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 10 }}>
@@ -160,7 +237,7 @@ function LeaderboardPage({ onViewProfile }) {
             </tbody>
           </table>
         </div>
-      </div>}
+      </div>
 
       {/* EO Leaderboard */}
       {lbMode === "eo" && (

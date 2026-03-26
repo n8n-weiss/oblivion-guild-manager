@@ -16,18 +16,21 @@ export function computeAttendanceStatus(attendancePct) {
   return { label: "At Risk", color: "var(--red)", badge: "badge-atrisk", icon: "🚨" };
 }
 
-export function computeLeaderboard(members, events, attendance, performance) {
+export function computeLeaderboard(members, events, attendance, performance, eoRatings = []) {
   return members.map((member) => {
     let totalScore = 0;
     let presentCount = 0;
     let absentCount = 0;
     let consecutiveAbsent = 0;
     let tempConsecutive = 0;
-    const glEvents = events.filter(e => e.eventType === "Guild League");
-    const eventCount = events.length;
+
+    // Filter events based on member's Join Date
+    const eligibleEvents = events.filter(e => !member.joinDate || new Date(e.eventDate) >= new Date(member.joinDate));
+    const glEvents = eligibleEvents.filter(e => e.eventType === "Guild League");
+    const eventCount = eligibleEvents.length;
     const glCount = glEvents.length;
 
-    events.forEach((event) => {
+    eligibleEvents.forEach((event) => {
       const att = attendance.find((a) => a.memberId === member.memberId && a.eventId === event.eventId);
       const perf = performance.find((p) => p.memberId === member.memberId && p.eventId === event.eventId);
       if (att?.status === "present") {
@@ -53,7 +56,16 @@ export function computeLeaderboard(members, events, attendance, performance) {
     else if (totalScore >= 60) classification = "Active";
     else if (totalScore >= 40) classification = "Casual";
 
-    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus };
+    // EO-based calculations
+    const memberEoRatings = eoRatings.filter(r => r.memberId === member.memberId);
+    const totalEoScore = memberEoRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
+    const avgEoRating = memberEoRatings.length > 0 ? Math.round((totalEoScore / memberEoRatings.length) * 10) / 10 : 0;
+
+    // Support Performance Index (SPI)
+    // Formula: (Attendance * 0.5) + (EO Rating * 10)
+    const supportIndex = Math.round((attendancePct * 0.5) + (avgEoRating * 10));
+
+    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }

@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
 import Icon from '../components/ui/icons';
-import Toast from '../components/ui/Toast';
-import Modal from '../components/ui/Modal';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import { useGuild } from '../context/GuildContext';
+import { db } from '../firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
 import { computeScore, computeLeaderboard, computeAttendanceStatus } from '../utils/scoring';
 
 async function writeAuditLog(userEmail, userName, action, details) {
@@ -24,10 +22,12 @@ async function writeAuditLog(userEmail, userName, action, details) {
 
 
 function AuditLogPage() {
+  const { isArchitect, showToast } = useGuild();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterAction, setFilterAction] = useState("All");
   const [filterUser, setFilterUser] = useState("All");
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     const loadLogs = async () => {
@@ -43,6 +43,24 @@ function AuditLogPage() {
     };
     loadLogs();
   }, []);
+
+  const clearLogs = async () => {
+    if (!window.confirm("Are you sure you want to PERMANENTLY delete all audit logs? This cannot be undone.")) return;
+    setIsClearing(true);
+    try {
+      const snap = await getDocs(collection(db, "auditlogs"));
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      setLogs([]);
+      showToast("Audit logs cleared successfully", "success");
+    } catch (err) {
+      console.error("Clear logs error:", err);
+      showToast("Failed to clear logs", "error");
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const actionIcons = {
     "member_add": "➕",
@@ -88,8 +106,15 @@ function AuditLogPage() {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">📋 Audit Log</h1>
-        <p className="page-subtitle">Track all changes made by officers and admins</p>
+        <div>
+          <h1 className="page-title">📋 Audit Log</h1>
+          <p className="page-subtitle">Track all changes made by officers and admins</p>
+        </div>
+        {isArchitect && (
+          <button className="btn btn-danger btn-sm" onClick={clearLogs} disabled={isClearing || logs.length === 0}>
+            <Icon name="trash" size={12} /> {isClearing ? "Clearing..." : "Clear All Logs"}
+          </button>
+        )}
       </div>
 
       {/* Filters */}

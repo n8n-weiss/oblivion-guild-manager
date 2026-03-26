@@ -8,6 +8,7 @@ function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [imported, setImported] = useState(false);
+  const [defaultJoinDate, setDefaultJoinDate] = useState(new Date().toISOString().split("T")[0]);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -37,6 +38,7 @@ function ImportPage() {
             uid: row.findIndex(c => ["uid", "member id", "id", "memberid"].includes(c.toLowerCase())),
             role: row.findIndex(c => ["role", "position"].includes(c.toLowerCase())),
             discord: row.findIndex(c => ["discord", "discord id", "discord username"].includes(c.toLowerCase())),
+            joinDate: row.findIndex(c => ["join date", "joined", "joindate"].includes(c.toLowerCase())),
             idCol: row.findIndex(c => c === "#" || c.toLowerCase() === "no" || c.toLowerCase() === "no.")
           };
           const foundCount = Object.values(finds).filter(v => v !== -1).length;
@@ -90,8 +92,9 @@ function ImportPage() {
         if (memberId.length < 3 || /^(dps|support|role|ign|rank|status)$/i.test(memberId)) continue;
 
         const normalizedRole = roleStr.toLowerCase().includes("support") || roleStr.toLowerCase().includes("utility") ? "Support" : "DPS";
+        const jd = mapping.joinDate !== -1 ? (row[mapping.joinDate] || defaultJoinDate) : defaultJoinDate;
         
-        parsed.push({ memberId, ign, class: cls, role: normalizedRole, discord });
+        parsed.push({ memberId, ign, class: cls, role: normalizedRole, discord, joinDate: jd });
       }
 
       if (parsed.length === 0) {
@@ -142,12 +145,22 @@ function ImportPage() {
       </div>
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-title">📍 Upload File</div>
-        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "32px 20px", border: "2px dashed var(--border-bright)", borderRadius: 12, cursor: "pointer", background: "rgba(99,130,230,0.03)" }}>
+        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "32px 20px", border: "2px dashed var(--border-bright)", borderRadius: 12, cursor: "pointer", background: "rgba(99,130,230,0.03)", marginBottom: 12 }}>
           <div style={{ fontSize: 32 }}>📄</div>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{fileName || "I-click para pumili ng CSV o TSV file"}</div>
           <div className="text-xs text-muted">Awtomatikong nade-detect ang format at separator (Comma, Tab, Semicolon)</div>
           <input type="file" accept=".csv,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
         </label>
+        
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", background: "rgba(240,192,64,0.05)", borderRadius: 8, border: "1px solid rgba(240,192,64,0.1)" }}>
+          <div style={{ fontSize: 18 }}>🛡️</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>DEFAULT JOIN DATE</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Gagamitin ito kapag walang 'Join Date' column sa iyong file.</div>
+          </div>
+          <input type="date" className="form-input" style={{ width: "auto", padding: "4px 8px" }} value={defaultJoinDate} onChange={e => setDefaultJoinDate(e.target.value)} />
+        </div>
+
         {error && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(224,80,80,0.1)", border: "1px solid rgba(224,80,80,0.3)", borderRadius: 8, color: "var(--red)", fontSize: 13 }}>⚠️ {error}</div>}
         {imported && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(64,201,122,0.1)", border: "1px solid rgba(64,201,122,0.3)", borderRadius: 8, color: "var(--green)", fontSize: 13 }}>✅ Import successful!</div>}
       </div>
@@ -165,7 +178,7 @@ function ImportPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th><th>Discord</th></tr></thead>
+              <thead><tr><th>Member ID</th><th>IGN</th><th>Class</th><th>Role</th><th>Discord</th><th>Join Date</th></tr></thead>
               <tbody>
                 {preview.map((m, i) => (
                   <tr key={i}>
@@ -174,6 +187,7 @@ function ImportPage() {
                     <td className="text-secondary">{m.class}</td>
                     <td><span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`}>{m.role}</span></td>
                     <td className="text-xs text-muted">{m.discord || <span style={{ opacity: 0.3 }}>N/A</span>}</td>
+                    <td><span className="badge badge-casual" style={{ fontSize: 10 }}>{m.joinDate}</span></td>
                   </tr>
                 ))}
               </tbody>

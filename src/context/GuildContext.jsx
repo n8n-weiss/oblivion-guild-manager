@@ -45,6 +45,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [eoRatings, setEoRatings] = useState([]);
   const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
@@ -115,7 +116,8 @@ export const GuildProvider = ({ children, initialData }) => {
           perfSnap,
           eoSnap,
           absSnap,
-          metaSnap
+          metaSnap,
+          notifSnap
         ] = await Promise.all([
           getDocs(collection(db, "roster")),
           getDocs(collection(db, "events")),
@@ -123,7 +125,8 @@ export const GuildProvider = ({ children, initialData }) => {
           getDocs(collection(db, "performance")),
           getDocs(collection(db, "eoRatings")),
           getDocs(collection(db, "absences")),
-          getDoc(doc(db, "metadata", "current"))
+          getDoc(doc(db, "metadata", "current")),
+          getDocs(collection(db, "notifications"))
         ]);
 
         const loadedMembers = rosterSnap.docs.map(d => d.data());
@@ -208,6 +211,7 @@ export const GuildProvider = ({ children, initialData }) => {
         setEoRatings(flatEoRatings);
         setAuctionSessions(metadata.auctionSessions || []);
         setAuctionTemplates(metadata.auctionTemplates || []);
+        setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
 
         // Initialize prevData
         const finalParties = (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) ? cloudParties : localParties;
@@ -266,6 +270,21 @@ export const GuildProvider = ({ children, initialData }) => {
 
         // 2. Save Events
         if (JSON.stringify(events) !== JSON.stringify(prevData.current.events)) {
+          // Identify removed events
+          const currentEventIds = new Set(events.map(e => e.eventId));
+          const removedEventIds = prevData.current.events
+            .filter(e => !currentEventIds.has(e.eventId))
+            .map(e => e.eventId);
+          
+          removedEventIds.forEach(eid => {
+            if (eid) {
+              batch.delete(doc(db, "events", eid));
+              batch.delete(doc(db, "attendance", eid));
+              batch.delete(doc(db, "performance", eid));
+              batch.delete(doc(db, "eoRatings", eid));
+            }
+          });
+
           events.forEach(e => batch.set(doc(db, "events", e.eventId), e));
           prevData.current.events = [...events];
           changesCount++;
@@ -369,6 +388,32 @@ export const GuildProvider = ({ children, initialData }) => {
     localStorage.setItem('guild_partyNames', JSON.stringify({ data: partyNames, ts: Date.now() }));
   }, [partyNames, loading]);
 
+  const sendNotification = async (targetId, title, message, type = "info") => {
+    const notif = {
+      targetId, // memberId or "all"
+      title,
+      message,
+      type,
+      ts: new Date().toISOString(),
+      readBy: [] // track who read it (for global) or simple status for personal
+    };
+    const docRef = await setDoc(doc(collection(db, "notifications")), notif);
+    setNotifications(prev => [notif, ...prev]);
+    showToast("Notification sent", "success");
+  };
+
+  const markNotifRead = async (id) => {
+    // For simplicity, we'll just update local state and Firestore if it's personal
+    // If it's global, we won't mark it read for everyone
+    try {
+      const n = notifications.find(x => x.id === id);
+      if (n && n.targetId !== "all") {
+        await setDoc(doc(db, "notifications", id), { ...n, isRead: true });
+        setNotifications(prev => prev.map(x => x.id === id ? { ...x, isRead: true } : x));
+      }
+    } catch(err) { console.error(err); }
+  };
+
   const resetDatabase = async () => {
     setLoading(true);
     try {
@@ -426,6 +471,7 @@ export const GuildProvider = ({ children, initialData }) => {
     eoRatings, setEoRatings,
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
+    notifications, sendNotification, markNotifRead,
     resetDatabase
   };
 
