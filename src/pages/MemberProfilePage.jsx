@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useGuild } from '../context/GuildContext';
+import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from "./AuditLogPage";
@@ -103,18 +104,19 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   if (eoRatingsList.length >= 3 && avgEoRating >= 4.5) badges.push({ icon: "⭐", label: "MVP", color: "var(--color-priest)" });
 
   // 4. Class Theme & Icon
-  const classThemes = {
-    "Lord Knight": { color: "var(--color-knight)", icon: "⚔️" },
-    "Paladin": { color: "var(--color-knight)", icon: "🛡️" },
-    "High Priest": { color: "var(--color-priest)", icon: "✨" },
-    "Professor": { color: "var(--color-priest)", icon: "📖" },
-    "High Wizard": { color: "var(--color-wizard)", icon: "🔮" },
-    "Sniper": { color: "var(--color-sniper)", icon: "🏹" },
-    "Assassin Cross": { color: "var(--color-assassin)", icon: "🔪" },
-    "Stalker": { color: "var(--color-assassin)", icon: "🎭" },
-    "Whitesmith": { color: "var(--color-blacksmith)", icon: "🔨" },
-    "Creator": { color: "var(--color-blacksmith)", icon: "🧪" },
-  };
+  const classThemes = useMemo(() => {
+    const themes = {};
+    JOB_CLASSES.forEach(branch => {
+      branch.jobs.forEach(job => {
+        themes[job.name] = { color: job.color, icon: job.emoji };
+      });
+    });
+    // Fallbacks
+    themes["Professor"] = { color: "var(--color-priest)", icon: "📖" };
+    themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨" };
+    themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
+    return themes;
+  }, []);
   const theme = classThemes[member.class] || { color: "var(--color-others)", icon: "👤" };
 
   const attStatus = attPct >= 80 ? { label: "Reliable", badge: "badge-active" }

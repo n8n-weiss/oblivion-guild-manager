@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useGuild } from '../context/GuildContext';
+import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
 import { MemberAvatar } from '../components/common/MemberAvatar';
@@ -53,21 +54,21 @@ function MembersPage({ onViewProfile }) {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
   };
 
-  const classThemes = {
-    "Lord Knight": { color: "var(--color-knight)", icon: "⚔️" },
-    "Paladin": { color: "var(--color-knight)", icon: "🛡️" },
-    "High Priest": { color: "var(--color-priest)", icon: "✨" },
-    "Professor": { color: "var(--color-priest)", icon: "📖" },
-    "High Wizard": { color: "var(--color-wizard)", icon: "🔮" },
-    "Sniper": { color: "var(--color-sniper)", icon: "🏹" },
-    "Assassin Cross": { color: "var(--color-assassin)", icon: "🔪" },
-    "Stalker": { color: "var(--color-assassin)", icon: "🎭" },
-    "Whitesmith": { color: "var(--color-blacksmith)", icon: "🔨" },
-    "Creator": { color: "var(--color-blacksmith)", icon: "🧪" },
-    "Champion": { color: "var(--color-knight)", icon: "👊" },
-    "Minstrel": { color: "var(--color-priest)", icon: "🎵" },
-    "Diva": { color: "var(--color-priest)", icon: "🎤" },
-  };
+  const classThemes = useMemo(() => {
+    const themes = {};
+    JOB_CLASSES.forEach(branch => {
+      branch.jobs.forEach(job => {
+        themes[job.name] = { color: job.color, icon: job.emoji };
+      });
+    });
+    // Fallbacks for any legacy data
+    themes["Professor"] = { color: "var(--color-priest)", icon: "📖" };
+    themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨" };
+    themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
+    themes["Minstrel"] = { color: "var(--color-priest)", icon: "🎵" };
+    themes["Diva"] = { color: "var(--color-priest)", icon: "🎤" };
+    return themes;
+  }, []);
   const getRankInfo = (score) => {
     if (score >= 200) return { rank: "LEGEND", color: "#ff4d4d" };
     if (score >= 150) return { rank: "ELITE", color: "#ffcc00" };
@@ -221,7 +222,16 @@ function MembersPage({ onViewProfile }) {
             </div>
             <div className="form-group">
               <label className="form-label">Class</label>
-              <input className="form-input" placeholder="e.g. Lord Knight" value={form.class} onChange={e => setForm(f => ({ ...f, class: e.target.value }))} />
+              <select className="form-select" value={form.class} onChange={e => setForm(f => ({ ...f, class: e.target.value }))}>
+                <option value="">-- Select Class --</option>
+                {JOB_CLASSES.map(branch => (
+                  <optgroup key={branch.branch} label={branch.branch}>
+                    {branch.jobs.map(job => (
+                      <option key={job.name} value={job.name}>{job.emoji} {job.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label className="form-label">Role</label>

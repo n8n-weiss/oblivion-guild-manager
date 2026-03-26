@@ -6,9 +6,9 @@ export const INITIAL_MEMBERS = [
   { memberId: "OBL005", ign: "ArcaneVeil", class: "High Wizard", role: "DPS" },
   { memberId: "OBL006", ign: "IronFortress", class: "Paladin", role: "Support" },
   { memberId: "OBL007", ign: "NightCrawler", class: "Stalker", role: "DPS" },
-  { memberId: "OBL008", ign: "MysticHeal", class: "Professor", role: "Support" },
-  { memberId: "OBL009", ign: "BlazeKnight", class: "Crusader", role: "DPS" },
-  { memberId: "OBL010", ign: "VoidWalker", class: "Rogue", role: "DPS" },
+  { memberId: "OBL008", ign: "MysticHeal", class: "Scholar (Professor)", role: "Support" },
+  { memberId: "OBL009", ign: "BlazeKnight", class: "Paladin", role: "DPS" },
+  { memberId: "OBL010", ign: "VoidWalker", class: "Stalker", role: "DPS" },
 ];
 
 export const INITIAL_EVENTS = [
@@ -74,3 +74,49 @@ export const NAV_ITEMS = [
 ];
 
 export const PARTY_NAMES = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
+
+export const JOB_CLASSES = [
+  {
+    branch: "Swordsman Branch",
+    jobs: [
+      { name: "Lord Knight", emoji: "⚔️", color: "var(--color-knight)" },
+      { name: "Paladin", emoji: "🛡️", color: "var(--color-knight)" }
+    ]
+  },
+  {
+    branch: "Acolyte Branch",
+    jobs: [
+      { name: "High Priest", emoji: "✨", color: "var(--color-priest)" },
+      { name: "Champion", emoji: "👊", color: "var(--color-knight)" }
+    ]
+  },
+  {
+    branch: "Mage Branch",
+    jobs: [
+      { name: "High Wizard", emoji: "🔮", color: "var(--color-wizard)" },
+      { name: "Scholar (Professor)", emoji: "📖", color: "var(--color-priest)" }
+    ]
+  },
+  {
+    branch: "Archer Branch",
+    jobs: [
+      { name: "Sniper", emoji: "🏹", color: "var(--color-sniper)" },
+      { name: "Minstrel (Clown)", emoji: "🎵", color: "var(--color-priest)" },
+      { name: "Gypsy", emoji: "💃", color: "var(--color-priest)" }
+    ]
+  },
+  {
+    branch: "Thief Branch",
+    jobs: [
+      { name: "Assassin Cross", emoji: "🔪", color: "var(--color-assassin)" },
+      { name: "Stalker", emoji: "🎭", color: "var(--color-assassin)" }
+    ]
+  },
+  {
+    branch: "Merchant Branch",
+    jobs: [
+      { name: "Mastersmith (Whitesmith)", emoji: "🔨", color: "var(--color-blacksmith)" },
+      { name: "Biochemist (Creator)", emoji: "🧪", color: "var(--color-blacksmith)" }
+    ]
+  }
+];

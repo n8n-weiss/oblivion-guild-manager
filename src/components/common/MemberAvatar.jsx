@@ -11,21 +11,23 @@ export const AVATAR_COLORS = [
   {bg:"rgba(251,191,36,0.18)",color:"#fbbf24"},
 ];
 
-const CLASS_THEMES = {
-  "Lord Knight":    { color: "var(--color-knight)",     icon: "⚔️" },
-  "Paladin":        { color: "var(--color-knight)",     icon: "🛡️" },
-  "High Priest":    { color: "var(--color-priest)",     icon: "✨" },
-  "Professor":      { color: "var(--color-priest)",     icon: "📖" },
-  "High Wizard":    { color: "var(--color-wizard)",     icon: "🔮" },
-  "Sniper":         { color: "var(--color-sniper)",     icon: "🏹" },
-  "Assassin Cross": { color: "var(--color-assassin)",   icon: "🔪" },
-  "Stalker":        { color: "var(--color-assassin)",   icon: "🎭" },
-  "Whitesmith":     { color: "var(--color-blacksmith)", icon: "🔨" },
-  "Creator":        { color: "var(--color-blacksmith)", icon: "🧪" },
-  "Champion":       { color: "var(--color-knight)",     icon: "👊" },
-  "Minstrel":       { color: "var(--color-priest)",     icon: "🎵" },
-  "Diva":           { color: "var(--color-priest)",     icon: "🎤" },
-};
+import { JOB_CLASSES } from '../../utils/constants';
+
+const CLASS_THEMES = (() => {
+  const themes = {};
+  JOB_CLASSES.forEach(branch => {
+    branch.jobs.forEach(job => {
+      themes[job.name] = { color: job.color, icon: job.emoji };
+    });
+  });
+  // Fallbacks for any legacy data
+  themes["Professor"] = { color: "var(--color-priest)", icon: "📖" };
+  themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨" };
+  themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
+  themes["Minstrel"] = { color: "var(--color-priest)", icon: "🎵" };
+  themes["Diva"] = { color: "var(--color-priest)", icon: "🎤" };
+  return themes;
+})();
 
 const RANK_RING = {
   LEGEND:  { color: "#ff4d4d",  glow: "#ff4d4d66",  animate: true  },
