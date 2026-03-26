@@ -37,6 +37,36 @@ function Dashboard() {
   // Recent events for trend
   const recentEvents = events.slice(-5);
 
+  // Guild Level and XP Calculation
+  const totalGuildScore = lb.reduce((sum, m) => sum + (m.totalScore || 0), 0);
+  const guildLevel = Math.max(1, Math.floor(Math.sqrt(totalGuildScore / 10)));
+  const nextLevelXP = Math.pow(guildLevel + 1, 2) * 10;
+  const currentLevelXP = Math.pow(guildLevel, 2) * 10;
+  const xpProgress = Math.min(100, Math.round(((totalGuildScore - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100));
+
+  // Activity Feed (Simulated based on recent data)
+  const activityFeed = useMemo(() => {
+    const feed = [];
+    // Recent top performers
+    recentEvents.forEach(ev => {
+      const evPerf = performance.filter(p => p.eventId === ev.eventId).sort((a, b) => b.totalScore - a.totalScore).slice(0, 2);
+      evPerf.forEach(p => {
+        const member = activeMembers.find(m => m.memberId === p.memberId);
+        if (member) {
+          feed.push({
+            id: `feed-${ev.eventId}-${p.memberId}`,
+            type: "performance",
+            member: member.ign,
+            text: `scored ${p.performancePoints + (p.ctfPoints || 0)} points in ${ev.eventType}`,
+            date: ev.eventDate,
+            icon: "🔥"
+          });
+        }
+      });
+    });
+    return feed.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+  }, [recentEvents, performance, activeMembers]);
+
   // Guild Composition Counts
   const composition = {
     Core: lb.filter(m => m.classification === "Core").length,
@@ -44,6 +74,14 @@ function Dashboard() {
     Casual: lb.filter(m => m.classification === "Casual").length,
     "At Risk": lb.filter(m => m.classification === "At Risk").length
   };
+
+  // Guild Milestones
+  const milestones = [
+    { label: "Centurion Guild", desc: "Reach 100 total events", achieved: events.length >= 100, icon: "🏛️" },
+    { label: "Elite Roster", desc: "Have 20+ Core members", achieved: composition.Core >= 20, icon: "💎" },
+    { label: "Active Force", desc: "75%+ Avg Attendance", achieved: attRate >= 75, icon: "⚡" },
+    { label: "War Machine", desc: "1000+ Total Guild XP", achieved: totalGuildScore >= 1000, icon: "⚔️" }
+  ];
 
   // Party Strength Calculation
   const partyPerformance = useMemo(() => {
@@ -99,11 +137,22 @@ function Dashboard() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="page-title">📊 Dashboard</h1>
+      <div className="page-header flex justify-between items-end">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="page-title">📊 Dashboard</h1>
+          </div>
+          <p className="page-subtitle">Guild overview & performance at a glance</p>
         </div>
-        <p className="page-subtitle">Guild overview & performance at a glance</p>
+        <div style={{ textAlign: "right", minWidth: 200 }}>
+          <div className="flex justify-between items-end mb-1" style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>
+            <span>GUILD RANK: {guildLevel}</span>
+            <span className="text-muted" style={{ fontWeight: 400 }}>{totalGuildScore} / {nextLevelXP} XP</span>
+          </div>
+          <div className="progress-bar-wrap" style={{ height: 6 }}>
+            <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "var(--gold)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
+          </div>
+        </div>
       </div>
 
       <div className="stats-grid animate-slide-up">
@@ -201,6 +250,48 @@ function Dashboard() {
               <span className="text-muted">Guild Health</span>
               <span style={{ color: "var(--green)", fontWeight: 700 }}>{Math.round(((composition.Core + composition.Active) / total) * 100)}% Stable</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid-2 mb-4 animate-slide-up" style={{ animationDelay: "0.15s" }}>
+        {/* Activity Feed */}
+        <div className="card">
+          <div className="card-title">📡 Guild Activity</div>
+          <div className="flex flex-col gap-3 mt-2">
+            {activityFeed.map(item => (
+              <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)" }}>
+                <div style={{ fontSize: 18 }}>{item.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)" }}>
+                    <span style={{ fontWeight: 700, color: "var(--accent)" }}>{item.member}</span> {item.text}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{item.date}</div>
+                </div>
+              </div>
+            ))}
+            {activityFeed.length === 0 && <div className="text-xs text-muted p-4 text-center">No recent activity detected.</div>}
+          </div>
+        </div>
+
+        {/* Guild Milestones */}
+        <div className="card">
+          <div className="card-title">🏆 Guild Milestones</div>
+          <div className="grid-2 gap-3 mt-2">
+            {milestones.map(m => (
+              <div key={m.label} style={{ 
+                padding: "12px", borderRadius: 12, 
+                background: m.achieved ? "rgba(240,192,64,0.05)" : "rgba(255,255,255,0.02)",
+                border: `1px solid ${m.achieved ? "rgba(240,192,64,0.2)" : "rgba(255,255,255,0.05)"}`,
+                opacity: m.achieved ? 1 : 0.5,
+                position: "relative"
+              }}>
+                {m.achieved && <div style={{ position: "absolute", top: -5, right: -5, fontSize: 14 }}>✅</div>}
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{m.icon}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: m.achieved ? "var(--gold)" : "var(--text-muted)" }}>{m.label}</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.desc}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

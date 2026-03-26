@@ -469,12 +469,23 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           )}
 
           <div className="level-bar-container">
-            <div className="level-text">
-              <span>Path to {getRankInfo(totalGLScore + 50).rank}</span>
-              <span>{totalGLScore} XP</span>
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                <div style={{ 
+                  width: 32, height: 32, borderRadius: "50%", 
+                  border: `2px solid ${theme.color}`, 
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 12, fontWeight: 700, color: theme.color,
+                  background: `${theme.color}11`
+                }}>
+                  {Math.min(100, Math.round(totalGLScore / 2))}%
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: 1 }}>CLASS MASTERY</div>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Path to {getRankInfo(totalGLScore + 50).rank}</div>
             </div>
             <div className="progress-bar-wrap" style={{ height: 8 }}>
-              <div className="progress-bar-fill" style={{ width: `${levelProgress}%`, background: `linear-gradient(90deg, ${theme.color}, ${rankInfo.color})`, boxShadow: `0 0 8px ${theme.color}66` }} />
+              <div className="progress-bar-fill" style={{ width: `${levelProgress}%`, background: `linear-gradient(90deg, ${theme.color}, ${rankInfo.color})`, boxShadow: `0 0 12px ${theme.color}66` }} />
             </div>
           </div>
         </div>
@@ -699,22 +710,44 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         <div className="animate-fade-in">
           <div className="card">
             <div className="card-title">🏆 Achievement Hall</div>
-            <div className="achievement-grid">
+            <p className="text-xs text-muted mb-6">Earn trophies by participating in guild events and reaching performance milestones.</p>
+            <div className="achievement-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
               {[
-                { id: 'hero', icon: '🔥', name: 'War Hero', desc: 'Reach 80 total GL score', earned: totalGLScore >= 80 },
-                { id: 'wall', icon: '🛡️', name: 'Iron Wall', desc: '100% attendance (min 5 events)', earned: attPct === 100 && memberEvents.length >= 5 },
-                { id: 'clutch', icon: '⚡', name: 'Clutch King', desc: 'Be 20% above avg skill', earned: avgGL > (guildAvgGL / 10) + 1 },
-                { id: 'mvp', icon: '⭐', name: 'MVP Material', desc: 'Avg 4.5+ EO Rating', earned: eoRatingsList.length >= 3 && avgEoRating >= 4.5 },
-                { id: 'loyal', icon: '💎', name: 'Old Guard', desc: 'Attend 10+ events', earned: memberEvents.length >= 10 },
-                { id: 'legend', icon: '👑', name: 'Living Legend', desc: 'Reach 200 total score', earned: totalGLScore >= 200 },
-                { id: 'streak3', icon: '🎯', name: 'On a Roll', desc: '3+ event attendance streak', earned: winStreak >= 3 },
+                { id: 'hero', icon: '🔥', name: 'War Hero', desc: '80+ total GL score', earned: totalGLScore >= 80 },
+                { id: 'wall', icon: '🛡️', name: 'Iron Wall', desc: '100% attendance (5+ events)', earned: attPct === 100 && memberEvents.length >= 5 },
+                { id: 'clutch', icon: '⚡', name: 'Clutch King', desc: 'Above guild avg skill', earned: avgGL > (guildAvgGL / 10) + 1 },
+                { id: 'mvp', icon: '⭐', name: 'MVP Material', desc: '4.5+ EO Rating (3+ reviews)', earned: eoRatingsList.length >= 3 && avgEoRating >= 4.5 },
+                { id: 'loyal', icon: '💎', name: 'Old Guard', desc: '10+ events attended', earned: memberEvents.length >= 10 },
+                { id: 'legend', icon: '👑', name: 'Living Legend', desc: '200+ total score', earned: totalGLScore >= 200 },
+                { id: 'streak3', icon: '🎯', name: 'On a Roll', desc: '3+ attendance streak', earned: winStreak >= 3 },
                 { id: 'elite', icon: '🏅', name: 'Elite Warrior', desc: 'Reach ELITE rank', earned: totalGLScore >= 150 },
               ].map(ach => (
-                <div key={ach.id} className={`achievement-item ${!ach.earned ? 'locked' : ''}`} title={ach.earned ? 'Unlocked!' : 'Still locked'}>
-                  <div className="achievement-icon">{ach.icon}</div>
-                  <div className="achievement-name">{ach.name}</div>
-                  <div className="achievement-desc">{ach.desc}</div>
-                  {ach.earned && <div style={{ marginTop: 6, fontSize: 9, color: "var(--green)", fontWeight: 700 }}>✅ EARNED</div>}
+                <div key={ach.id} className={`achievement-item ${!ach.earned ? 'locked' : ''}`} 
+                  style={{ 
+                    padding: "16px", borderRadius: 16, textAlign: "center",
+                    background: ach.earned ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.2)",
+                    border: ach.earned ? `1px solid ${theme.color}44` : "1px solid rgba(255,255,255,0.05)",
+                    opacity: ach.earned ? 1 : 0.4,
+                    transition: "all 0.3s ease",
+                    position: "relative",
+                    overflow: "hidden"
+                  }}>
+                  {ach.earned && (
+                    <div style={{ 
+                      position: "absolute", inset: 0, 
+                      background: `radial-gradient(circle at center, ${theme.color}11, transparent 70%)`,
+                      pointerEvents: "none"
+                    }} />
+                  )}
+                  <div style={{ fontSize: 32, marginBottom: 8, filter: ach.earned ? "none" : "grayscale(1)" }}>{ach.icon}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: ach.earned ? "var(--text-primary)" : "var(--text-muted)", marginBottom: 4 }}>{ach.name}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.3 }}>{ach.desc}</div>
+                  {ach.earned && (
+                    <div style={{ 
+                      marginTop: 10, fontSize: 9, color: "var(--green)", fontWeight: 800, 
+                      letterSpacing: 1, textTransform: "uppercase" 
+                    }}>Unlocked</div>
+                  )}
                 </div>
               ))}
             </div>

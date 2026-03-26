@@ -1,18 +1,22 @@
   @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
   :root {
-    --bg-deepest: #080a0f;
-    --bg-dark: #0d1017;
-    --bg-card: #111520;
-    --bg-card2: #161c2e;
-    --bg-hover: #1a2238;
-    --border: rgba(99, 130, 230, 0.15);
-    --border-bright: rgba(99, 130, 230, 0.35);
+    --bg-deepest: #04060b;
+    --bg-dark: #080a0f;
+    --bg-card: rgba(13, 18, 30, 0.7);
+    --bg-card2: rgba(22, 28, 46, 0.75);
+    --bg-hover: rgba(30, 41, 74, 0.6);
+    --border: rgba(99, 130, 230, 0.12);
+    --border-bright: rgba(99, 130, 230, 0.25);
     --accent: #6382e6;
-    --accent-light: rgba(99, 130, 230, 0.1);
-    --success-light: rgba(34, 197, 94, 0.1);
-    --warning-light: rgba(234, 179, 8, 0.1);
-    --error-light: rgba(239, 68, 68, 0.1);
+    --accent-glow: rgba(99, 130, 230, 0.4);
+    --accent-light: rgba(99, 130, 230, 0.08);
+    --success-light: rgba(34, 197, 94, 0.08);
+    --warning-light: rgba(234, 179, 8, 0.08);
+    --error-light: rgba(239, 68, 68, 0.08);
+    --glass-blur: blur(20px);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+    --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
 
     /* Class Colors */
     --color-knight: #ef4444;
@@ -111,16 +115,18 @@
   .progress-bar-wrap {
     width: 100%;
     height: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
     overflow: hidden;
     margin-top: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .progress-bar-fill {
     height: 100%;
-    background: var(--accent);
-    transition: width 1s ease-out;
+    background: linear-gradient(90deg, var(--accent), #8b5cf6);
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 10px var(--accent-glow);
   }
 
   /* ── Login ── */
@@ -344,11 +350,19 @@
   /* ── Cards ── */
   .card {
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: var(--glass-border);
+    border-radius: 16px;
+    padding: 24px;
     position: relative;
     overflow: hidden;
+    box-shadow: var(--shadow-premium);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .card:hover {
+    box-shadow: 0 12px 48px 0 rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(99, 130, 230, 0.1);
   }
 
   .card::before {
