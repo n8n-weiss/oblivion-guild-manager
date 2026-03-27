@@ -79,7 +79,7 @@ export default function App() {
       <nav className="sidebar">
         <div className="sidebar-logo">
           <img
-            src="oblivion-logo.png"
+            src={`${import.meta.env.BASE_URL}oblivion-logo.png`}
             alt="Oblivion Guild"
             style={{ width: "100%", maxWidth: 160, height: "auto", display: "block", margin: "0 auto 8px", borderRadius: 8 }}
           />

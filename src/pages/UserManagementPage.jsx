@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { db, auth, firebaseConfig } from '../firebase';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { useGuild } from '../context/GuildContext';
+import { writeAuditLog } from '../utils/audit';
 import Icon from '../components/ui/icons';
 
 function UserManagementPage() {
-  const { currentUser, showToast, members, isAdmin, resetDatabase } = useGuild();
+  const { currentUser, showToast, members, isAdmin, isArchitect, resetDatabase } = useGuild();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
   const [creating, setCreating] = useState(false);
+  const [deletingUid, setDeletingUid] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingUid, setEditingUid] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -34,10 +37,15 @@ function UserManagementPage() {
       showToast("Fill all fields", "error"); return;
     }
     setCreating(true);
+    let secondaryApp;
     try {
       let uid = editingUid;
       if (!editingUid) {
-        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+        // Use a secondary app instance to create the user without signing out the main admin session
+        const appName = `secondary-${Date.now()}`;
+        secondaryApp = initializeApp(firebaseConfig, appName);
+        const secondaryAuth = getAuth(secondaryApp);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password);
         uid = cred.user.uid;
       }
       
@@ -48,19 +56,50 @@ function UserManagementPage() {
       const newUsers = editingUid ? users.map(u => u.uid === uid ? { ...u, ...userDoc } : u) : [...users, newUser];
       
       await saveUsers(newUsers);
+      
+      // Log the action
+      await writeAuditLog(
+        currentUser.email, 
+        currentUser.displayName || currentUser.email, 
+        editingUid ? "user_edit" : "user_create", 
+        `${editingUid ? "Updated" : "Created"} account for ${form.displayName} (${form.role})`
+      );
+      
       setForm({ email: "", password: "", displayName: "", role: "member", memberId: "" });
       setShowForm(false);
       setEditingUid(null);
       showToast(editingUid ? "User updated" : `Account created for ${form.displayName}`, "success");
-      
-      if (!editingUid) {
-        // Sign back in as admin (creating user signs in as new user)
-        await signInWithEmailAndPassword(auth, currentUser.email, "");
-      }
     } catch (err) {
       showToast(err.message || "Error saving account", "error");
     } finally {
       setCreating(false);
+      if (secondaryApp) await deleteApp(secondaryApp);
+    }
+  };
+
+  const deleteUser = async (uid) => {
+    try {
+      // 1. Remove from userroles
+      await deleteDoc(doc(db, "userroles", uid));
+      
+      // 2. Remove from the registry list
+      const userToDelete = users.find(u => u.uid === uid);
+      const newUsers = users.filter(u => u.uid !== uid);
+      await saveUsers(newUsers);
+      
+      // Log the action
+      await writeAuditLog(
+        currentUser.email, 
+        currentUser.displayName || currentUser.email, 
+        "user_delete", 
+        `Revoked access for ${userToDelete?.displayName || uid}`
+      );
+      
+      showToast("Account access revoked successfully", "success");
+      setDeletingUid(null);
+    } catch (err) {
+      showToast("Error deleting account", "error");
+      console.error(err);
     }
   };
 
@@ -167,10 +206,15 @@ function UserManagementPage() {
                     )}
                   </td>
                   <td>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
                       <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(u)} title="Edit Account">
                         <Icon name="edit" size={14} />
                       </button>
+                      {u.uid !== currentUser?.uid && isArchitect && (
+                        <button className="btn btn-ghost btn-ghost-danger btn-sm btn-icon" onClick={() => setDeletingUid(u.uid)} title="Revoke Access">
+                          <Icon name="trash" size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -179,6 +223,22 @@ function UserManagementPage() {
           </table>
         </div>
       </div>
+
+      {deletingUid && (
+        <div className="modal-overlay" style={{ display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div className="card animate-fade-in" style={{ maxWidth: 400, border: "1px solid rgba(239, 68, 68, 0.3)" }}>
+            <div className="card-title" style={{ color: "var(--red)" }}>Revoke Account Access?</div>
+            <p className="text-secondary" style={{ fontSize: 13, marginBottom: 20 }}>
+              Are you sure you want to revoke access for <strong>{users.find(u => u.uid === deletingUid)?.displayName}</strong>?<br/><br/>
+              They will no longer be able to log in to the Guild Manager. This action cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button className="btn btn-ghost btn-sm" onClick={() => setDeletingUid(null)}>Cancel</button>
+              <button className="btn btn-danger btn-sm" onClick={() => deleteUser(deletingUid)}>Revoke Access</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="card" style={{ border: "1px solid rgba(239, 68, 68, 0.2)", background: "rgba(239, 68, 68, 0.02)" }}>

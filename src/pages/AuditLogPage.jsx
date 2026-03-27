@@ -3,22 +3,8 @@ import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import { useGuild } from '../context/GuildContext';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
-import { computeScore, computeLeaderboard, computeAttendanceStatus } from '../utils/scoring';
-
-async function writeAuditLog(userEmail, userName, action, details) {
-  try {
-    await addDoc(collection(db, "auditlogs"), {
-      userEmail,
-      userName,
-      action,
-      details,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("Audit log error:", err);
-  }
-}
+import { collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { writeAuditLog } from '../utils/audit';
 
 
 function AuditLogPage() {
@@ -73,6 +59,9 @@ function AuditLogPage() {
     "eo_rating": "⭐",
     "absence_submit": "⚠️",
     "absence_delete": "🗑️",
+    "user_create": "👤",
+    "user_edit": "🔧",
+    "user_delete": "🚫",
   };
 
   const actionColors = {
@@ -86,6 +75,9 @@ function AuditLogPage() {
     "eo_rating": "var(--gold)",
     "absence_submit": "var(--accent2)",
     "absence_delete": "var(--red)",
+    "user_create": "var(--green)",
+    "user_edit": "var(--accent)",
+    "user_delete": "var(--red)",
   };
 
   const allUsers = [...new Set(logs.map(l => l.userName))];
