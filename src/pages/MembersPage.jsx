@@ -15,14 +15,32 @@ function MembersPage({ onViewProfile }) {
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
 
-  const filtered = members.filter(m => {
-    const status = m.status || "active";
-    return (status === statusFilter) &&
-      (roleFilter === "All" || m.role === roleFilter) &&
-      (m.ign.toLowerCase().includes(search.toLowerCase()) ||
-        m.memberId.toLowerCase().includes(search.toLowerCase()) ||
-        m.class.toLowerCase().includes(search.toLowerCase()));
-  });
+  const RANK_ORDER = {
+    "Guild Master": 0,
+    "Vice Guild Master": 1,
+    "Commander": 2,
+    "Charisma Baby": 3,
+    "System Architect (Creator)": 4,
+    "Officer": 5,
+    "Member": 6,
+  };
+
+  const getRankPriority = (rank) => RANK_ORDER[rank] ?? 7;
+
+  const filtered = members
+    .filter(m => {
+      const status = m.status || "active";
+      return (status === statusFilter) &&
+        (roleFilter === "All" || m.role === roleFilter) &&
+        (m.ign.toLowerCase().includes(search.toLowerCase()) ||
+          m.memberId.toLowerCase().includes(search.toLowerCase()) ||
+          m.class.toLowerCase().includes(search.toLowerCase()));
+    })
+    .sort((a, b) => {
+      const rankDiff = getRankPriority(a.guildRank) - getRankPriority(b.guildRank);
+      if (rankDiff !== 0) return rankDiff;
+      return a.ign.localeCompare(b.ign); // alphabetical within same rank
+    });
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
