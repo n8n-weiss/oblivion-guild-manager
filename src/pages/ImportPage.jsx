@@ -3,7 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 
 function ImportPage() {
-  const { members, setMembers, showToast } = useGuild();
+  const { members, setMembers, showToast, isArchitect } = useGuild();
   const [preview, setPreview] = useState([]);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -68,7 +68,7 @@ function ImportPage() {
 
         const ign = row[mapping.ign] || "";
         const memberId = row[mapping.uid] || "";
-        
+
         // Skip summary or header repetitions
         if (!ign || !memberId || ign.toLowerCase() === "ign" || memberId.toLowerCase() === "uid") continue;
         if (ign.toLowerCase().includes("count") || ign === "0") continue;
@@ -79,7 +79,7 @@ function ImportPage() {
           const rowNumStr = rawId.replace(/[^0-9]/g, "");
           const rowNum = parseInt(rowNumStr, 10);
           if (isNaN(rowNum) || rowNum <= 0) continue;
-          
+
           // Extra safety: If Column A is "1" but IGN is empty, it's not a real member
           if (!ign || ign === "0") continue;
         }
@@ -93,7 +93,7 @@ function ImportPage() {
 
         const normalizedRole = roleStr.toLowerCase().includes("support") || roleStr.toLowerCase().includes("utility") ? "Support" : "DPS";
         const jd = mapping.joinDate !== -1 ? (row[mapping.joinDate] || defaultJoinDate) : defaultJoinDate;
-        
+
         parsed.push({ memberId, ign, class: cls, role: normalizedRole, discord, joinDate: jd });
       }
 
@@ -109,6 +109,7 @@ function ImportPage() {
   const confirmImport = (mode) => {
     if (preview.length === 0) return;
     if (mode === "replace") {
+      if (!window.confirm("ARE YOU SURE? This will DELETE all current members and replace them with the CSV data. This action cannot be undone.")) return;
       setMembers(preview);
       showToast(`${preview.length} members imported (replaced all)`, "success");
     } else {
@@ -133,7 +134,7 @@ function ImportPage() {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-title">📋 Paano mag-import nang tama</div>
         <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8 }}>
-          <div>Para hindi malito ang system, ito ang subukan mo:</div>
+          <div>Para hindi malito ang system, ito ang dapat content ng CSV file mo:</div>
           <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6, fontFamily: "monospace", fontSize: 11 }}>
             #, IGN, Class, UID, Role, Discord<br />
             1, Ebakook, High Wizard, OBL335675, DPS, taegamingsaaa<br />
@@ -151,7 +152,7 @@ function ImportPage() {
           <div className="text-xs text-muted">Awtomatikong nade-detect ang format at separator (Comma, Tab, Semicolon)</div>
           <input type="file" accept=".csv,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
         </label>
-        
+
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", background: "rgba(240,192,64,0.05)", borderRadius: 8, border: "1px solid rgba(240,192,64,0.1)" }}>
           <div style={{ fontSize: 18 }}>🛡️</div>
           <div style={{ flex: 1 }}>
@@ -172,8 +173,10 @@ function ImportPage() {
               <div className="text-xs text-muted">I-check kung tama ang data bago i-confirm. Kung may maling information (katulad nung Weiss 456463), paki-check ang headers ng iyong file.</div>
             </div>
             <div className="flex gap-2">
-              <button className="btn btn-ghost" onClick={() => confirmImport("merge")}>🔄 Merge</button>
-              <button className="btn btn-primary" onClick={() => confirmImport("replace")}>♻️ Replace All</button>
+              <button className="btn btn-primary" onClick={() => confirmImport("merge")}>🔄 Confirm Merge</button>
+              {isArchitect && (
+                <button className="btn btn-danger" onClick={() => confirmImport("replace")}>⚠️ Replace All</button>
+              )}
             </div>
           </div>
           <div className="table-wrap">
@@ -194,8 +197,12 @@ function ImportPage() {
             </table>
           </div>
           <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(240,192,64,0.06)", border: "1px solid rgba(240,192,64,0.2)", borderRadius: 8, fontSize: 12, color: "var(--text-muted)" }}>
-            💡 <strong style={{ color: "var(--gold)" }}>Merge</strong> — i-update ang existing at idagdag ang bago.<br />
-            💡 <strong style={{ color: "var(--accent)" }}>Replace All</strong> — burahin lahat at palitan ng nasa CSV.
+            💡 <strong style={{ color: "var(--gold)" }}>Merge</strong> — i-update ang existing members at i-preserve ang iba. Ito ang <strong>safe</strong> option.<br />
+            {isArchitect ? (
+              <>💡 <strong style={{ color: "var(--red)" }}>Replace All</strong> — <span style={{ color: "var(--red)", fontWeight: 800 }}>MABURA LAHAT</span> ng current members at mapapalitan ng CSV data. Gamitin lamang kung magsa-start over.</>
+            ) : (
+              <>💡 <span style={{ opacity: 0.5 }}>Replace All option is restricted to System Architect only.</span></>
+            )}
           </div>
         </div>
       )}
