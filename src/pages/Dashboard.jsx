@@ -391,6 +391,7 @@ function Dashboard() {
                 { name: "Creator", role: "Support" },
                 { name: "Minstrel", role: "Support" },
                 { name: "Diva", role: "Support" },
+                { name: "Summoner", role: "Support" },
               ];
               const classCounts = ALL_CLASSES.map(c => ({
                 ...c,

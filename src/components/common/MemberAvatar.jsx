@@ -28,7 +28,7 @@ const CLASS_THEMES = (() => {
       themes[job.name] = { 
         color: job.color, 
         icon: job.emoji, 
-        portrait: `avatars/branch_${branchMaps[branch.branch]}.png` 
+        portrait: branchMaps[branch.branch] ? `avatars/branch_${branchMaps[branch.branch]}.png` : null
       };
     });
   });

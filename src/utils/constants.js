@@ -9,6 +9,7 @@ export const INITIAL_MEMBERS = [
   { memberId: "OBL008", ign: "MysticHeal", class: "Scholar (Professor)", role: "Support" },
   { memberId: "OBL009", ign: "BlazeKnight", class: "Paladin", role: "DPS" },
   { memberId: "OBL010", ign: "VoidWalker", class: "Stalker", role: "DPS" },
+  { memberId: "OBL011", ign: "Catnip", class: "Summoner", role: "Support" },
 ];
 
 export const INITIAL_EVENTS = [
@@ -117,6 +118,12 @@ export const JOB_CLASSES = [
     jobs: [
       { name: "Mastersmith (Whitesmith)", emoji: "🔨", color: "var(--color-blacksmith)" },
       { name: "Biochemist (Creator)", emoji: "🧪", color: "var(--color-blacksmith)" }
+    ]
+  },
+  {
+    branch: "Doram Branch",
+    jobs: [
+      { name: "Summoner", emoji: "🐱", color: "var(--color-doram)" }
     ]
   }
 ];
