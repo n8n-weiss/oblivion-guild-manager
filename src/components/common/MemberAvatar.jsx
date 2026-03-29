@@ -21,14 +21,16 @@ const CLASS_THEMES = (() => {
     "Mage Branch": "wizard",
     "Archer Branch": "archer",
     "Thief Branch": "assassin",
-    "Merchant Branch": "blacksmith"
+    "Merchant Branch": "blacksmith",
+    "Doram Branch": "doram"
   };
   JOB_CLASSES.forEach(branch => {
     branch.jobs.forEach(job => {
+      const branchKey = branchMaps[branch.branch];
       themes[job.name] = { 
         color: job.color, 
         icon: job.emoji, 
-        portrait: branchMaps[branch.branch] ? `avatars/branch_${branchMaps[branch.branch]}.png` : null
+        portrait: branchKey ? `avatars/branch_${branchKey}.${branchKey === 'doram' ? 'jpg' : 'png'}` : null
       };
     });
   });
@@ -143,7 +145,7 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
             pointerEvents: "none",
           }} />
         )}
-        {!classTheme?.portrait && initials}
+        {!classTheme?.portrait && (memberClass === "Summoner" ? "🐱" : initials)}
       </div>
 
       {/* Class icon badge — bottom-right corner */}
