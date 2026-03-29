@@ -98,9 +98,14 @@ function MembersPage({ onViewProfile }) {
   const saveMember = () => {
     if (!form.ign.trim() || !form.class.trim()) { showToast("Fill all fields", "error"); return; }
     if (editMember) {
+      const existing = members.find(m => m.memberId === editMember);
       setMembers(prev => prev.map(m => m.memberId === editMember ? { ...form } : m));
       showToast("Member updated", "success");
-      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) — Class: ${form.class}, Role: ${form.role}`);
+      // Log rank change separately if it changed
+      if (existing?.guildRank !== form.guildRank) {
+        writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "rank_change", `Rank changed for ${form.ign} (${form.memberId}): ${existing?.guildRank || "Member"} → ${form.guildRank}`);
+      }
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) — Class: ${form.class}, Role: ${form.role}, Rank: ${form.guildRank}`);
     } else {
       if (members.find(m => m.memberId === form.memberId)) { showToast("ID already exists", "error"); return; }
       setMembers(prev => [...prev, { ...form }]);

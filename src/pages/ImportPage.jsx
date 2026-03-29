@@ -117,7 +117,14 @@ function ImportPage() {
       let added = 0, updated = 0;
       preview.forEach(p => {
         const idx = merged.findIndex(m => m.memberId === p.memberId);
-        if (idx >= 0) { merged[idx] = p; updated++; } else { merged.push(p); added++; }
+        if (idx >= 0) {
+          // Preserve app-managed fields (guildRank, status, etc.) that are NOT in CSV
+          merged[idx] = { ...merged[idx], ...p };
+          updated++;
+        } else {
+          merged.push(p);
+          added++;
+        }
       });
       setMembers(merged);
       showToast(`Import done: ${added} added, ${updated} updated`, "success");
