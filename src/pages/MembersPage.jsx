@@ -119,90 +119,113 @@ function MembersPage({ onViewProfile }) {
           )}
         </div>
 
-        {/* Member Card Grid */}
+        {/* Member Table */}
         {filtered.length === 0 ? (
           <div className="empty-state"><div className="empty-state-icon">⚔</div><div className="empty-state-text">No members found</div></div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16, padding: 4 }}>
-            {filtered.map(m => {
-              const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
-              const idx = members.indexOf(m);
-              // Compute GL score for rank
-              return (
-                <div key={m.memberId}
-                  className="animate-fade-in"
-                  style={{
-                    background: "var(--bg-card2)",
-                    border: `1px solid ${theme.color}33`,
-                    borderRadius: 14,
-                    padding: "20px 16px",
-                    position: "relative",
-                    overflow: "hidden",
-                    transition: "all 0.22s",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = `0 12px 32px ${theme.color}22`; e.currentTarget.style.borderColor = `${theme.color}88`; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; e.currentTarget.style.borderColor = `${theme.color}33`; }}
-                >
-                  {/* BG glow */}
-                  <div style={{ position: "absolute", top: 0, right: 0, width: 80, height: 80, borderRadius: "0 14px 0 0", background: `radial-gradient(circle at top right, ${theme.color}, transparent 70%)`, opacity: 0.12, pointerEvents: "none" }} />
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 48 }}>#</th>
+                  <th>Member</th>
+                  <th>Class</th>
+                  <th>Role</th>
+                  <th>Guild Rank</th>
+                  <th>Joined</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m, i) => {
+                  const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
+                  const idx = members.indexOf(m);
+                  return (
+                    <tr key={m.memberId} className="animate-fade-in" style={{ borderLeft: `3px solid ${theme.color}55` }}>
+                      {/* Row number */}
+                      <td style={{ color: "var(--text-muted)", fontSize: 12, fontWeight: 700, paddingRight: 0 }}>
+                        {i + 1}
+                      </td>
 
-                  {/* Class icon top-right */}
-                  <div style={{ position: "absolute", top: 12, right: 14, fontSize: 22, opacity: 0.5 }}>{theme.icon}</div>
+                      {/* Member identity */}
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <div style={{ position: "relative", flexShrink: 0 }}>
+                            <MemberAvatar ign={m.ign} index={idx} size={36} memberClass={m.class} />
+                            <div style={{ position: "absolute", bottom: 0, right: 0, width: 8, height: 8, borderRadius: "50%", background: theme.color, border: "2px solid var(--bg-deepest)", boxShadow: `0 0 4px ${theme.color}` }} />
+                          </div>
+                          <div>
+                            <div
+                              style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 14, color: "var(--text-primary)", cursor: "pointer", lineHeight: 1.2 }}
+                              onClick={() => onViewProfile && onViewProfile(m)}
+                              title="View profile"
+                            >
+                              {m.ign}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{m.memberId}</div>
+                          </div>
+                        </div>
+                      </td>
 
-                  {/* Avatar + IGN */}
-                  <div className="flex items-center gap-3" style={{ marginBottom: 14 }}>
-                    <div style={{ position: "relative" }}>
-                      <MemberAvatar ign={m.ign} index={idx} size={48} memberClass={m.class} hexagon />
-                      {/* Online dot decoration */}
-                      <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: theme.color, border: "2px solid var(--bg-card2)", boxShadow: `0 0 6px ${theme.color}` }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 15, color: "var(--text-primary)", cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-                        onClick={() => onViewProfile && onViewProfile(m)}
-                        title={m.ign}
-                      >{m.ign}</div>
-                      <div style={{ fontSize: 11, color: theme.color, fontWeight: 600, marginTop: 2 }}>{theme.icon} {m.class}</div>
-                    </div>
-                  </div>
+                      {/* Class */}
+                      <td>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontSize: 12, fontWeight: 700, padding: "3px 10px",
+                          borderRadius: 20, background: `${theme.color}18`,
+                          color: theme.color, border: `1px solid ${theme.color}44`,
+                          whiteSpace: "nowrap"
+                        }}>
+                          {theme.icon} {m.class || "—"}
+                        </span>
+                      </td>
 
-                  {/* Divider */}
-                  <div style={{ height: 1, background: `linear-gradient(90deg, ${theme.color}44, transparent)`, marginBottom: 12 }} />
+                      {/* Role */}
+                      <td>
+                        <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 11 }}>
+                          {m.role === "DPS" ? "⚔" : "🛡"} {m.role}
+                        </span>
+                      </td>
 
-                  {/* Badges row */}
-                  <div className="flex gap-2" style={{ flexWrap: "wrap", marginBottom: 14 }}>
-                    <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 10 }}>
-                      {m.role === "DPS" ? "⚔" : "🛡"} {m.role}
-                    </span>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, fontWeight: 700, background: `${theme.color}22`, color: theme.color, border: `1px solid ${theme.color}44` }}>
-                      {m.memberId}
-                    </span>
-                  </div>
+                      {/* Guild rank */}
+                      <td style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>
+                        {m.guildRank || "Member"}
+                      </td>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 justify-end">
-                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => onViewProfile && onViewProfile(m)}>View</button>
-                    {isOfficer && (
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={13} /></button>
-                    )}
-                    {isAdmin && (
-                      <button className={`btn btn-sm ${statusFilter === "active" ? "btn-archive" : "btn-restore"}`}
-                        style={{ fontSize: 10, padding: "4px 8px" }}
-                        onClick={() => toggleArchive(m.memberId)}
-                        title={statusFilter === "active" ? "Archive" : "Restore"}>
-                        {statusFilter === "active" ? "Archive" : "Restore"}
-                      </button>
-                    )}
-                    {isArchitect && (
-                      <button className="btn btn-ghost btn-sm btn-icon text-red" onClick={() => deleteMemberRecord(m.memberId)} title="Permanent Delete">
-                        <Icon name="trash" size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Join date */}
+                      <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                        {m.joinDate || "—"}
+                      </td>
+
+                      {/* Actions */}
+                      <td>
+                        <div className="flex gap-1 justify-end" style={{ flexWrap: "nowrap" }}>
+                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => onViewProfile && onViewProfile(m)}>View</button>
+                          {isOfficer && (
+                            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={13} /></button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              className={`btn btn-sm ${statusFilter === "active" ? "btn-archive" : "btn-restore"}`}
+                              style={{ fontSize: 10, padding: "4px 8px" }}
+                              onClick={() => toggleArchive(m.memberId)}
+                              title={statusFilter === "active" ? "Archive" : "Restore"}
+                            >
+                              {statusFilter === "active" ? "Archive" : "Restore"}
+                            </button>
+                          )}
+                          {isArchitect && (
+                            <button className="btn btn-ghost btn-sm btn-icon text-red" onClick={() => deleteMemberRecord(m.memberId)} title="Permanent Delete">
+                              <Icon name="trash" size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
