@@ -46,6 +46,23 @@ export const GuildProvider = ({ children, initialData }) => {
   const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [raidParties, setRaidParties] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_raidParties');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      const data = Array.isArray(parsed) ? parsed : (parsed.data || []);
+      return data.map(p => Array.isArray(p) ? p : (p.members || []));
+    } catch { return []; }
+  });
+  const [raidPartyNames, setRaidPartyNames] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_raidPartyNames');
+      if (!saved) return ["Raid Alpha"];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : (parsed.data || ["Raid Alpha"]);
+    } catch { return ["Raid Alpha"]; }
+  });
 
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
@@ -213,6 +230,30 @@ export const GuildProvider = ({ children, initialData }) => {
         setAuctionTemplates(metadata.auctionTemplates || []);
         setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
 
+        // Load raidParties — prefer Firestore over localStorage
+        const cloudRaidRaw = metadata.raidParties || [];
+        const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
+        const localRaidStr = localStorage.getItem('guild_raidParties');
+        let localRaid = [];
+        try { const lr = localRaidStr ? JSON.parse(localRaidStr) : null; localRaid = (lr?.data || (Array.isArray(lr) ? lr : [])).map(p => Array.isArray(p) ? p : (p.members || [])); } catch {}
+        if (cloudRaid.length > 0) {
+          setRaidParties(cloudRaid);
+          localStorage.setItem('guild_raidParties', JSON.stringify({ data: cloudRaid, ts: firestoreTs }));
+        } else if (localRaid.length > 0) {
+          setRaidParties(localRaid);
+        }
+        // Load raidPartyNames
+        const cloudRaidNames = metadata.raidPartyNames || [];
+        const localRaidNamesStr = localStorage.getItem('guild_raidPartyNames');
+        let localRaidNames = [];
+        try { const ln = localRaidNamesStr ? JSON.parse(localRaidNamesStr) : null; localRaidNames = ln?.data || (Array.isArray(ln) ? ln : []); } catch {}
+        if (cloudRaidNames.length > 0) {
+          setRaidPartyNames(cloudRaidNames);
+          localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: cloudRaidNames, ts: firestoreTs }));
+        } else if (localRaidNames.length > 0) {
+          setRaidPartyNames(localRaidNames);
+        }
+
         // Initialize prevData
         const finalParties = (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) ? cloudParties : localParties;
         const finalNames = (cloudNames.length > 0 && (firestoreTs >= localNamesTs || localNames.length === 0)) ? cloudNames : localNames;
@@ -331,17 +372,25 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
           JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
-          JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates)
+          JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
+          JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
+          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames)
         ) {
           // Wrap nested arrays for Firestore
           const wrappedParties = parties.map(p => ({ members: p }));
+          const wrappedRaids = raidParties.map(p => ({ members: p }));
           batch.set(doc(db, "metadata", "current"), {
-            parties: wrappedParties, partyNames, auctionSessions, auctionTemplates, lastUpdate: new Date().toISOString()
+            parties: wrappedParties, partyNames,
+            raidParties: wrappedRaids, raidPartyNames,
+            auctionSessions, auctionTemplates,
+            lastUpdate: new Date().toISOString()
           });
           prevData.current.parties = [...parties];
           prevData.current.partyNames = [...partyNames];
           prevData.current.auctionSessions = [...auctionSessions];
           prevData.current.auctionTemplates = [...auctionTemplates];
+          prevData.current.raidParties = [...raidParties];
+          prevData.current.raidPartyNames = [...raidPartyNames];
           changesCount++;
         }
 
@@ -373,9 +422,9 @@ export const GuildProvider = ({ children, initialData }) => {
       }
     };
 
-    const timeout = setTimeout(saveData, 1000); // Reduced from 2000 to 1000 for faster sync
+    const timeout = setTimeout(saveData, 1000);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, loading]);
+  }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, loading]);
 
   // Immediate localStorage backup with timestamp
   useEffect(() => {
@@ -387,6 +436,16 @@ export const GuildProvider = ({ children, initialData }) => {
     if (loading) return;
     localStorage.setItem('guild_partyNames', JSON.stringify({ data: partyNames, ts: Date.now() }));
   }, [partyNames, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    localStorage.setItem('guild_raidParties', JSON.stringify({ data: raidParties, ts: Date.now() }));
+  }, [raidParties, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: raidPartyNames, ts: Date.now() }));
+  }, [raidPartyNames, loading]);
 
   const sendNotification = async (targetId, title, message, type = "info") => {
     const notif = {
@@ -468,6 +527,8 @@ export const GuildProvider = ({ children, initialData }) => {
     absences, setAbsences,
     parties, setParties,
     partyNames, setPartyNames,
+    raidParties, setRaidParties,
+    raidPartyNames, setRaidPartyNames,
     eoRatings, setEoRatings,
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
