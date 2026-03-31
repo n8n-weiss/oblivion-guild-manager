@@ -20,13 +20,16 @@ function AuctionBuilder() {
   const [colNameInput, setColNameInput] = useState("");
   const [dragging, setDragging] = useState(null); // memberId
   const [dragOver, setDragOver] = useState(null); // "table" | "pool"
+  const [poolSearch, setPoolSearch] = useState("");
 
   // Get active session data
   const session = auctionSessions.find(s => s.id === activeSession);
 
   // Pool = active members not in session
   const sessionMemberIds = new Set((session?.members || []).map(m => m.memberId));
-  const pool = activeMembers.filter(m => !sessionMemberIds.has(m.memberId));
+  const pool = activeMembers
+    .filter(m => !sessionMemberIds.has(m.memberId))
+    .filter(m => !poolSearch || m.ign.toLowerCase().includes(poolSearch.toLowerCase()) || m.class.toLowerCase().includes(poolSearch.toLowerCase()));
   const sessionMembers = (session?.members || []).map(sm => members.find(m => m.memberId === sm.memberId)).filter(Boolean);
 
   const createSession = () => {
@@ -273,18 +276,64 @@ function AuctionBuilder() {
       <div className="flex gap-4" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
 
         {/* Member Pool */}
-        <div style={{ width: 200, flexShrink: 0 }}>
-          <div style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 700, marginBottom: 10 }}>Member Pool</div>
+        <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="flex items-center justify-between">
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 700 }}>Member Pool</div>
+            {pool.length > 0 && (
+              <button 
+                className="btn btn-ghost btn-sm" 
+                style={{ fontSize: 10, padding: "2px 6px", height: 24 }}
+                onClick={() => {
+                  updateSession(s => ({
+                    ...s, 
+                    members: [...s.members, ...pool.map(m => ({ memberId: m.memberId }))]
+                  }));
+                  setPoolSearch("");
+                }}
+                title="Add all shown members to table"
+              >
+                Add All
+              </button>
+            )}
+          </div>
+          
+          <div style={{ position: "relative" }}>
+            <input 
+              className="form-input" 
+              placeholder="Search member..." 
+              style={{ fontSize: 12, padding: "6px 12px 6px 28px", width: "100%", background: "var(--bg-card)", borderColor: "var(--border)" }}
+              value={poolSearch} 
+              onChange={e => setPoolSearch(e.target.value)} 
+            />
+            <div style={{ position: "absolute", left: 10, top: 8, opacity: 0.5 }}>
+              <Icon name="search" size={12} />
+            </div>
+            {poolSearch && (
+              <button 
+                onClick={() => setPoolSearch("")}
+                style={{ position: "absolute", right: 8, top: 8, opacity: 0.5, background: "none", border: "none", cursor: "pointer", padding: 2 }}
+              >
+                <Icon name="x" size={10} />
+              </button>
+            )}
+          </div>
+
           <div style={{
-            minHeight: 120, borderRadius: 10, border: `2px dashed ${dragOver === "pool" ? "var(--accent)" : "var(--border)"}`,
+            minHeight: 120, maxHeight: "calc(100vh - 280px)", overflowY: "auto", borderRadius: 10, 
+            border: `2px dashed ${dragOver === "pool" ? "var(--accent)" : "var(--border)"}`,
             background: dragOver === "pool" ? "rgba(99,130,230,0.08)" : "var(--bg-card)",
-            padding: 10, transition: "all 0.15s",
+            padding: 8, transition: "all 0.15s",
           }}
+            className="custom-scrollbar"
             onDragOver={e => { e.preventDefault(); setDragOver("pool"); }}
             onDragLeave={() => setDragOver(null)}
             onDrop={dropToPool}
           >
-            {pool.length === 0 && <div className="text-xs text-muted" style={{ textAlign: "center", padding: "16px 0" }}>All members added</div>}
+            {pool.length === 0 && (
+              <div className="text-xs text-muted" style={{ textAlign: "center", padding: "20px 0" }}>
+                {poolSearch ? "No matches" : "All members added"}
+              </div>
+            )}
             {pool.map((m, i) => (
               <div key={m.memberId}
                 draggable

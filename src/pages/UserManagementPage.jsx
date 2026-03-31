@@ -27,6 +27,44 @@ function UserManagementPage() {
     loadUsers();
   }, []);
 
+  const syncSelfRegisteredUsers = async () => {
+    try {
+      showToast("Syncing users from database...", "info");
+      const snap = await getDoc(doc(db, "guildusers", "list"));
+      let currentUsers = snap.exists() ? (snap.data().users || []) : [];
+      
+      const { getDocs, collection } = await import('firebase/firestore');
+      const urSnap = await getDocs(collection(db, "userroles"));
+      
+      let added = 0;
+      urSnap.forEach(rDoc => {
+        const uid = rDoc.id;
+        const data = rDoc.data();
+        if (!currentUsers.find(u => u.uid === uid)) {
+          currentUsers.push({
+            uid,
+            role: data.role || "member",
+            email: data.email || `${uid}@oblivion.com`,
+            displayName: data.displayName || "Unknown Member",
+            createdAt: data.createdAt || new Date().toISOString(),
+            memberId: data.memberId || ""
+          });
+          added++;
+        }
+      });
+      
+      if (added > 0) {
+        await saveUsers(currentUsers);
+        showToast(`Synced ${added} self-registered accounts!`, "success");
+      } else {
+        showToast("No new accounts to sync.", "success");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to sync users - check console", "error");
+    }
+  };
+
   const saveUsers = async (newUsers) => {
     await setDoc(doc(db, "guildusers", "list"), { users: newUsers });
     setUsers(newUsers);
@@ -119,7 +157,10 @@ function UserManagementPage() {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="flex items-center justify-between mb-3">
           <div className="card-title" style={{ marginBottom: 0 }}>Guild Accounts ({users.length})</div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}><Icon name="plus" size={12} /> Create Account</button>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost btn-sm" onClick={syncSelfRegisteredUsers}><Icon name="refresh" size={12} /> Sync Setup Accounts</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}><Icon name="plus" size={12} /> Create Account</button>
+          </div>
         </div>
 
         {showForm && (

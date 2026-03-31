@@ -70,31 +70,32 @@ function ImportPage() {
         const memberId = row[mapping.uid] || "";
 
         // Skip summary or header repetitions
-        if (!ign || !memberId || ign.toLowerCase() === "ign" || memberId.toLowerCase() === "uid") continue;
-        if (ign.toLowerCase().includes("count") || ign === "0") continue;
+        if (!ign || ign.toLowerCase() === "ign" || (memberId && memberId.toLowerCase() === "uid")) continue;
+        if (ign.toLowerCase().includes("count") || ign === "0" || ign.toLowerCase().includes("total")) continue;
 
-        // Skip rows that don't have a valid positive ID if the ID column exists
+        // Provide a fallback UID if missing so the member isn't skipped
+        let finalUid = memberId;
+        if (!finalUid || finalUid.toLowerCase() === "n/a" || finalUid === "-") {
+          finalUid = `TEMP-${ign.replace(/[^a-zA-Z0-9]/g, "").substring(0, 6).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+        }
+
+        // We won't strictly enforce '#' sequence numbers because new members might not have them yet.
         if (mapping.idCol !== -1) {
-          const rawId = (row[mapping.idCol] || "").trim();
-          const rowNumStr = rawId.replace(/[^0-9]/g, "");
-          const rowNum = parseInt(rowNumStr, 10);
-          if (isNaN(rowNum) || rowNum <= 0) continue;
-
-          // Extra safety: If Column A is "1" but IGN is empty, it's not a real member
-          if (!ign || ign === "0") continue;
+          const rawId = (row[mapping.idCol] || "").trim().toLowerCase();
+          if (rawId.includes("total") || rawId.includes("count")) continue;
         }
 
         const cls = mapping.cls !== -1 ? (row[mapping.cls] || "") : "";
         const roleStr = mapping.role !== -1 ? (row[mapping.role] || "") : "";
         const discord = mapping.discord !== -1 ? (row[mapping.discord] || "") : "";
 
-        // Ensure the Member ID (UID) isn't just a word like "DPS" or "Role" accidentally mapped
-        if (memberId.length < 3 || /^(dps|support|role|ign|rank|status)$/i.test(memberId)) continue;
+        // Ensure the UID isn't just a word accidentally mapped
+        if (finalUid.length < 3 || /^(dps|support|role|ign|rank|status)$/i.test(finalUid)) continue;
 
         const normalizedRole = roleStr.toLowerCase().includes("support") || roleStr.toLowerCase().includes("utility") ? "Support" : "DPS";
         const jd = mapping.joinDate !== -1 ? (row[mapping.joinDate] || defaultJoinDate) : defaultJoinDate;
 
-        parsed.push({ memberId, ign, class: cls, role: normalizedRole, discord, joinDate: jd });
+        parsed.push({ memberId: finalUid, ign, class: cls, role: normalizedRole, discord, joinDate: jd });
       }
 
       if (parsed.length === 0) {

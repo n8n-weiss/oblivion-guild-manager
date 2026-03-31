@@ -192,9 +192,9 @@ export default function App() {
 
         {page === "members" && (
           isMember ? (
-            members.find(m => m.memberId === myMemberId) ? (
+            members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
               <MemberProfilePage
-                member={members.find(m => m.memberId === myMemberId)}
+                member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
                 isOwnProfile={true}
               />
             ) : (

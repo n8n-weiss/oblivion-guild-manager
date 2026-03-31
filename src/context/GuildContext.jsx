@@ -72,7 +72,8 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   // Derive rank from members if myMemberId is set
-  const myProfile = members.find(m => m.memberId === myMemberId);
+  const cleanMyId = (myMemberId || "").trim().toLowerCase();
+  const myProfile = members.find(m => m.memberId?.trim().toLowerCase() === cleanMyId);
   const myRank = myProfile?.guildRank || "Member";
   
   const isArchitect = myRank === "System Architect" || myRank === "Creator" || userRole === "architect";
