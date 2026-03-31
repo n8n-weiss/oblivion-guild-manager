@@ -341,17 +341,20 @@ function AuctionBuilder() {
                 onDragEnd={onDragEnd}
                 style={{
                   display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, cursor: "grab",
-                  background: "var(--bg-card2)", border: "1px solid var(--border)", marginBottom: 6,
-                  opacity: dragging === m.memberId ? 0.4 : 1, userSelect: "none", transition: "opacity 0.15s"
-                }}>
+                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6, boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  opacity: dragging === m.memberId ? 0.4 : 1, userSelect: "none", transition: "all 0.15s"
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "var(--accent)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+              >
                 {miniAvatar(m, members.indexOf(m))}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.ign}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.role}</div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: 0.5 }}>{m.ign}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 500 }}>{m.role}</div>
                 </div>
               </div>
             ))}
-            {dragOver === "pool" && <div className="text-xs text-muted" style={{ textAlign: "center", padding: "8px 0" }}>Drop to remove</div>}
+            {dragOver === "pool" && <div className="text-xs text-secondary" style={{ textAlign: "center", padding: "8px 0" }}>Drop to remove</div>}
           </div>
         </div>
 
@@ -375,23 +378,25 @@ function AuctionBuilder() {
               <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--border)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: "rgba(99,130,230,0.06)", borderBottom: "1px solid var(--border)" }}>
-                      <th style={{ padding: "11px 16px", textAlign: "left", fontFamily: "Cinzel,serif", fontSize: 10, letterSpacing: 1.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: 160 }}>Member</th>
+                    <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: 160, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>Member</th>
                       {session.columns.map(col => (
-                        <th key={col.id} style={{ padding: "11px 16px", textAlign: "left", borderLeft: "1px solid var(--border)", minWidth: 160 }}>
+                        <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid rgba(255,255,255,0.1)", minWidth: 160 }}>
                           {editingColId === col.id ? (
-                            <input className="form-input" style={{ padding: "3px 8px", fontSize: 12, width: "100%" }} autoFocus
+                            <input className="form-input" style={{ padding: "3px 8px", fontSize: 12, width: "100%", background: "rgba(0,0,0,0.3)", color: "white" }} autoFocus
                               value={colNameInput}
                               onChange={e => setColNameInput(e.target.value)}
                               onBlur={() => renameColumn(col.id)}
                               onKeyDown={e => { if (e.key === "Enter") renameColumn(col.id); if (e.key === "Escape") setEditingColId(null); }} />
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                              <span style={{ fontFamily: "Cinzel,serif", fontSize: 10, letterSpacing: 1.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{col.name}</span>
-                              <div style={{ display: "flex", gap: 4, opacity: 0.7 }}>
-                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "0 2px" }}
+                              <span style={{ fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{col.name}</span>
+                              <div style={{ display: "flex", gap: 4, opacity: 0.8 }}>
+                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 12, padding: "0 2px" }}
+                                  onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
+                                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-secondary)"}
                                   onClick={() => { setEditingColId(col.id); setColNameInput(col.name); }}>✎</button>
-                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 13, padding: "0 2px" }}
+                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 14, padding: "0 2px" }}
                                   onClick={() => deleteColumn(col.id)}>×</button>
                               </div>
                             </div>
@@ -407,15 +412,19 @@ function AuctionBuilder() {
                         onDragStart={() => onDragStart(m.memberId)}
                         onDragEnd={onDragEnd}
                         style={{
-                          borderBottom: "1px solid var(--border)", background: rowIdx % 2 === 1 ? "rgba(99,130,230,0.02)" : "transparent",
-                          opacity: dragging === m.memberId ? 0.35 : 1, transition: "opacity 0.15s"
-                        }}>
+                          borderBottom: "1px solid var(--border)", 
+                          background: rowIdx % 2 === 1 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.15)",
+                          opacity: dragging === m.memberId ? 0.35 : 1, transition: "background 0.15s, opacity 0.15s"
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                        onMouseLeave={e => e.currentTarget.style.background = rowIdx % 2 === 1 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.15)"}
+                      >
                         <td style={{ padding: "10px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "grab" }}>
                             {miniAvatar(m, members.indexOf(m))}
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{m.ign}</div>
-                              <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.class}</div>
+                              <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", letterSpacing: 0.5 }}>{m.ign}</div>
+                              <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 500 }}>{m.class}</div>
                             </div>
                           </div>
                         </td>
