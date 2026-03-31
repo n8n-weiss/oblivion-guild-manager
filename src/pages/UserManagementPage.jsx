@@ -74,6 +74,11 @@ function UserManagementPage() {
     if (!form.email.trim() || (!editingUid && !form.password.trim()) || !form.displayName.trim()) {
       showToast("Fill all fields", "error"); return;
     }
+    // VALIDATE PASSWORD LENGTH
+    if (!editingUid && form.password.trim().length < 6) {
+      showToast("Password must be at least 6 characters", "error"); return;
+    }
+    
     setCreating(true);
     let secondaryApp;
     try {
@@ -83,11 +88,11 @@ function UserManagementPage() {
         const appName = `secondary-${Date.now()}`;
         secondaryApp = initializeApp(firebaseConfig, appName);
         const secondaryAuth = getAuth(secondaryApp);
-        const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email.trim(), form.password.trim());
         uid = cred.user.uid;
       }
       
-      const userDoc = { role: form.role, displayName: form.displayName, email: form.email, memberId: form.memberId || null };
+      const userDoc = { role: form.role, displayName: form.displayName, email: form.email.trim(), memberId: form.memberId || null };
       await setDoc(doc(db, "userroles", uid), userDoc);
       
       const newUser = { uid, ...userDoc, createdAt: new Date().toISOString() };
@@ -108,7 +113,13 @@ function UserManagementPage() {
       setEditingUid(null);
       showToast(editingUid ? "User updated" : `Account created for ${form.displayName}`, "success");
     } catch (err) {
-      showToast(err.message || "Error saving account", "error");
+      if (err.code === 'auth/email-already-in-use') {
+        showToast("Email already exists! Try syncing existing accounts.", "error");
+      } else if (err.code === 'auth/invalid-email') {
+        showToast("Invalid email format.", "error");
+      } else {
+        showToast(err.message || "Error saving account", "error");
+      }
     } finally {
       setCreating(false);
       if (secondaryApp) await deleteApp(secondaryApp);
@@ -186,7 +197,7 @@ function UserManagementPage() {
               {!editingUid && (
                 <div className="form-group">
                   <label className="form-label">Password</label>
-                  <input className="form-input" type="password" placeholder="Set initial password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <input className="form-input" type="password" placeholder="Min 6 chars" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
                 </div>
               )}
               <div className="form-group">
@@ -205,7 +216,7 @@ function UserManagementPage() {
             <div className="flex gap-2 justify-end">
               <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
               <button className="btn btn-primary btn-sm" onClick={createUser} disabled={creating}>
-                {creating ? "Creating..." : <><Icon name="plus" size={12} /> Create Account</>}
+                {creating ? "Saving..." : <><Icon name="save" size={12} /> Save Account</>}
               </button>
             </div>
           </div>
