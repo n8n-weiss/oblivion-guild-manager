@@ -26,6 +26,7 @@ import ImportPage from "./pages/ImportPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import RequestsPage from "./pages/RequestsPage";
 
 export default function App() {
   const {
@@ -33,7 +34,7 @@ export default function App() {
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
-    notifications
+    notifications, requests
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -41,6 +42,7 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
+  const pendingRequestsCount = requests.filter(r => r.status === "pending").length;
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -127,6 +129,11 @@ export default function App() {
                 {count !== undefined && !isMember && (
                   <span style={{ background: "rgba(99,130,230,0.15)", color: "var(--accent)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700, minWidth: 20, textAlign: "center" }}>
                     {count}
+                  </span>
+                )}
+                {item.id === "requests" && pendingRequestsCount > 0 && (
+                  <span style={{ background: "var(--red)", color: "white", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 10px rgba(239,68,68,0.5)" }}>
+                    {pendingRequestsCount}
                   </span>
                 )}
               </div>
@@ -286,6 +293,10 @@ export default function App() {
 
         {page === "auditlog" && isAdmin && (
           <AuditLogPage />
+        )}
+
+        {page === "requests" && isOfficer && (
+          <RequestsPage />
         )}
       </main>
 

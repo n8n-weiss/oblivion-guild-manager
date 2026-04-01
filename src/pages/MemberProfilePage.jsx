@@ -3,7 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
-import { writeAuditLog } from "./AuditLogPage";
+import { writeAuditLog } from '../utils/audit';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -26,9 +26,16 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const { 
     members, events, attendance, performance, absences, eoRatings, 
     notifications, markNotifRead,
+    requests, submitRequest,
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser 
   } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    ign: member.ign,
+    class: member.class,
+    role: member.role
+  });
   const [absenceForm, setAbsenceForm] = useState({
     eventType: "Guild League",
     eventDate: new Date().toISOString().split("T")[0],
@@ -75,6 +82,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const memberAbsences = absences.filter(a => a.memberId === member.memberId);
   const myNotifs = notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId);
   const unreadCount = myNotifs.filter(n => !n.isRead && n.targetId !== "all").length;
+  
+  const myPendingRequest = requests.find(r => r.memberId === member.memberId && r.status === "pending");
   
   const totalGLScore = glEvents.reduce((sum, e) => sum + e.score, 0);
   const presentCount = memberEvents.filter(e => e.att?.status === "present").length;
@@ -349,6 +358,11 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "patron_toggle", `${member.isDonator ? "Revoked" : "Granted"} Patron status for ${member.ign}`);
   };
 
+  const handleRequestSubmit = async () => {
+    const success = await submitRequest(member.memberId, requestForm);
+    if (success) setShowRequestModal(false);
+  };
+
   return (
     <div>
       {/* Sticky mini-bar header */}
@@ -453,6 +467,22 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       )}
 
+      {/* Pending Request Banner */}
+      {myPendingRequest && (
+        <div className="card mb-4" style={{
+          background: "rgba(99,130,230,0.05)",
+          border: "1px solid var(--accent)",
+          display: "flex", alignItems: "center", gap: 12, padding: "12px 20px"
+        }}>
+          <div className="animate-pulse" style={{ fontSize: 20 }}>⏳</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: 13 }}>Update Request Pending</div>
+            <p className="text-xs text-muted">You requested a change: <strong>{myPendingRequest.newData.ign}</strong> ({myPendingRequest.newData.class}). Please wait for an officer to approve.</p>
+          </div>
+          <button className="btn btn-ghost btn-sm" disabled>Waiting...</button>
+        </div>
+      )}
+
       {/* Portal Hero */}
       <div className="portal-hero animate-fade-in" style={{ borderColor: theme.color, marginBottom: 20 }}>
         <div className="portal-hero-bg" style={{ background: `radial-gradient(circle at 70% 30%, ${theme.color}, transparent 60%)` }} />
@@ -501,9 +531,16 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                 </button>
               )}
               {isOwnProfile && (
-                <button className="btn btn-ghost btn-sm" onClick={() => isEditingBio ? saveSocialData() : setIsEditingBio(true)}>
-                  {isEditingBio ? "💾 Save" : "✏️ Edit"}
-                </button>
+                <div className="flex gap-2">
+                  <button className="btn btn-ghost btn-sm" onClick={() => isEditingBio ? saveSocialData() : setIsEditingBio(true)}>
+                    {isEditingBio ? "💾 Save" : "✏️ Edit Bio"}
+                  </button>
+                  {!myPendingRequest && (
+                    <button className="btn btn-sm" style={{ background: "rgba(99,130,230,0.1)", color: "var(--accent)", border: "1px solid var(--accent)" }} onClick={() => setShowRequestModal(true)}>
+                      ⚔️ Request Update
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -902,6 +939,45 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Profile Request Modal */}
+      {showRequestModal && (
+        <div className="modal-overlay" style={{ display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div className="card animate-fade-in" style={{ maxWidth: 450, border: "2px solid var(--accent)" }}>
+            <div className="card-title">🛡️ Vanguard Profile Request</div>
+            <p className="text-secondary text-xs mb-6">Use this to request a change in your In-Game Name, Job Class, or Role. This requires Officer approval.</p>
+            
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">New IGN</label>
+                <input className="form-input" value={requestForm.ign} onChange={e => setRequestForm({...requestForm, ign: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">New Class</label>
+                <select className="form-select" value={requestForm.class} onChange={e => setRequestForm({...requestForm, class: e.target.value})}>
+                  {JOB_CLASSES.map(branch => (
+                    <optgroup key={branch.branch} label={branch.branch}>
+                      {branch.jobs.map(j => <option key={j.name} value={j.name}>{j.emoji} {j.name}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">New Role</label>
+                <select className="form-select" value={requestForm.role} onChange={e => setRequestForm({...requestForm, role: e.target.value})}>
+                  <option value="DPS">DPS</option>
+                  <option value="Support">Support / Utility</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end mt-6">
+              <button className="btn btn-ghost" onClick={() => setShowRequestModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRequestSubmit}>Submit Request</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

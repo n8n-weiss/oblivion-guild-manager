@@ -70,6 +70,7 @@ export const NAV_ITEMS = [
   { id: "import", label: "Import CSV", icon: "save" },
   { id: "report", label: "Weekly Report", icon: "report" },
   { id: "auction", label: "Auction Builder", icon: "trophy" },
+  { id: "requests", label: "Requests", icon: "edit" },
   { id: "users", label: "User Management", icon: "users" },
   { id: "auditlog", label: "Audit Log", icon: "report" },
 ];

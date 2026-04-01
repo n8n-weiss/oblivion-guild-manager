@@ -46,6 +46,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [raidParties, setRaidParties] = useState(() => {
     try {
       const saved = localStorage.getItem('guild_raidParties');
@@ -135,7 +136,8 @@ export const GuildProvider = ({ children, initialData }) => {
           eoSnap,
           absSnap,
           metaSnap,
-          notifSnap
+          notifSnap,
+          reqSnap
         ] = await Promise.all([
           getDocs(collection(db, "roster")),
           getDocs(collection(db, "events")),
@@ -144,7 +146,8 @@ export const GuildProvider = ({ children, initialData }) => {
           getDocs(collection(db, "eoRatings")),
           getDocs(collection(db, "absences")),
           getDoc(doc(db, "metadata", "current")),
-          getDocs(collection(db, "notifications"))
+          getDocs(collection(db, "notifications")),
+          getDocs(collection(db, "requests"))
         ]);
 
         const loadedMembers = rosterSnap.docs.map(d => d.data());
@@ -230,6 +233,7 @@ export const GuildProvider = ({ children, initialData }) => {
         setAuctionSessions(metadata.auctionSessions || []);
         setAuctionTemplates(metadata.auctionTemplates || []);
         setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
+        setRequests(reqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
 
         // Load raidParties — prefer Firestore over localStorage
         const cloudRaidRaw = metadata.raidParties || [];
@@ -480,7 +484,7 @@ export const GuildProvider = ({ children, initialData }) => {
       const batch = writeBatch(db);
       
       // Get all docs in all collections
-      const collections = ["roster", "events", "attendance", "performance", "eoRatings", "absences"];
+      const collections = ["roster", "events", "attendance", "performance", "eoRatings", "absences", "requests"];
       for (const collName of collections) {
         const snap = await getDocs(collection(db, collName));
         snap.forEach(d => batch.delete(d.ref));
@@ -504,6 +508,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setEoRatings([]);
       setAuctionSessions([]);
       setAuctionTemplates([]);
+      setRequests([]);
       
       localStorage.removeItem('guild_parties');
       localStorage.removeItem('guild_partyNames');
@@ -514,6 +519,107 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Error resetting database", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitRequest = async (memberId, newData) => {
+    try {
+      const m = members.find(x => x.memberId === memberId);
+      if (!m) return;
+      const req = {
+        memberId,
+        requesterIgn: m.ign,
+        oldData: { ign: m.ign, class: m.class, role: m.role },
+        newData,
+        status: "pending",
+        timestamp: new Date().toISOString()
+      };
+      const docRef = doc(collection(db, "requests"));
+      await setDoc(docRef, req);
+      const newReq = { ...req, id: docRef.id };
+      setRequests(prev => [newReq, ...prev]);
+      showToast("Request submitted for approval!", "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to submit request", "error");
+      return false;
+    }
+  };
+
+  const approveRequest = async (requestId) => {
+    try {
+      const r = requests.find(x => x.id === requestId);
+      if (!r) return;
+
+      const updatedMembers = members.map(m => 
+        m.memberId === r.memberId ? { ...m, ...r.newData } : m
+      );
+
+      // Update Roster in Firestore
+      await setDoc(doc(db, "roster", r.memberId), { 
+        ...members.find(x => x.memberId === r.memberId), 
+        ...r.newData 
+      });
+      
+      // Update Request Status
+      await setDoc(doc(db, "requests", requestId), { ...r, status: "approved" });
+
+      setMembers(updatedMembers);
+      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "approved" } : x));
+      
+      showToast(`Request approved for ${r.requesterIgn}`, "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to approve request", "error");
+      return false;
+    }
+  };
+
+  const rejectRequest = async (requestId) => {
+    try {
+      const r = requests.find(x => x.id === requestId);
+      if (!r) return;
+      await setDoc(doc(db, "requests", requestId), { ...r, status: "rejected" });
+      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "rejected" } : x));
+      showToast(`Request rejected`, "info");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to reject request", "error");
+      return false;
+    }
+  };
+
+  const deleteRequest = async (requestId) => {
+    try {
+      await deleteDoc(doc(db, "requests", requestId));
+      setRequests(prev => prev.filter(x => x.id !== requestId));
+      showToast("Request deleted from history", "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to delete request", "error");
+      return false;
+    }
+  };
+
+  const clearProcessedRequests = async () => {
+    try {
+      const processed = requests.filter(r => r.status !== "pending");
+      const batch = writeBatch(db);
+      processed.forEach(r => {
+        batch.delete(doc(db, "requests", r.id));
+      });
+      await batch.commit();
+      setRequests(prev => prev.filter(r => r.status === "pending"));
+      showToast("Processed history cleared", "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to clear history", "error");
+      return false;
     }
   };
 
@@ -534,6 +640,7 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
     notifications, sendNotification, markNotifRead,
+    requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     resetDatabase
   };
 
