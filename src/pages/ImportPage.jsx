@@ -9,6 +9,7 @@ function ImportPage() {
   const [error, setError] = useState("");
   const [imported, setImported] = useState(false);
   const [defaultJoinDate, setDefaultJoinDate] = useState(new Date().toISOString().split("T")[0]);
+  const [protectExistingData, setProtectExistingData] = useState(true);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -119,8 +120,19 @@ function ImportPage() {
       preview.forEach(p => {
         const idx = merged.findIndex(m => m.memberId === p.memberId);
         if (idx >= 0) {
-          // Preserve app-managed fields (guildRank, status, etc.) that are NOT in CSV
-          merged[idx] = { ...merged[idx], ...p };
+          // Preserve app-managed fields (guildRank, status, etc.)
+          if (protectExistingData) {
+            // "Smart Merge": Keep existing critical fields (approved by portal)
+            merged[idx] = { 
+              ...merged[idx], 
+              discord: p.discord || merged[idx].discord, 
+              joinDate: (p.joinDate && p.joinDate !== defaultJoinDate) ? p.joinDate : merged[idx].joinDate 
+              // Notice we SKIP p.ign, p.class, p.role
+            };
+          } else {
+            // "Overwrite Merge": CSV takes precedence
+            merged[idx] = { ...merged[idx], ...p };
+          }
           updated++;
         } else {
           merged.push(p);
@@ -133,11 +145,60 @@ function ImportPage() {
     setImported(true); setPreview([]); setFileName("");
   };
 
+  const exportToCSV = () => {
+    try {
+      if (members.length === 0) { showToast("No members to export", "error"); return; }
+      const headers = ["#", "IGN", "UID", "Class", "Role", "Discord", "Join Date", "Rank", "Status"];
+      const rows = members.map((m, i) => [
+        i + 1,
+        m.ign,
+        m.memberId,
+        m.class,
+        m.role,
+        m.discord || "",
+        m.joinDate || "",
+        m.guildRank || "Member",
+        m.status || "active"
+      ]);
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(cell => `"${(cell + "").replace(/"/g, '""')}"`).join(","))
+      ].join("\n");
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `oblivion_roster_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Roster exported successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Export failed", "error");
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1 className="page-title">📥 Import CSV / Spreadsheet</h1>
         <p className="page-subtitle">I-import ang Members list gamit ang bago nating Universal Parser</p>
+      </div>
+
+      {/* Export Section */}
+      <div className="card" style={{ marginBottom: 20, background: "rgba(99,130,230,0.05)", border: "1px solid var(--accent)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="card-title mb-1">📤 Export Portal Data</div>
+            <div className="text-xs text-muted">I-download ang latest roster mula sa Portal para ma-update ang inyong Master Spreadsheet.</div>
+          </div>
+          <button className="btn btn-primary" onClick={exportToCSV}>
+            <Icon name="save" size={12} /> Download Current Roster
+          </button>
+        </div>
       </div>
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-title">📋 Paano mag-import nang tama</div>
@@ -180,11 +241,19 @@ function ImportPage() {
               <div className="card-title" style={{ marginBottom: 4 }}>👀 Preview — {preview.length} members found</div>
               <div className="text-xs text-muted">I-check kung tama ang data bago i-confirm. Kung may maling information (katulad nung Weiss 456463), paki-check ang headers ng iyong file.</div>
             </div>
-            <div className="flex gap-2">
-              <button className="btn btn-primary" onClick={() => confirmImport("merge")}>🔄 Confirm Merge</button>
-              {isArchitect && (
-                <button className="btn btn-danger" onClick={() => confirmImport("replace")}>⚠️ Replace All</button>
-              )}
+            <div className="flex gap-4 items-center">
+              <label className="flex items-center gap-2 cursor-pointer" title="Kapag naka-ON, hindi mapapalitan ang IGN, Class, at Role ng existing members.">
+                <input type="checkbox" checked={protectExistingData} onChange={e => setProtectExistingData(e.target.checked)} />
+                <span className="text-xs font-bold" style={{ color: protectExistingData ? "var(--green)" : "var(--gold)" }}>
+                  {protectExistingData ? "🛡️ Smart Merge Protected" : "⚠️ Overwrite Enabled"}
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <button className="btn btn-primary" onClick={() => confirmImport("merge")}>🔄 Confirm Merge</button>
+                {isArchitect && (
+                  <button className="btn btn-danger" onClick={() => confirmImport("replace")}>⚠️ Replace All</button>
+                )}
+              </div>
             </div>
           </div>
           <div className="table-wrap">
@@ -205,7 +274,7 @@ function ImportPage() {
             </table>
           </div>
           <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(240,192,64,0.06)", border: "1px solid rgba(240,192,64,0.2)", borderRadius: 8, fontSize: 12, color: "var(--text-muted)" }}>
-            💡 <strong style={{ color: "var(--gold)" }}>Merge</strong> — i-update ang existing members at i-preserve ang iba. Ito ang <strong>safe</strong> option.<br />
+            💡 <strong style={{ color: "var(--gold)" }}>Merge</strong> — i-update ang existing members. (Kapag naka-ON ang <strong>🛡️ Smart Merge</strong>, hindi mapapalitan ang approved IGN/Class/Role ng existing members).<br />
             {isArchitect ? (
               <>💡 <strong style={{ color: "var(--red)" }}>Replace All</strong> — <span style={{ color: "var(--red)", fontWeight: 800 }}>MABURA LAHAT</span> ng current members at mapapalitan ng CSV data. Gamitin lamang kung magsa-start over.</>
             ) : (
