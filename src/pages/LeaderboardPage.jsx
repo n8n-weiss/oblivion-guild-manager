@@ -64,7 +64,24 @@ function LeaderboardPage({ onViewProfile }) {
             <h1 className="page-title">🏆 Leaderboard</h1>
             <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 quick-summary-bar show-on-mobile" style={{ margin: "16px 0 0", padding: "4px 0" }}>
+            {[
+              { id: "Combat", label: "Combat", icon: "⚔️" },
+              { id: "Duty", label: "Duty", icon: "🛡️" },
+              { id: "Consistency", label: "Stability", icon: "⚖️" },
+              { id: "Support", label: "Support", icon: "✨" }
+            ].map(cat => (
+              <button 
+                key={cat.id} 
+                className={`btn btn-sm ${lbMode === cat.id ? "btn-primary" : "btn-ghost"}`} 
+                style={{ flex: "0 0 auto" }}
+                onClick={() => setLbMode(cat.id)}
+              >
+                {cat.icon} {cat.label}
+              </button>
+            ))}
+          </div>
+          <div className="hide-on-mobile flex gap-2">
             {[
               { id: "Combat", label: "Combat", icon: "⚔️" },
               { id: "Duty", label: "Duty", icon: "🛡️" },
@@ -150,17 +167,32 @@ function LeaderboardPage({ onViewProfile }) {
       </div>}
 
       <div className="card">
+        <div className="show-on-mobile quick-summary-bar">
+          <div className="summary-item">
+            <span className="summary-label">RANK #1</span>
+            <span className="summary-value" style={{ color: 'var(--gold)' }}>{lb[0]?.ign || "—"}</span>
+          </div>
+          <div className="summary-item" style={{ borderColor: "var(--accent)" }}>
+            <span className="summary-label">MODE</span>
+            <span className="summary-value" style={{ fontSize: 14 }}>{lbMode.toUpperCase()}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">UNIT COUNT</span>
+            <span className="summary-value" style={{ color: 'var(--accent2)' }}>{filtered.length}</span>
+          </div>
+        </div>
+
         <div className="section-header">
           <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>
             {lbMode} Rankings
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 quick-summary-bar" style={{ padding: 0, margin: 0, border: "none" }}>
             {["All", "Core", "Active", "Casual", "At Risk"].map(f => (
-              <button key={f} className={`btn btn-sm ${filter === f ? "btn-primary" : "btn-ghost"}`} onClick={() => setFilter(f)}>{f}</button>
+              <button key={f} className={`btn btn-sm ${filter === f ? "btn-primary" : "btn-ghost"}`} onClick={() => setFilter(f)} style={{ fontSize: 10, padding: "4px 8px" }}>{f}</button>
             ))}
           </div>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap hide-on-mobile">
           <table>
             <thead><tr>
               <th>#</th><th>Player</th><th>Role</th>
@@ -236,6 +268,57 @@ function LeaderboardPage({ onViewProfile }) {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card List */}
+        <div className="show-on-mobile">
+          {filtered.map((m, i) => {
+            const val = lbMode === "Combat" ? m.totalScore : 
+                        lbMode === "Duty" ? `${m.attendancePct}%` : 
+                        lbMode === "Support" ? m.supportIndex : 
+                        Math.round((m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40));
+            const rankLabel = i < 3 ? ["🥇", "🥈", "🥉"][i] : `#${i + 1}`;
+            return (
+              <div key={m.memberId} className="glass-card-mobile animate-fade-in" style={{ borderLeft: `3px solid ${rankColors[i] || "var(--border)"}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div style={{ fontFamily: "Cinzel, serif", fontWeight: 900, fontSize: 16, color: rankColors[i] || "var(--text-muted)", minWidth: 24 }}>
+                      {rankLabel}
+                    </div>
+                    <MemberAvatar ign={m.ign} index={i} size={40} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }} onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</div>
+                      <div className="text-xs text-muted leading-tight">{m.class}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="font-cinzel" style={{ fontSize: 18, fontWeight: 700, color: rankColors[i] || "var(--text-primary)" }}>{val}</div>
+                    <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>{lbMode} SCORE</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mb-3">
+                   <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{m.role}</span>
+                   <span className={`badge ${m.classification === "Core" ? "badge-core" : m.classification === "Active" ? "badge-active" : m.classification === "Casual" ? "badge-casual" : "badge-atrisk"}`} style={{ fontSize: 9 }}>{m.classification}</span>
+                   <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 9 }}>🎯 {m.attStatus?.label}</span>
+                </div>
+
+                <div className="score-bar-wrap mb-1" style={{ height: 4 }}>
+                   <div className="score-bar-bg" style={{ height: 4 }}>
+                     <div className="score-bar-fill" style={{ 
+                        height: 4,
+                        width: `${Math.max(2, (
+                          (lbMode === "Combat" ? m.totalScore : 
+                           lbMode === "Duty" ? m.attendancePct : 
+                           lbMode === "Support" ? m.supportIndex : 
+                           (m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40)) / maxVal) * 100)}%`,
+                        background: i < 3 ? rankColors[i] : "var(--accent)"
+                     }} />
+                   </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

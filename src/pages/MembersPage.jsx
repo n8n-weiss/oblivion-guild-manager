@@ -123,22 +123,44 @@ function MembersPage({ onViewProfile }) {
       </div>
 
       <div className="card">
+        {/* Quick View Summary (Mobile Only) */}
+        <div className="show-on-mobile quick-summary-bar">
+          <div className="summary-item">
+            <span className="summary-label">TOTAL</span>
+            <span className="summary-value" style={{ color: 'var(--accent)' }}>{members.length}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">ACTIVE</span>
+            <span className="summary-value" style={{ color: 'var(--green)' }}>{members.filter(m => (m.status || "active") === "active").length}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">DPS</span>
+            <span className="summary-value" style={{ color: 'var(--accent2)' }}>{members.filter(m => m.role === "DPS" && (m.status || "active") === "active").length}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">SUPPORTS</span>
+            <span className="summary-value" style={{ color: 'var(--gold)' }}>{members.filter(m => m.role === "Support" && (m.status || "active") === "active").length}</span>
+          </div>
+        </div>
+
         <div className="section-header">
           <div className="flex gap-2 items-center">
             <div className="search-bar">
               <span className="search-icon"><Icon name="search" size={14} /></span>
               <input className="form-input" placeholder="Search IGN, ID, class…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <select className="form-select" style={{ width: "auto" }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-              <option>All</option><option>DPS</option><option>Support</option>
-            </select>
-            <div className="flex gap-1 p-1 bg-deepest rounded-lg border border-border">
-              <button className={`btn btn-sm ${statusFilter === "active" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStatusFilter("active")} style={{ fontSize: 10 }}>Active</button>
-              <button className={`btn btn-sm ${statusFilter === "left" ? "btn-danger" : "btn-ghost"}`} onClick={() => setStatusFilter("left")} style={{ fontSize: 10 }}>Left</button>
+            <div className="flex gap-2">
+              <select className="form-select" style={{ width: "auto" }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+                <option>All</option><option>DPS</option><option>Support</option>
+              </select>
+              <div className="flex gap-1 p-1 bg-deepest rounded-lg border border-border">
+                <button className={`btn btn-sm ${statusFilter === "active" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStatusFilter("active")} style={{ fontSize: 10 }}>Active</button>
+                <button className={`btn btn-sm ${statusFilter === "left" ? "btn-danger" : "btn-ghost"}`} onClick={() => setStatusFilter("left")} style={{ fontSize: 10 }}>Left</button>
+              </div>
             </div>
           </div>
           {isOfficer && (
-            <button className="btn btn-primary" onClick={openAdd}><Icon name="plus" size={14} /> Add Member</button>
+            <button className="btn btn-primary" onClick={openAdd} style={{ width: "100%", maxWidth: "none" }}><Icon name="plus" size={14} /> Add Member</button>
           )}
         </div>
 
@@ -146,7 +168,8 @@ function MembersPage({ onViewProfile }) {
         {filtered.length === 0 ? (
           <div className="empty-state"><div className="empty-state-icon">⚔</div><div className="empty-state-text">No members found</div></div>
         ) : (
-          <div className="table-wrap">
+          <>
+            <div className="table-wrap hide-on-mobile">
             <table>
               <thead>
                 <tr>
@@ -250,8 +273,63 @@ function MembersPage({ onViewProfile }) {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Mobile Card List */}
+          <div className="show-on-mobile">
+            {filtered.map((m, i) => {
+              const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
+              const idx = members.indexOf(m);
+              return (
+                <div key={m.memberId} className="glass-card-mobile animate-fade-in" style={{ borderLeft: `4px solid ${theme.color}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div style={{ position: "relative" }}>
+                        <MemberAvatar ign={m.ign} index={idx} size={44} memberClass={m.class} />
+                        <div style={{ position: "absolute", bottom: -2, right: -2, width: 10, height: 10, borderRadius: "50%", background: theme.color, border: "2px solid var(--bg-deepest)" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }} onClick={() => onViewProfile && onViewProfile(m)}>
+                          {m.ign}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.memberId}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>{m.guildRank || "Member"}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Joined {m.joinDate || "—"}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mb-4">
+                    <span style={{ 
+                      display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", 
+                      borderRadius: 20, background: `${theme.color}18`, color: theme.color, border: `1px solid ${theme.color}33` 
+                    }}>
+                      {theme.icon} {m.class}
+                    </span>
+                    <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 10 }}>
+                      {m.role === "DPS" ? "⚔" : "🛡"} {m.role}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: "center" }} onClick={() => onViewProfile && onViewProfile(m)}>View Profile</button>
+                    {isOfficer && (
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)}><Icon name="edit" size={14} /></button>
+                    )}
+                    {isAdmin && (
+                      <button className={`btn btn-sm ${statusFilter === "active" ? "btn-archive" : "btn-restore"}`} style={{ fontSize: 10 }} onClick={() => toggleArchive(m.memberId)}>
+                        {statusFilter === "active" ? "Archive" : "Restore"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
 
       {showModal && (
         <Modal title={editMember ? "Edit Member" : "Add Member"} onClose={() => setShowModal(false)}

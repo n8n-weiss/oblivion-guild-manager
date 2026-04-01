@@ -154,6 +154,13 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     return { rank: "NOVICE", label: "Initiate Hero", color: "#999999" };
   };
   const rankInfo = getRankInfo(totalGLScore);
+  
+  // Calculate Next Rank
+  const nextRankThresholds = [50, 100, 150, 200];
+  const nextThreshold = nextRankThresholds.find(t => t > totalGLScore) || 200;
+  const pointsToNextRank = nextThreshold - totalGLScore;
+  const rankProgress = Math.min(100, Math.round((totalGLScore / nextThreshold) * 100));
+
   const level = Math.max(1, Math.floor(Math.sqrt(totalGLScore * 5)));
   const nextLevelScore = Math.pow((level + 1) / 5, 2);
   const prevLevelScore = Math.pow(level / 5, 2);
@@ -205,6 +212,51 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     else break;
   }
   const toggleCollapse = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // --- Participation Heatmap Logic ---
+  const heatmapData = useMemo(() => {
+    const data = [];
+    const today = new Date();
+    // 21 weeks (approx 5 months)
+    for (let i = 146; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const ev = memberEvents.find(e => e.eventDate === dateStr);
+      let status = "no-event";
+      if (ev) {
+        if (ev.att?.status === "present") {
+          status = ev.eventType === "Guild League" ? "present-gl" : "present-eo";
+        } else {
+          status = "absent";
+        }
+      }
+      data.push({ date: dateStr, status, ev });
+    }
+    return data;
+  }, [memberEvents]);
+
+  const ParticipationHeatmap = () => (
+    <div className="heatmap-container animate-fade-in">
+      <div className="heatmap-grid">
+        {heatmapData.map((day, i) => (
+          <div 
+            key={i} 
+            className={`heatmap-cell ${day.status}`} 
+            title={`${day.date}: ${day.ev ? day.ev.eventType + ' (' + day.status + ')' : 'No Event'}`}
+          />
+        ))}
+      </div>
+      <div className="heatmap-legend">
+        <span>Less</span>
+        <div className="legend-item"><div className="legend-box no-event" /><span>None</span></div>
+        <div className="legend-item"><div className="legend-box" style={{ background: 'var(--green)' }} /><span>GL Present</span></div>
+        <div className="legend-item"><div className="legend-box" style={{ background: 'var(--gold)' }} /><span>EO Present</span></div>
+        <div className="legend-item"><div className="legend-box" style={{ background: 'var(--red)' }} /><span>Absent</span></div>
+        <span>More</span>
+      </div>
+    </div>
+  );
 
   const chartData = useMemo(() => {
     return [...memberEvents].reverse().map(ev => ({
@@ -507,6 +559,11 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <div className="progress-bar-wrap" style={{ height: 8 }}>
               <div className="progress-bar-fill" style={{ width: `${levelProgress}%`, background: `linear-gradient(90deg, ${theme.color}, ${rankInfo.color})`, boxShadow: `0 0 12px ${theme.color}66` }} />
             </div>
+            {pointsToNextRank > 0 && (
+              <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 6, textAlign: "right", letterSpacing: 1 }}>
+                {pointsToNextRank} POINTS UNTIL NEXT RANK
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -630,6 +687,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             )}
           </div>
 
+          {/* Participation Heatmap */}
+          <div className="card mb-4">
+            <div className="card-title">📅 Participation Heatmap (Last 5 Months)</div>
+            <ParticipationHeatmap />
+          </div>
+
           {/* Radar + Chart row */}
           <div className="grid-2 mb-4">
             <div className="card">
@@ -734,21 +797,21 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             <p className="text-xs text-muted mb-6">Earn trophies by participating in guild events and reaching performance milestones.</p>
             <div className="achievement-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
               {[
-                { id: 'hero', icon: '🔥', name: 'War Hero', desc: '80+ total GL score', earned: totalGLScore >= 80 },
-                { id: 'wall', icon: '🛡️', name: 'Iron Wall', desc: '100% attendance (5+ events)', earned: attPct === 100 && memberEvents.length >= 5 },
-                { id: 'clutch', icon: '⚡', name: 'Clutch King', desc: 'Above guild avg skill', earned: avgGL > (guildAvgGL / 10) + 1 },
-                { id: 'mvp', icon: '⭐', name: 'MVP Material', desc: '4.5+ EO Rating (3+ reviews)', earned: eoRatingsList.length >= 3 && avgEoRating >= 4.5 },
-                { id: 'loyal', icon: '💎', name: 'Old Guard', desc: '10+ events attended', earned: memberEvents.length >= 10 },
-                { id: 'legend', icon: '👑', name: 'Living Legend', desc: '200+ total score', earned: totalGLScore >= 200 },
-                { id: 'streak3', icon: '🎯', name: 'On a Roll', desc: '3+ attendance streak', earned: winStreak >= 3 },
-                { id: 'elite', icon: '🏅', name: 'Elite Warrior', desc: 'Reach ELITE rank', earned: totalGLScore >= 150 },
+                { id: 'hero', icon: '🔥', name: 'War Hero', desc: '80+ total GL score', earned: totalGLScore >= 80, current: totalGLScore, goal: 80 },
+                { id: 'wall', icon: '🛡️', name: 'Iron Wall', desc: '100% attendance (5+ events)', earned: attPct === 100 && memberEvents.length >= 5, current: attPct === 100 ? memberEvents.length : 0, goal: 5 },
+                { id: 'clutch', icon: '⚡', name: 'Clutch King', desc: 'Above guild avg skill', earned: avgGL > (guildAvgGL / 10) + 1, current: Math.round(avgGL), goal: Math.round((guildAvgGL / 10) + 1) },
+                { id: 'mvp', icon: '⭐', name: 'MVP Material', desc: '4.5+ EO Rating (3+ reviews)', earned: eoRatingsList.length >= 3 && avgEoRating >= 4.5, current: avgEoRating, goal: 4.5 },
+                { id: 'loyal', icon: '💎', name: 'Old Guard', desc: '10+ events attended', earned: memberEvents.length >= 10, current: memberEvents.length, goal: 10 },
+                { id: 'legend', icon: '👑', name: 'Living Legend', desc: '200+ total score', earned: totalGLScore >= 200, current: totalGLScore, goal: 200 },
+                { id: 'streak3', icon: '🎯', name: 'On a Roll', desc: '3+ attendance streak', earned: winStreak >= 3, current: winStreak, goal: 3 },
+                { id: 'elite', icon: '🏅', name: 'Elite Warrior', desc: 'Reach ELITE rank', earned: totalGLScore >= 150, current: totalGLScore, goal: 150 },
               ].map(ach => (
                 <div key={ach.id} className={`achievement-item ${!ach.earned ? 'locked' : ''}`} 
                   style={{ 
                     padding: "16px", borderRadius: 16, textAlign: "center",
                     background: ach.earned ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.2)",
                     border: ach.earned ? `1px solid ${theme.color}44` : "1px solid rgba(255,255,255,0.05)",
-                    opacity: ach.earned ? 1 : 0.4,
+                    opacity: ach.earned ? 1 : 1,
                     transition: "all 0.3s ease",
                     position: "relative",
                     overflow: "hidden"
@@ -760,12 +823,23 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                       pointerEvents: "none"
                     }} />
                   )}
-                  <div style={{ fontSize: 32, marginBottom: 8, filter: ach.earned ? "none" : "grayscale(1)" }}>{ach.icon}</div>
+                  <div style={{ fontSize: 32, marginBottom: 8, filter: ach.earned ? "none" : "grayscale(1) opacity(0.5)" }}>{ach.icon}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: ach.earned ? "var(--text-primary)" : "var(--text-muted)", marginBottom: 4 }}>{ach.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.3 }}>{ach.desc}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.3, marginBottom: 8 }}>{ach.desc}</div>
+                  
+                  {/* Progress Bar */}
+                  {!ach.earned && (
+                    <div className="achievement-progress-wrap">
+                      <div className="achievement-progress-fill" style={{ width: `${Math.min(100, Math.round((ach.current / ach.goal) * 100))}%`, background: theme.color }} />
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 4 }}>
+                    {ach.earned ? "COMPLETED" : `${ach.current} / ${ach.goal}`}
+                  </div>
+
                   {ach.earned && (
                     <div style={{ 
-                      marginTop: 10, fontSize: 9, color: "var(--green)", fontWeight: 800, 
+                      marginTop: 6, fontSize: 9, color: "var(--green)", fontWeight: 800, 
                       letterSpacing: 1, textTransform: "uppercase" 
                     }}>Unlocked</div>
                   )}

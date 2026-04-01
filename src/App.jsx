@@ -185,6 +185,38 @@ export default function App() {
         </div>
       </nav>
 
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-nav">
+        {NAV_ITEMS.filter(item => {
+          if (isMember) return item.id === "members";
+          // Only show top 5 relevant items on mobile nav to avoid clutter
+          const mobileWhitelisted = ["dashboard", "members", "events", "leaderboard", "party"];
+          if (!mobileWhitelisted.includes(item.id)) return false;
+          
+          if (isAdmin) return true;
+          if (isOfficer) return item.id !== "users" && item.id !== "auditlog";
+          return false;
+        }).map(item => {
+          let label = item.label;
+          if (isMember && item.id === "members") label = "Profile";
+          if (label === "Dashboard") label = "Home"; // Shorten for mobile
+          if (label === "Leaderboard") label = "Rank";
+
+          return (
+            <button key={item.id} className={`mobile-nav-item ${page === item.id ? "active" : ""}`} 
+              onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}>
+              <Icon name={item.id === "members" && isMember ? "user" : item.icon} size={20} />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+        {/* Extra: Quick sign out for mobile */}
+        <button className="mobile-nav-item" onClick={handleSignOut} style={{ opacity: 0.6 }}>
+          <Icon name="x" size={18} />
+          <span>Exit</span>
+        </button>
+      </nav>
+
       {/* Main Content Areas */}
       <main className="main-content">
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
