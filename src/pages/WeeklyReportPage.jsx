@@ -50,31 +50,33 @@ function WeeklyReportPage() {
 
   // Member scores for the period
   const memberStats = members.map(member => {
-    let score = 0;
-    let presentCount = 0;
-    let absentCount = 0;
-    let consecutiveAbsent = 0;
-    let tempConsec = 0;
+      let score = 0;
+      let presentCount = 0;
+      let absentCount = 0;
+      let consecutiveAbsent = 0;
+      let tempConsec = 0;
 
-    filteredEvents.forEach(event => {
-      const att = attendance.find(a => a.memberId === member.memberId && a.eventId === event.eventId);
-      const perf = performance.find(p => p.memberId === member.memberId && p.eventId === event.eventId);
-      if (att?.status === "present") {
-        presentCount++;
-        tempConsec = 0;
-        if (event.eventType === "Guild League") {
-          score += (perf?.ctfPoints || 0) + (perf?.performancePoints || 0);
+      const mId = (member.memberId || "").toLowerCase();
+
+      filteredEvents.forEach(event => {
+        const att = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === event.eventId);
+        const perf = performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === event.eventId);
+        if (att?.status === "present") {
+          presentCount++;
+          tempConsec = 0;
+          if (event.eventType === "Guild League") {
+            score += (perf?.ctfPoints || 0) + (perf?.performancePoints || 0);
+          }
+        } else if (att) {
+          absentCount++;
+          tempConsec++;
+          if (tempConsec > consecutiveAbsent) consecutiveAbsent = tempConsec;
         }
-      } else if (att) {
-        absentCount++;
-        tempConsec++;
-        if (tempConsec > consecutiveAbsent) consecutiveAbsent = tempConsec;
-      }
-    });
+      });
 
-    const attPct = filteredEvents.length > 0 ? Math.round((presentCount / filteredEvents.length) * 100) : 0;
-    return { ...member, score, presentCount, absentCount, consecutiveAbsent, attPct };
-  });
+      const attPct = filteredEvents.length > 0 ? Math.round((presentCount / filteredEvents.length) * 100) : 0;
+      return { ...member, score, presentCount, absentCount, consecutiveAbsent, attPct };
+    });
 
   const topPerformers = [...memberStats].sort((a, b) => b.score - a.score).slice(0, 3);
   const needsAttention = memberStats.filter(m => m.consecutiveAbsent >= 2 || m.attPct < 60).sort((a, b) => a.attPct - b.attPct);

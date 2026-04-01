@@ -8,7 +8,7 @@ function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [imported, setImported] = useState(false);
-  const [defaultJoinDate, setDefaultJoinDate] = useState(new Date().toISOString().split("T")[0]);
+  const [defaultJoinDate, setDefaultJoinDate] = useState("");
   const [protectExistingData, setProtectExistingData] = useState(true);
 
   const handleFile = (e) => {

@@ -46,15 +46,16 @@ function EventsPage() {
   };
 
   const toggleAtt = (memberId, eventId) => {
-    const current = attendance.find(a => a.memberId === memberId && a.eventId === eventId);
+    const mId = (memberId || "").toLowerCase();
+    const current = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId);
     const newStatus = current?.status === "present" ? "absent" : "present";
-    const member = members.find(m => m.memberId === memberId);
+    const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
     
     setAttendance(prev => {
-      const exists = prev.some(a => a.memberId === memberId && a.eventId === eventId);
+      const exists = prev.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId);
       if (exists) {
-        return prev.map(a => a.memberId === memberId && a.eventId === eventId ? { ...a, status: newStatus } : a);
+        return prev.map(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a);
       }
       return [...prev, { memberId, eventId, status: newStatus }];
     });
@@ -64,13 +65,14 @@ function EventsPage() {
 
   const savePerformance = (memberId, eventId) => {
     const key = `${memberId}_${eventId}`;
+    const mId = (memberId || "").toLowerCase();
     const edits = perfEdits[key] || {};
     setPerformance(prev => {
-      const exists = prev.find(p => p.memberId === memberId && p.eventId === eventId);
-      if (exists) return prev.map(p => p.memberId === memberId && p.eventId === eventId ? { ...p, ...edits } : p);
+      const exists = prev.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId);
+      if (exists) return prev.map(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
       return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, ...edits }];
     });
-    const member = members.find(m => m.memberId === memberId);
+    const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
     const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
@@ -80,14 +82,18 @@ function EventsPage() {
   const evt = selectedEvent;
   const evtAtt = evt ? attendance.filter(a => a.eventId === evt.eventId) : [];
   const evtMembers = evt ? members.filter(m => {
-    const hasAtt = attendance.some(a => a.eventId === evt.eventId && a.memberId === m.memberId);
+    const mId = (m.memberId || "").toLowerCase();
+    const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").toLowerCase() === mId);
     const isActive = (m.status || "active") === "active";
     return hasAtt || isActive;
-  }).map(m => ({
-    ...m,
-    att: evtAtt.find(a => a.memberId === m.memberId),
-    perf: performance.find(p => p.memberId === m.memberId && p.eventId === evt.eventId)
-  })) : [];
+  }).map(m => {
+    const mId = (m.memberId || "").toLowerCase();
+    return {
+      ...m,
+      att: evtAtt.find(a => (a.memberId || "").toLowerCase() === mId),
+      perf: performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === evt.eventId)
+    };
+  }) : [];
 
   return (
     <div>

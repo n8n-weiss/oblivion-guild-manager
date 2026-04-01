@@ -51,7 +51,8 @@ function Dashboard() {
     recentEvents.forEach(ev => {
       const evPerf = performance.filter(p => p.eventId === ev.eventId).sort((a, b) => b.totalScore - a.totalScore).slice(0, 2);
       evPerf.forEach(p => {
-        const member = activeMembers.find(m => m.memberId === p.memberId);
+        const pId = (p.memberId || "").toLowerCase();
+        const member = activeMembers.find(m => (m.memberId || "").toLowerCase() === pId);
         if (member) {
           feed.push({
             id: `feed-${ev.eventId}-${p.memberId}`,
@@ -90,7 +91,8 @@ function Dashboard() {
     
     return parties.map((pMembers, idx) => {
       const totalStrength = pMembers.reduce((sum, pm) => {
-        const lbEntry = lb.find(l => l.memberId === pm.memberId);
+        const pmId = (pm.memberId || "").toLowerCase();
+        const lbEntry = lb.find(l => (l.memberId || "").toLowerCase() === pmId);
         return sum + (lbEntry ? lbEntry.totalScore : 0);
       }, 0);
       const avgStrength = pMembers.length > 0 ? Math.round(totalStrength / pMembers.length) : 0;
@@ -450,8 +452,9 @@ function Dashboard() {
               let topScorer = null;
               let topScore = -Infinity;
               evPerf.forEach(p => {
-                const member = activeMembers.find(m => m.memberId === p.memberId);
-                const att = evAtt.find(a => a.memberId === p.memberId);
+                const pId = (p.memberId || "").toLowerCase();
+                const member = activeMembers.find(m => (m.memberId || "").toLowerCase() === pId);
+                const att = evAtt.find(a => (a.memberId || "").toLowerCase() === pId);
                 const s = computeScore({ event: ev, att, perf: p });
                 if (s > topScore) { topScore = s; topScorer = member; }
               });

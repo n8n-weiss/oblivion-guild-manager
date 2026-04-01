@@ -44,9 +44,10 @@ function LeaderboardPage({ onViewProfile }) {
   // EO leaderboard
   const eoEvents = events.filter(e => e.eventType === "Emperium Overrun");
   const eoLb = useMemo(() => activeMembers.map(member => {
-    const memberRatings = eoRatings.filter(r => r.memberId === member.memberId);
+    const mId = (member.memberId || "").toLowerCase();
+    const memberRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
+    const eoPresent = eoEvents.filter(ev => attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId && a.status === "present")).length;
     const totalEoScore = memberRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
-    const eoPresent = eoEvents.filter(ev => attendance.find(a => a.memberId === member.memberId && a.eventId === ev.eventId && a.status === "present")).length;
     const avgRating = memberRatings.length > 0 ? Math.round((totalEoScore / memberRatings.length) * 10) / 10 : 0;
     return { ...member, totalEoScore, eoPresent, eoTotal: eoEvents.length, avgRating };
   }).sort((a, b) => b.totalEoScore - a.totalEoScore).map((m, i) => ({ ...m, eoRank: i + 1 }))

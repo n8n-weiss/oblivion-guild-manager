@@ -67,15 +67,20 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   }
 
   const memberIdx = members.findIndex(m => m.memberId === member.memberId);
+  const mId = (member.memberId || "").toLowerCase();
   const memberEvents = events.map(ev => {
-    const att = attendance.find(a => a.memberId === member.memberId && a.eventId === ev.eventId);
-    const perf = performance.find(p => p.memberId === member.memberId && p.eventId === ev.eventId);
-    const eoRating = eoRatings.find(r => r.memberId === member.memberId && r.eventId === ev.eventId);
+    const att = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId);
+    const perf = performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === ev.eventId);
+    const eoRating = eoRatings.find(r => (r.memberId || "").toLowerCase() === mId && r.eventId === ev.eventId);
     const score = ev.eventType === "Guild League" && att?.status === "present"
       ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0;
     return { ...ev, att, perf, eoRating, score };
   }).sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
-    .filter(e => !member.joinDate || new Date(e.eventDate) >= new Date(member.joinDate));
+    .filter(e => {
+      if (!member.joinDate) return true;
+      if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
+      return e.att || e.perf || e.eoRating;
+    });
 
   const glEvents = memberEvents.filter(e => e.eventType === "Guild League");
   const eoEvents = memberEvents.filter(e => e.eventType === "Emperium Overrun");

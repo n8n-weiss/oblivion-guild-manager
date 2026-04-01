@@ -24,15 +24,24 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     let consecutiveAbsent = 0;
     let tempConsecutive = 0;
 
-    // Filter events based on member's Join Date
-    const eligibleEvents = events.filter(e => !member.joinDate || new Date(e.eventDate) >= new Date(member.joinDate));
+    const mId = (member.memberId || "").toLowerCase();
+
+    // Filter events: include if after Join Date OR if member has explicit data for it
+    const eligibleEvents = events.filter(e => {
+      if (!member.joinDate) return true;
+      if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
+      const hasAtt = attendance.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === e.eventId);
+      const hasPerf = performance.some(p => (p.memberId || "").toLowerCase() === mId && p.eventId === e.eventId);
+      return hasAtt || hasPerf;
+    });
+
     const glEvents = eligibleEvents.filter(e => e.eventType === "Guild League");
     const eventCount = eligibleEvents.length;
     const glCount = glEvents.length;
 
     eligibleEvents.forEach((event) => {
-      const att = attendance.find((a) => a.memberId === member.memberId && a.eventId === event.eventId);
-      const perf = performance.find((p) => p.memberId === member.memberId && p.eventId === event.eventId);
+      const att = attendance.find((a) => (a.memberId || "").toLowerCase() === mId && a.eventId === event.eventId);
+      const perf = performance.find((p) => (p.memberId || "").toLowerCase() === mId && p.eventId === event.eventId);
       if (att?.status === "present") {
         presentCount++;
         tempConsecutive = 0;
@@ -57,7 +66,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     else if (totalScore >= 40) classification = "Casual";
 
     // EO-based calculations
-    const memberEoRatings = eoRatings.filter(r => r.memberId === member.memberId);
+    const memberEoRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
     const totalEoScore = memberEoRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
     const avgEoRating = memberEoRatings.length > 0 ? Math.round((totalEoScore / memberEoRatings.length) * 10) / 10 : 0;
 
