@@ -1,4 +1,4 @@
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
   :root {
     --bg-deepest: #04060b;
@@ -14,8 +14,8 @@
     --success-light: rgba(34, 197, 94, 0.08);
     --warning-light: rgba(234, 179, 8, 0.08);
     --error-light: rgba(239, 68, 68, 0.08);
-    --glass-blur: blur(20px);
-    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+    --glass-blur: blur(25px);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
     --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
 
     /* Class Colors */
@@ -170,7 +170,7 @@
   }
 
   body {
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Outfit', sans-serif;
     font-size: 16px;
     background: var(--bg-deepest);
     color: var(--text-primary);
@@ -327,7 +327,8 @@
     flex: 1;
     padding: 36px 44px;
     min-height: 100vh;
-    background: radial-gradient(ellipse at 20% 0%, rgba(99, 130, 230, 0.05) 0%, transparent 60%);
+    background: transparent;
+    position: relative;
   }
 
   .page-header {
@@ -1639,4 +1640,44 @@
     align-items: stretch !important;
     gap: 12px;
   }
+}
+
+/* Ambient Background Effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 30% 20%, rgba(99, 130, 230, 0.05) 0%, transparent 40%),
+              radial-gradient(circle at 70% 80%, rgba(224, 92, 138, 0.03) 0%, transparent 40%);
+  z-index: -1;
+  animation: ambientRotate 60s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ambientRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-deepest);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 130, 230, 0.2);
+  border-radius: 10px;
+  border: 2px solid var(--bg-deepest);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 130, 230, 0.4);
 }

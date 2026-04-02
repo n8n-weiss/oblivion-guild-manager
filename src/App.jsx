@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { auth } from "./firebase";
 import { signOut } from "firebase/auth";
 import { useGuild } from "./context/GuildContext";
@@ -27,6 +28,20 @@ import AuditLogPage from "./pages/AuditLogPage";
 import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import RequestsPage from "./pages/RequestsPage";
+import { CardSkeleton } from "./components/ui/Skeleton";
+
+const PageWrapper = ({ children, id }) => (
+  <motion.div
+    key={id}
+    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+    animate={{ opacity: 1, y: 0, scale: 1 }}
+    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+    transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+    style={{ width: '100%', height: '100%' }}
+  >
+    {children}
+  </motion.div>
+);
 
 export default function App() {
   const {
@@ -72,9 +87,23 @@ export default function App() {
   if (!currentUser) return <LoginPage />;
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg-deepest)", flexDirection: "column", gap: 16 }}>
-      <div style={{ fontFamily: "Cinzel,serif", fontSize: 28, color: "var(--accent)", textShadow: "0 0 20px rgba(99,130,230,0.5)" }}>OBLIVION</div>
-      <div style={{ color: "var(--text-muted)", fontSize: 13, letterSpacing: 3, textTransform: "uppercase" }}>Loading Guild Data...</div>
+    <div className="app-root">
+      <nav className="sidebar" style={{ opacity: 0.5 }}>
+        <div className="sidebar-logo">
+          <div style={{ fontFamily: "Cinzel,serif", fontSize: 28, color: "var(--accent)" }}>OBLIVION</div>
+        </div>
+      </nav>
+      <main className="main-content">
+        <div className="page-header">
+          <div style={{ width: 200, height: 32, background: 'rgba(255,255,255,0.05)', borderRadius: 8 }} />
+        </div>
+        <div className="grid-2">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      </main>
     </div>
   );
 
@@ -123,8 +152,17 @@ export default function App() {
             if (isMember && item.id === "members") label = "My Profile";
 
             return (
-              <div key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => { setPage(item.id); setProfileMember(null); }}
-                style={{ justifyContent: "space-between" }}>
+              <motion.div 
+                key={item.id} 
+                className={`nav-item ${page === item.id ? "active" : ""}`} 
+                onClick={() => { setPage(item.id); setProfileMember(null); }}
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.05 * NAV_ITEMS.findIndex(i => i.id === item.id) }}
+                whileHover={{ x: 4 }}
+                whileTap={{ scale: 0.98 }}
+                style={{ justifyContent: "space-between" }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <Icon name={item.id === "members" && isMember ? "user" : item.icon} size={16} />
                   {label}
@@ -139,7 +177,7 @@ export default function App() {
                     {pendingRequestsCount}
                   </span>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -230,77 +268,106 @@ export default function App() {
       {/* Main Content Areas */}
       <main className="main-content">
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
-        {page === "dashboard" && <Dashboard />}
+        
+        <AnimatePresence mode="wait">
+          {page === "dashboard" && (
+            <PageWrapper id="dashboard">
+              <Dashboard />
+            </PageWrapper>
+          )}
 
-        {page === "members" && (
-          isMember ? (
-            members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
-              <MemberProfilePage
-                member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
-                isOwnProfile={true}
-              />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-muted)", textAlign: "center", padding: 20 }}>
-                <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
-                <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
-                <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
-                  Your account is not linked to any active guild member in the current roster.<br /><br />
-                  If the database was recently wiped for update, please wait for an Admin to upload the new roster.
-                </div>
-              </div>
-            )
-          ) : (
-            profileMember ? (
-              <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
-            ) : (
-              <MembersPage onViewProfile={setProfileMember} />
-            )
-          )
-        )}
+          {page === "members" && (
+            <PageWrapper id={profileMember ? `profile-${profileMember.memberId}` : "members"}>
+              {isMember ? (
+                members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
+                  <MemberProfilePage
+                    member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
+                    isOwnProfile={true}
+                  />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-muted)", textAlign: "center", padding: 20 }}>
+                    <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
+                    <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
+                    <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                      Your account is not linked to any active guild member in the current roster.<br /><br />
+                      If the database was recently wiped for update, please wait for an Admin to upload the new roster.
+                    </div>
+                  </div>
+                )
+              ) : (
+                profileMember ? (
+                  <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
+                ) : (
+                  <MembersPage onViewProfile={setProfileMember} />
+                )
+              )}
+            </PageWrapper>
+          )}
 
-        {page === "events" && (
-          <EventsPage />
-        )}
+          {page === "events" && (
+            <PageWrapper id="events">
+              <EventsPage />
+            </PageWrapper>
+          )}
 
-        {page === "absences" && (
-          <AbsencesPage />
-        )}
+          {page === "absences" && (
+            <PageWrapper id="absences">
+              <AbsencesPage />
+            </PageWrapper>
+          )}
 
-        {page === "leaderboard" && !profileMember && (
-          <LeaderboardPage onViewProfile={setProfileMember} />
-        )}
+          {page === "leaderboard" && (
+            <PageWrapper id={profileMember ? `profile-lb-${profileMember.memberId}` : "leaderboard"}>
+                {profileMember ? (
+                  <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
+                ) : (
+                  <LeaderboardPage onViewProfile={setProfileMember} />
+                )}
+            </PageWrapper>
+          )}
 
-        {page === "leaderboard" && profileMember && (
-          <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
-        )}
+          {page === "party" && (
+            <PageWrapper id="party">
+              <PartyBuilder />
+            </PageWrapper>
+          )}
 
-        {page === "party" && (
-          <PartyBuilder />
-        )}
+          {page === "import" && (
+            <PageWrapper id="import">
+              <ImportPage />
+            </PageWrapper>
+          )}
 
-        {page === "import" && (
-          <ImportPage />
-        )}
+          {page === "report" && (
+            <PageWrapper id="report">
+              <WeeklyReportPage />
+            </PageWrapper>
+          )}
 
-        {page === "report" && (
-          <WeeklyReportPage />
-        )}
+          {page === "auction" && (
+            <PageWrapper id="auction">
+              <AuctionBuilder />
+            </PageWrapper>
+          )}
 
-        {page === "auction" && (
-          <AuctionBuilder />
-        )}
+          {page === "users" && isArchitect && (
+            <PageWrapper id="users">
+              <UserManagementPage />
+            </PageWrapper>
+          )}
 
-        {page === "users" && isArchitect && (
-          <UserManagementPage />
-        )}
+          {page === "auditlog" && isAdmin && (
+            <PageWrapper id="auditlog">
+              <AuditLogPage />
+            </PageWrapper>
+          )}
 
-        {page === "auditlog" && isAdmin && (
-          <AuditLogPage />
-        )}
-
-        {page === "requests" && isOfficer && (
-          <RequestsPage />
-        )}
+          {page === "requests" && isOfficer && (
+            <PageWrapper id="requests">
+              <RequestsPage />
+            </PageWrapper>
+          )}
+        </AnimatePresence>
       </main>
 
       {showTreasury && <TreasuryModal onClose={() => setShowTreasury(false)} />}

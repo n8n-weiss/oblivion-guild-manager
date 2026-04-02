@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
@@ -121,7 +122,13 @@ function LoginPage() {
       <div style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center", gap: 28, zIndex: 1, position: "relative" }}>
 
         {/* Logo */}
-        <div style={{ textAlign: "center" }} className="animate-float">
+        <motion.div 
+          initial={{ y: -30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          style={{ textAlign: "center" }} 
+          className="animate-float"
+        >
           <div style={{ position: "relative", display: "inline-block" }}>
             <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 160, height: 160, background: "radial-gradient(circle, var(--accent-light) 0%, transparent 70%)", borderRadius: "50%", zIndex: 0, filter: "blur(20px)" }} />
             <img
@@ -131,10 +138,15 @@ function LoginPage() {
             />
           </div>
           <div style={{ fontSize: 11, letterSpacing: 4, color: "var(--text-muted)", textTransform: "uppercase", marginTop: 16, textShadow: "0 2px 4px rgba(158, 158, 158, 0.72)" }}>Guild Portal</div>
-        </div>
+        </motion.div>
 
         {/* Card */}
-        <div className="login-card">
+        <motion.div 
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+          className="login-card"
+        >
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg,transparent,var(--accent),transparent)", opacity: 0.5 }} />
 
           <div style={{ display: "flex", background: "rgba(0,0,0,0.4)", borderRadius: 12, padding: 6, marginBottom: 32, boxShadow: "inset 0 4px 8px rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.05)", position: "relative", gap: 4 }}>
@@ -275,11 +287,16 @@ function LoginPage() {
               ⚠️ {error}
             </div>
           )}
-        </div>
+        </motion.div>
 
-        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: 1, zIndex: 1, backgroundColor: "rgba(8,10,15,0.5)", padding: "4px 12px", borderRadius: 12, backdropFilter: "blur(4px)", border: "1px solid var(--border)" }}>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1, duration: 1 }}
+          style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: 1, zIndex: 1, backgroundColor: "rgba(8,10,15,0.5)", padding: "4px 12px", borderRadius: 12, backdropFilter: "blur(4px)", border: "1px solid var(--border)" }}
+        >
           Need help? DM Masters and Officers in Discord.
-        </div>
+        </motion.div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { computeScore, computeLeaderboard } from '../utils/scoring';
@@ -137,9 +138,28 @@ function Dashboard() {
     return null;
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    show: { y: 0, opacity: 1 }
+  };
+
   return (
-    <div>
-      <div className="page-header flex justify-between items-end">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="show"
+    >
+      <motion.div variants={itemVariants} className="page-header flex justify-between items-end">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="page-title">📊 Dashboard</h1>
@@ -155,9 +175,9 @@ function Dashboard() {
             <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "var(--gold)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="stats-grid animate-slide-up">
+      <motion.div variants={itemVariants} className="stats-grid">
         <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
           <div className="stat-icon">⚔️</div>
           <div className="stat-label">Active Members</div>
@@ -194,9 +214,9 @@ function Dashboard() {
             ● This season
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="grid-2 mb-4 animate-slide-up" style={{ animationDelay: "0.1s" }}>
+      <motion.div variants={itemVariants} className="grid-2 mb-4">
         {/* Top 5 Players */}
         <div className="card">
           <div className="card-title">🏆 Top Players</div>
@@ -254,9 +274,9 @@ function Dashboard() {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="grid-2 mb-4 animate-slide-up" style={{ animationDelay: "0.15s" }}>
+      <motion.div variants={itemVariants} className="grid-2 mb-4">
         {/* Activity Feed */}
         <div className="card">
           <div className="card-title">📡 Guild Activity</div>
@@ -296,9 +316,9 @@ function Dashboard() {
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="card mb-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
+      <motion.div variants={itemVariants} className="card mb-4">
         <div className="card-title">📈 Guild Attendance Trend</div>
         <div style={{ minHeight: 220, width: "100%", marginTop: 20 }}>
           <ResponsiveContainer width="100%" height={220}>
@@ -337,9 +357,9 @@ function Dashboard() {
           </ResponsiveContainer>
         </div>
         <div className="text-xs text-muted mt-2">Attendance trend across last 10 guild events.</div>
-      </div>
+      </motion.div>
 
-      <div className="grid-2 animate-slide-up" style={{ animationDelay: "0.3s" }}>
+      <motion.div variants={itemVariants} className="grid-2">
         {/* Role Distribution + Class Breakdown */}
         <div className="card">
           <div className="card-title">📖 Role Distribution</div>
@@ -526,8 +546,8 @@ function Dashboard() {
             {events.length === 0 && <div className="text-muted text-sm" style={{ padding: "16px 0" }}>No events yet.</div>}
           </div>
         </div>
-      </div>
-      <div className="grid-2 animate-slide-up" style={{ animationDelay: "0.4s", marginTop: 20 }}>
+      </motion.div>
+      <motion.div variants={itemVariants} className="grid-2" style={{ marginTop: 20 }}>
         {/* Party Performance Comparison */}
         <div className="card">
           <div className="card-title">🛡️ Party Strength Comparison</div>
@@ -558,8 +578,8 @@ function Dashboard() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
