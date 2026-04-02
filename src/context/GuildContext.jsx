@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -130,166 +130,129 @@ export const GuildProvider = ({ children, initialData }) => {
           }
         }
 
-        // Step 2: Fetch everything in parallel
-        const [
-          rosterSnap,
-          eventsSnap,
-          attSnap,
-          perfSnap,
-          eoSnap,
-          absSnap,
-          metaSnap,
-          notifSnap,
-          reqSnap,
-          joinReqSnap
-        ] = await Promise.all([
-          getDocs(collection(db, "roster")),
-          getDocs(collection(db, "events")),
-          getDocs(collection(db, "attendance")),
-          getDocs(collection(db, "performance")),
-          getDocs(collection(db, "eoRatings")),
-          getDocs(collection(db, "absences")),
-          getDoc(doc(db, "metadata", "current")),
-          getDocs(collection(db, "notifications")),
-          getDocs(collection(db, "requests")),
-          getDocs(collection(db, "join_requests"))
-        ]);
+        // Track initial loads to hide spinner only when data is ready
+        let rosterLoaded = false;
+        let metaLoaded = false;
+        const checkReady = () => {
+          if (rosterLoaded && metaLoaded) setLoading(false);
+        };
 
-
-        const loadedMembers = rosterSnap.docs.map(d => d.data());
-        const loadedEvents = eventsSnap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
-
-        // Reconstruct flat attendance array from grouped docs
-        const flatAttendance = [];
-        attSnap.docs.forEach(d => {
-          const { eventId, members: attMembers } = d.data();
-          Object.entries(attMembers || {}).forEach(([memberId, status]) => {
-            flatAttendance.push({ eventId, memberId, status });
-          });
+        // Step 2: Initialize Real-time Listeners
+        const unsubRoster = onSnapshot(collection(db, "roster"), (snap) => {
+          const docs = snap.docs.map(d => d.data());
+          const finalDocs = docs.length ? docs : (initialData.INITIAL_MEMBERS || []);
+          setMembers(finalDocs);
+          prevData.current.members = [...finalDocs];
+          rosterLoaded = true;
+          checkReady();
         });
 
-        // Reconstruct flat performance array
-        const flatPerformance = [];
-        perfSnap.docs.forEach(d => {
-          const { eventId, members: perfMembers } = d.data();
-          Object.entries(perfMembers || {}).forEach(([memberId, metrics]) => {
-            flatPerformance.push({ ...metrics, eventId, memberId });
-          });
+        const unsubEvents = onSnapshot(collection(db, "events"), (snap) => {
+          const docs = snap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
+          const finalDocs = docs.length ? docs : (initialData.INITIAL_EVENTS || []);
+          setEvents(finalDocs);
+          prevData.current.events = [...finalDocs];
         });
 
-        // Reconstruct flat eoRatings
-        const flatEoRatings = [];
-        eoSnap.docs.forEach(d => {
-          const { eventId, ratings: rates } = d.data();
-          Object.entries(rates || {}).forEach(([memberId, rating]) => {
-            flatEoRatings.push({ eventId, memberId, rating });
-          });
+        const unsubAbsences = onSnapshot(collection(db, "absences"), (snap) => {
+          const docs = snap.docs.map(d => d.data());
+          setAbsences(docs);
+          prevData.current.absences = [...docs];
         });
 
-        const loadedAbsences = absSnap.docs.map(d => d.data());
-        const isNew = !metaSnap.exists();
-        const metadata = metaSnap.exists() ? metaSnap.data() : {};
-
-        setMembers(loadedMembers.length ? loadedMembers : (isNew ? initialData.INITIAL_MEMBERS || [] : []));
-        setEvents(loadedEvents.length ? loadedEvents : (isNew ? initialData.INITIAL_EVENTS || [] : []));
-        setAttendance(flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []));
-        setPerformance(flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []));
-        setAbsences(loadedAbsences);
-        
-        const localPartiesStr = localStorage.getItem('guild_parties');
-        let localPartiesJson = null;
-        try { localPartiesJson = localPartiesStr ? JSON.parse(localPartiesStr) : null; } catch(e){}
-        
-        const localNamesStr = localStorage.getItem('guild_partyNames');
-        let localNamesJson = null;
-        try { localNamesJson = localNamesStr ? JSON.parse(localNamesStr) : null; } catch(e){}
-
-        const firestoreTs = metadata.lastUpdate ? new Date(metadata.lastUpdate).getTime() : 0;
-        const localPartiesTs = (localPartiesJson && typeof localPartiesJson === 'object' && !Array.isArray(localPartiesJson)) ? localPartiesJson.ts || 0 : 0;
-        const localNamesTs = (localNamesJson && typeof localNamesJson === 'object' && !Array.isArray(localNamesJson)) ? localNamesJson.ts || 0 : 0;
-
-        const cloudPartiesRaw = metadata.parties || [];
-        const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-        const localPartiesRaw = localPartiesJson?.data || (Array.isArray(localPartiesJson) ? localPartiesJson : []);
-        const localParties = localPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-        
-        const hasCloud = cloudParties.length > 0;
-        const hasLocal = localParties.length > 0;
-
-
-        // Decide parties
-        if (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) {
+        const unsubMetadata = onSnapshot(doc(db, "metadata", "current"), (snap) => {
+          const data = snap.exists() ? snap.data() : {};
+          
+          // Sync Parties
+          const cloudPartiesRaw = data.parties || [];
+          const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setParties(cloudParties);
-          localStorage.setItem('guild_parties', JSON.stringify({ data: cloudParties, ts: firestoreTs }));
-        } else if (hasLocal) {
-          setParties(localParties);
-        } else {
-          setParties([]);
-        }
+          prevData.current.parties = [...cloudParties];
 
-        // Decide partyNames
-        const cloudNames = metadata.partyNames || [];
-        const localNames = localNamesJson?.data || (Array.isArray(localNamesJson) ? localNamesJson : []);
-        if (cloudNames.length > 0 && (firestoreTs >= localNamesTs || localNames.length === 0)) {
-          setPartyNames(cloudNames);
-          localStorage.setItem('guild_partyNames', JSON.stringify({ data: cloudNames, ts: firestoreTs }));
-        }
-        
-        setEoRatings(flatEoRatings);
-        setAuctionSessions(metadata.auctionSessions || []);
-        setAuctionTemplates(metadata.auctionTemplates || []);
-        setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
-        setRequests(reqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-        setJoinRequests(joinReqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-        setDiscordConfig(metadata.discord || { webhookUrl: "" });
-
-
-        // Load raidParties — prefer Firestore over localStorage
-        const cloudRaidRaw = metadata.raidParties || [];
-        const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-        const localRaidStr = localStorage.getItem('guild_raidParties');
-        let localRaid = [];
-        try { const lr = localRaidStr ? JSON.parse(localRaidStr) : null; localRaid = (lr?.data || (Array.isArray(lr) ? lr : [])).map(p => Array.isArray(p) ? p : (p.members || [])); } catch {}
-        if (cloudRaid.length > 0) {
+          // Sync Raid Parties
+          const cloudRaidRaw = data.raidParties || [];
+          const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setRaidParties(cloudRaid);
-          localStorage.setItem('guild_raidParties', JSON.stringify({ data: cloudRaid, ts: firestoreTs }));
-        } else if (localRaid.length > 0) {
-          setRaidParties(localRaid);
-        }
-        // Load raidPartyNames
-        const cloudRaidNames = metadata.raidPartyNames || [];
-        const localRaidNamesStr = localStorage.getItem('guild_raidPartyNames');
-        let localRaidNames = [];
-        try { const ln = localRaidNamesStr ? JSON.parse(localRaidNamesStr) : null; localRaidNames = ln?.data || (Array.isArray(ln) ? ln : []); } catch {}
-        if (cloudRaidNames.length > 0) {
-          setRaidPartyNames(cloudRaidNames);
-          localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: cloudRaidNames, ts: firestoreTs }));
-        } else if (localRaidNames.length > 0) {
-          setRaidPartyNames(localRaidNames);
-        }
+          prevData.current.raidParties = [...cloudRaid];
 
-        // Initialize prevData
-        const finalParties = (hasCloud && (firestoreTs >= localPartiesTs || !hasLocal)) ? cloudParties : localParties;
-        const finalNames = (cloudNames.length > 0 && (firestoreTs >= localNamesTs || localNames.length === 0)) ? cloudNames : localNames;
+          // Sync Configs
+          setAuctionSessions(data.auctionSessions || []);
+          setAuctionTemplates(data.auctionTemplates || []);
+          setDiscordConfig(data.discord || { webhookUrl: "" });
+          prevData.current.auctionSessions = [...(data.auctionSessions || [])];
+          prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
+          prevData.current.discordConfig = { ...(data.discord || { webhookUrl: "" }) };
+          
+          if (data.partyNames) {
+            setPartyNames(data.partyNames);
+            prevData.current.partyNames = [...data.partyNames];
+          }
+          if (data.raidPartyNames) setRaidPartyNames(data.raidPartyNames);
+          
+          metaLoaded = true;
+          checkReady();
+        });
 
-        prevData.current = {
-          members: loadedMembers.length ? loadedMembers : (isNew ? initialData.INITIAL_MEMBERS || [] : []),
-          events: loadedEvents.length ? loadedEvents : (isNew ? initialData.INITIAL_EVENTS || [] : []),
-          attendance: flatAttendance.length ? flatAttendance : (isNew ? initialData.INITIAL_ATTENDANCE || [] : []),
-          performance: flatPerformance.length ? flatPerformance : (isNew ? initialData.INITIAL_PERFORMANCE || [] : []),
-          absences: loadedAbsences,
-          parties: finalParties,
-          partyNames: finalNames,
-          eoRatings: flatEoRatings,
-          auctionSessions: metadata.auctionSessions || [],
-          auctionTemplates: metadata.auctionTemplates || [],
-          discordConfig: metadata.discord || { webhookUrl: "" }
+        const unsubNotifs = onSnapshot(collection(db, "notifications"), (snap) => {
+          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts));
+          setNotifications(docs);
+        });
+
+        const unsubReqs = onSnapshot(collection(db, "requests"), (snap) => {
+          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setRequests(docs);
+        });
+
+        const unsubJoinReqs = onSnapshot(collection(db, "join_requests"), (snap) => {
+          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setJoinRequests(docs);
+        });
+
+        const unsubAtt = onSnapshot(collection(db, "attendance"), (snap) => {
+          const flat = [];
+          snap.docs.forEach(d => {
+            const { eventId, members: attMembers } = d.data();
+            Object.entries(attMembers || {}).forEach(([memberId, status]) => {
+              flat.push({ eventId, memberId, status });
+            });
+          });
+          setAttendance(flat);
+          prevData.current.attendance = [...flat];
+        });
+
+        const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
+          const flat = [];
+          snap.docs.forEach(d => {
+            const { eventId, members: perfMembers } = d.data();
+            Object.entries(perfMembers || {}).forEach(([memberId, metrics]) => {
+              flat.push({ ...metrics, eventId, memberId });
+            });
+          });
+          setPerformance(flat);
+          prevData.current.performance = [...flat];
+        });
+
+        const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
+          const flat = [];
+          snap.docs.forEach(d => {
+            const { eventId, ratings: rates } = d.data();
+            Object.entries(rates || {}).forEach(([memberId, rating]) => {
+              flat.push({ eventId, memberId, rating });
+            });
+          });
+          setEoRatings(flat);
+          prevData.current.eoRatings = [...flat];
+        });
+
+        return () => {
+          unsubRoster(); unsubEvents(); unsubAbsences(); unsubMetadata();
+          unsubNotifs(); unsubReqs(); unsubJoinReqs(); unsubAtt();
+          unsubPerf(); unsubEo();
         };
 
 
       } catch (err) {
         console.error("Firebase load error:", err);
-      } finally {
         setLoading(false);
       }
     };
