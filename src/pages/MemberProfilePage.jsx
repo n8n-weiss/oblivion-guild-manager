@@ -27,7 +27,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     members, events, attendance, performance, absences, eoRatings, 
     notifications, markNotifRead,
     requests, submitRequest,
-    isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser 
+    isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
+    auctionSessions
   } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -260,6 +261,23 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     else break;
   }
   const toggleCollapse = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // 9. My Loot History from Auction Builder
+  const myLootHistory = useMemo(() => {
+    const entries = [];
+    (auctionSessions || []).forEach(session => {
+      const memberEntry = (session.members || []).find(sm => sm.memberId === member.memberId);
+      if (!memberEntry) return;
+      (session.columns || []).forEach(col => {
+        const key = `${member.memberId}_${col.id}`;
+        const tags = (session.cells || {})[key] || [];
+        if (tags.length > 0) {
+          entries.push({ session: session.name, date: session.date, column: col.name, tags });
+        }
+      });
+    });
+    return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [auctionSessions, member.memberId]);
 
   // --- Participation Heatmap Logic ---
   const heatmapData = useMemo(() => {
@@ -716,6 +734,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           { id: "achievements", label: "🏆 Achievements" },
           { id: "notifications", label: `🔔 Alerts ${unreadCount > 0 ? `(${unreadCount})` : ''}` },
           { id: "absences", label: `⚠️ Absences (${memberAbsences.length})` },
+          ...(isOwnProfile ? [{ id: "mystats", label: "✨ My Stats" }] : []),
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             style={{
@@ -1018,7 +1037,127 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       )}
 
+      {/* Tab: My Stats (Own profile only) */}
+      {activeTab === "mystats" && isOwnProfile && (() => {
+        const radius = 52;
+        const circumference = 2 * Math.PI * radius;
+        const strokeDash = (attPct / 100) * circumference;
+        const attColor = attPct >= 75 ? "var(--green)" : attPct >= 50 ? "var(--gold)" : "var(--red)";
+        return (
+          <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Row 1: Vanguard Profile Card + Attendance Ring */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div className="card" style={{ background: `linear-gradient(135deg, ${theme.color}12, rgba(10,14,24,0.8))`, border: `1px solid ${theme.color}33`, padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: theme.color, marginBottom: 16, fontWeight: 800 }}>⚔️ Vanguard Profile</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                  <MemberAvatar ign={member.ign} index={memberIdx} size={56} memberClass={member.class} glScore={totalGLScore} hexagon />
+                  <div>
+                    <div style={{ fontFamily: "Cinzel,serif", fontWeight: 900, fontSize: 18, color: "#fff", textShadow: `0 0 20px ${theme.color}66` }}>{member.ign}</div>
+                    <div style={{ fontSize: 11, color: theme.color, fontWeight: 700, marginTop: 2 }}>{theme.icon} {member.class}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>ID: {member.memberId}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span className="badge badge-premium" style={{ background: theme.color, fontSize: 11 }}>{theme.icon} {member.class}</span>
+                  <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 11 }}>{member.role}</span>
+                  <span className="badge" style={{ background: `${rankInfo.color}22`, color: rankInfo.color, border: `1px solid ${rankInfo.color}`, fontSize: 10 }}>{rankInfo.rank} · LV.{level}</span>
+                  {member.guildRank && member.guildRank !== "Member" && (
+                    <span className="badge" style={{ background: "rgba(240,192,64,0.1)", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)", fontSize: 10 }}>🏅 {member.guildRank}</span>
+                  )}
+                </div>
+                {member.motto && (
+                  <div style={{ marginTop: 16, fontStyle: "italic", color: "var(--text-secondary)", fontSize: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>"{member.motto}"</div>
+                )}
+              </div>
+
+              {/* Attendance Ring */}
+              <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 800 }}>📋 War Duty Score</div>
+                <div style={{ position: "relative", width: 140, height: 140 }}>
+                  <svg width="140" height="140" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="70" cy="70" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="10" />
+                    <circle
+                      cx="70" cy="70" r={radius} fill="none"
+                      stroke={attColor}
+                      strokeWidth="10"
+                      strokeLinecap="round"
+                      strokeDasharray={`${strokeDash} ${circumference}`}
+                      style={{ filter: `drop-shadow(0 0 8px ${attColor})`, transition: "stroke-dasharray 1s cubic-bezier(0.4,0,0.2,1)" }}
+                    />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
+                    <div style={{ fontFamily: "Cinzel,serif", fontWeight: 900, fontSize: 28, color: attColor, textShadow: `0 0 16px ${attColor}66` }}>{attPct}%</div>
+                    <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Attendance</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{presentCount} of {memberEvents.length} events</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Status: <span style={{ color: attColor, fontWeight: 700 }}>{attStatus.label}</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Quick Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {[
+                { label: "Total GL Score", value: totalGLScore, icon: "⚔️", color: "var(--gold)" },
+                { label: "Avg GL / War", value: avgGL || "—", icon: "📊", color: "var(--accent)" },
+                { label: "Absences Filed", value: memberAbsences.length, icon: "⚠️", color: memberAbsences.length > 3 ? "var(--red)" : "var(--green)" },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: `${stat.color}0A`, border: `1px solid ${stat.color}22`, borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>{stat.icon}</div>
+                  <div style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 900, color: stat.color }}>{stat.value}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4, textTransform: "uppercase", letterSpacing: 1 }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 3: My Loot History */}
+            <div className="card">
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "var(--gold)", fontWeight: 800, flex: 1 }}>💎 My Loot History</div>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{myLootHistory.length} entries</span>
+              </div>
+              {myLootHistory.length === 0 ? (
+                <div className="empty-state" style={{ padding: "24px 0" }}>
+                  <div className="empty-state-icon">📦</div>
+                  <div className="empty-state-text">No loot recorded yet.</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Items from Auction Builder sessions will appear here.</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {myLootHistory.map((entry, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
+                      background: "rgba(240,192,64,0.04)", border: "1px solid rgba(240,192,64,0.12)",
+                      borderRadius: 12, borderLeft: "3px solid var(--gold)"
+                    }}>
+                      <div style={{ fontSize: 20 }}>💎</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{entry.column}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{entry.session} · {entry.date}</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {entry.tags.map((tag, ti) => (
+                          <span key={ti} style={{
+                            fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20,
+                            background: tag.toLowerCase().includes("upto") ? "rgba(240,192,64,0.15)" : tag.toLowerCase().includes("rw") ? "rgba(224,92,138,0.15)" : "rgba(64,201,122,0.15)",
+                            color: tag.toLowerCase().includes("upto") ? "var(--gold)" : tag.toLowerCase().includes("rw") ? "var(--accent2)" : "var(--green)",
+                            border: `1px solid ${tag.toLowerCase().includes("upto") ? "rgba(240,192,64,0.3)" : tag.toLowerCase().includes("rw") ? "rgba(224,92,138,0.3)" : "rgba(64,201,122,0.3)"}`
+                          }}>{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Profile Request Modal Placeholder (Already correctly handled below usually) */}
+
       {showRequestModal && (
         <div className="modal-overlay" style={{ display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div className="card animate-fade-in" style={{ maxWidth: 450, border: "2px solid var(--accent)" }}>

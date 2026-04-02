@@ -3,6 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from '../utils/audit';
 import Icon from '../components/ui/icons';
+import ConfettiEffect from '../components/effects/ConfettiEffect';
 
 function RequestsPage() {
   const { 
@@ -12,6 +13,7 @@ function RequestsPage() {
   } = useGuild();
   
   const [subTab, setSubTab] = useState("profile"); // profile, join
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const pendingRequests = requests.filter(r => r.status === "pending");
   const pendingJoin = joinRequests.filter(r => r.status === "pending");
@@ -62,6 +64,7 @@ function RequestsPage() {
   const handleApproveJoin = async (r) => {
     const success = await approveJoinRequest(r.id);
     if (success) {
+      setShowConfetti(true);
       await writeAuditLog(
         currentUser.email,
         currentUser.displayName || currentUser.email,
@@ -106,6 +109,7 @@ function RequestsPage() {
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <ConfettiEffect active={showConfetti} onDone={() => setShowConfetti(false)} />
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 32, marginBottom: 8 }}>📝 Request Manager</h1>

@@ -1714,3 +1714,149 @@ body::before {
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--border-bright);
 }
+
+/* ── MICRO-INTERACTIONS ── */
+
+/* Button Ripple Effect */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(255,255,255,0.25) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.btn:active::after {
+  opacity: 1;
+  transition: opacity 0s;
+}
+
+/* Enhanced Card Hover Glow */
+.card {
+  transition: transform 0.22s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.22s cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 0.22s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px var(--border-bright), 0 0 20px rgba(99,130,230,0.08);
+}
+
+/* Sidebar nav item — animated active border glow */
+@keyframes navActivePulse {
+  0%, 100% { box-shadow: inset 3px 0 0 var(--accent), 4px 0 16px rgba(99,130,230,0.2); }
+  50%       { box-shadow: inset 3px 0 0 var(--accent), 4px 0 24px rgba(99,130,230,0.4); }
+}
+
+.nav-item.active {
+  animation: navActivePulse 2.5s ease-in-out infinite;
+}
+
+/* Requesting badge pulse animation */
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+  50%       { transform: scale(1.15); box-shadow: 0 0 16px rgba(239,68,68,0.8); }
+}
+
+/* Apply to pending badge span in sidebar */
+.nav-item span[style*="var(--red)"] {
+  animation: badgePulse 1.6s ease-in-out infinite;
+}
+
+/* Page header title — subtle shimmer glow on load */
+@keyframes titleGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(99,130,230,0.3); }
+  50%       { text-shadow: 0 0 40px rgba(99,130,230,0.6), 0 0 80px rgba(99,130,230,0.2); }
+}
+
+.page-title {
+  animation: titleGlow 4s ease-in-out infinite;
+}
+
+/* Stat card / dashboard card number counter feel */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stat-value {
+  animation: countUp 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Table row hover — subtle accent highlight */
+tbody tr {
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+tbody tr:hover {
+  background: rgba(99, 130, 230, 0.05) !important;
+}
+
+/* Nav item left hover slide */
+.nav-item {
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* Input focus glow ring */
+.form-input:focus,
+.form-select:focus {
+  box-shadow: 0 0 0 2px rgba(99, 130, 230, 0.3), 0 0 12px rgba(99, 130, 230, 0.15);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Button primary hover — lift & glow */
+.btn-primary {
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+              filter 0.18s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(99, 130, 230, 0.4);
+  filter: brightness(1.12);
+}
+
+.btn-primary:active {
+  transform: translateY(0px);
+  box-shadow: 0 2px 8px rgba(99, 130, 230, 0.3);
+}
+
+/* Ghost button hover */
+.btn-ghost:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+/* Mobile bottom nav active indicator bounce */
+@keyframes mobileNavPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25) translateY(-3px); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+.mobile-nav-item.active svg,
+.mobile-nav-item.active span:first-child {
+  animation: mobileNavPop 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Smooth fade in for all cards */
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.card {
+  animation: cardReveal 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
