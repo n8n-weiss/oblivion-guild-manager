@@ -9,7 +9,7 @@ function EventsPage() {
   const {
     members, events, setEvents, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
-    showToast, isAdmin, currentUser
+    showToast, isAdmin, currentUser, sendDiscordEmbed
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const [showModal, setShowModal] = useState(false);
@@ -43,6 +43,20 @@ function EventsPage() {
     setAttendance(prev => [...prev, ...newAtt]);
     showToast("Event created with attendance loaded", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
+    
+    // Discord Notification
+    sendDiscordEmbed(
+      "📅 New Event Scheduled",
+      `Isang bagong guild event ang itinakda! Siguraduhin na i-check ang inyong attendance.`,
+      0x6382E6, // Blue
+      [
+        { name: "Event Type", value: form.eventType, inline: true },
+        { name: "Date", value: form.eventDate, inline: true },
+        { name: "Note", value: "Auto-loaded na ang inyong attendance base sa inyong LOA filings." }
+      ],
+      "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
+    );
+
     setShowModal(false);
   };
 

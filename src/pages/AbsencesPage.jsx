@@ -4,7 +4,7 @@ import Icon from '../components/ui/icons';
 import { writeAuditLog } from "./AuditLogPage";
 
 function AbsencesPage() {
-  const { members, absences, setAbsences, showToast, currentUser } = useGuild();
+  const { members, absences, setAbsences, showToast, currentUser, sendDiscordEmbed } = useGuild();
   const [form, setForm] = useState({
     memberId: members?.[0]?.memberId || "",
     eventType: "Guild League",
@@ -20,6 +20,20 @@ function AbsencesPage() {
     const member = members.find(m => m.memberId === form.memberId);
     showToast("Absence submitted successfully", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Submitted absence for ${member?.ign} — ${form.eventType} ${form.eventDate}: "${form.reason}"`);
+    
+    // Discord Notification
+    sendDiscordEmbed(
+      "🚨 New Absence Filed",
+      `Si **${member?.ign}** ay nag-file ng absence para sa upcoming event.`,
+      0xE05050, // Red
+      [
+        { name: "Member", value: member?.ign || form.memberId, inline: true },
+        { name: "Event", value: `${form.eventType} (${form.eventDate})`, inline: true },
+        { name: "Reason", value: form.reason },
+        { name: "Will be Online?", value: form.onlineStatus, inline: true }
+      ]
+    );
+
     setForm(f => ({ ...f, reason: "" }));
   };
 
@@ -29,6 +43,17 @@ function AbsencesPage() {
     setAbsences(prev => prev.filter(a => a.id !== id));
     showToast("Absence removed", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_delete", `Removed absence for ${member?.ign} — ${absence?.eventType} ${absence?.eventDate}`);
+    
+    // Discord Notification
+    sendDiscordEmbed(
+      "✅ Absence Removed",
+      `Ang absence record ni **${member?.ign}** ay kinuha na/binura.`,
+      0x40C97A, // Green
+      [
+        { name: "Member", value: member?.ign || absence?.memberId, inline: true },
+        { name: "Event", value: `${absence?.eventType} (${absence?.eventDate})`, inline: true }
+      ]
+    );
   };
 
   return (

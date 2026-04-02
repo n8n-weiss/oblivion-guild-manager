@@ -48,6 +48,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "" });
 
   const [raidParties, setRaidParties] = useState(() => {
     try {
@@ -240,6 +241,7 @@ export const GuildProvider = ({ children, initialData }) => {
         setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
         setRequests(reqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
         setJoinRequests(joinReqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        setDiscordConfig(metadata.discord || { webhookUrl: "" });
 
 
         // Load raidParties — prefer Firestore over localStorage
@@ -280,7 +282,8 @@ export const GuildProvider = ({ children, initialData }) => {
           partyNames: finalNames,
           eoRatings: flatEoRatings,
           auctionSessions: metadata.auctionSessions || [],
-          auctionTemplates: metadata.auctionTemplates || []
+          auctionTemplates: metadata.auctionTemplates || [],
+          discordConfig: metadata.discord || { webhookUrl: "" }
         };
 
 
@@ -379,14 +382,14 @@ export const GuildProvider = ({ children, initialData }) => {
           changesCount++;
         }
 
-        // 6. Save metadata
         if (
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
           JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
           JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
           JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
-          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames)
+          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
+          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig)
         ) {
           // Wrap nested arrays for Firestore
           const wrappedParties = parties.map(p => ({ members: p }));
@@ -395,6 +398,7 @@ export const GuildProvider = ({ children, initialData }) => {
             parties: wrappedParties, partyNames,
             raidParties: wrappedRaids, raidPartyNames,
             auctionSessions, auctionTemplates,
+            discord: discordConfig,
             lastUpdate: new Date().toISOString()
           });
           prevData.current.parties = [...parties];
@@ -403,6 +407,7 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.auctionTemplates = [...auctionTemplates];
           prevData.current.raidParties = [...raidParties];
           prevData.current.raidPartyNames = [...raidPartyNames];
+          prevData.current.discordConfig = { ...discordConfig };
           changesCount++;
         }
 
@@ -471,6 +476,43 @@ export const GuildProvider = ({ children, initialData }) => {
     const docRef = await setDoc(doc(collection(db, "notifications")), notif);
     setNotifications(prev => [notif, ...prev]);
     showToast("Notification sent", "success");
+  };
+
+  const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null) => {
+    if (!discordConfig?.webhookUrl) {
+      showToast("Discord Webhook URL not set. Please go to Import > Discord.", "error");
+      throw new Error("Webhook URL missing");
+    }
+
+    try {
+      const embed = {
+        title,
+        description,
+        color,
+        fields,
+        timestamp: new Date().toISOString(),
+        footer: { text: "Oblivion Guild Portal" }
+      };
+
+      if (thumbnail) embed.thumbnail = { url: thumbnail };
+
+      const response = await fetch(discordConfig.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: [embed] })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Discord API Error:", errorData);
+        throw new Error(errorData.message || `Discord Error: ${response.status}`);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error("Discord Webhook Network Error:", err);
+      throw err;
+    }
   };
 
   const markNotifRead = async (id) => {
@@ -554,6 +596,22 @@ export const GuildProvider = ({ children, initialData }) => {
       await setDoc(docRef, req);
       const newReq = { ...req, id: docRef.id };
       setJoinRequests(prev => [newReq, ...prev]);
+      
+      // Discord Notification
+      sendDiscordEmbed(
+        "📝 New Join Request",
+        `Isang bagong recruitment application ang natanggap mula kay **${data.ign}**!`,
+        0xF0C040, // Gold
+        [
+          { name: "IGN", value: data.ign, inline: true },
+          { name: "Class", value: data.jobClass, inline: true },
+          { name: "Role", value: data.role, inline: true },
+          { name: "UID", value: data.uid, inline: true },
+          { name: "Discord", value: data.discord, inline: true }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
+      );
+
       showToast("Registration submitted for approval!", "success");
       return true;
     } catch(err) {
@@ -587,6 +645,19 @@ export const GuildProvider = ({ children, initialData }) => {
       setMembers(prev => [...prev, newMember]);
       setJoinRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "approved" } : x));
       
+      // Discord Notification
+      sendDiscordEmbed(
+        "🎉 New Member Joined!",
+        `Maligayang pagdating kay **${r.ign}** sa ating Guild Portal!`,
+        0x40C97A, // Green
+        [
+          { name: "IGN", value: r.ign, inline: true },
+          { name: "Job Class", value: r.jobClass, inline: true },
+          { name: "Role", value: r.role, inline: true }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
+      );
+
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
       return true;
     } catch(err) {
@@ -641,6 +712,18 @@ export const GuildProvider = ({ children, initialData }) => {
       await setDoc(docRef, req);
       const newReq = { ...req, id: docRef.id };
       setRequests(prev => [newReq, ...prev]);
+      
+      // Discord Notification
+      sendDiscordEmbed(
+        "🛡️ Vanguard Request (Profile Update)",
+        `Ang member na si **${m.ign}** ay nag-submit ng profile update request.`,
+        0x6382E6, // Blue
+        [
+          { name: "Requester", value: m.ign, inline: true },
+          { name: "Updates", value: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
+        ]
+      );
+
       showToast("Request submitted for approval!", "success");
       return true;
     } catch(err) {
@@ -745,6 +828,7 @@ export const GuildProvider = ({ children, initialData }) => {
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
+    discordConfig, setDiscordConfig,
     resetDatabase
 
   };

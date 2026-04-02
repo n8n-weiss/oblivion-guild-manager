@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
+import DiscordSettings from '../components/common/DiscordSettings';
 
 function ImportPage() {
   const { members, setMembers, showToast, isArchitect } = useGuild();
@@ -10,6 +11,7 @@ function ImportPage() {
   const [imported, setImported] = useState(false);
   const [defaultJoinDate, setDefaultJoinDate] = useState("");
   const [protectExistingData, setProtectExistingData] = useState(true);
+  const [activeTab, setActiveTab] = useState("import");
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -185,56 +187,78 @@ function ImportPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">📥 Import CSV / Spreadsheet</h1>
-        <p className="page-subtitle">I-import ang Members list gamit ang bago nating Universal Parser</p>
+        <p className="page-subtitle">Manage roster data and system integrations</p>
       </div>
 
-      {/* Export Section */}
-      <div className="card" style={{ marginBottom: 20, background: "rgba(99,130,230,0.05)", border: "1px solid var(--accent)" }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="card-title mb-1">📤 Export Portal Data</div>
-            <div className="text-xs text-muted">I-download ang latest roster mula sa Portal para ma-update ang inyong Master Spreadsheet.</div>
-          </div>
-          <button className="btn btn-primary" onClick={exportToCSV}>
-            <Icon name="save" size={12} /> Download Current Roster
-          </button>
-        </div>
+      <div className="tabs mb-6">
+        <button className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`} onClick={() => setActiveTab('import')}>📥 Import</button>
+        <button className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>📤 Export</button>
+        <button className={`tab-btn ${activeTab === 'discord' ? 'active' : ''}`} onClick={() => setActiveTab('discord')}>🤖 Discord</button>
       </div>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-title">📋 Paano mag-import nang tama</div>
-        <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8 }}>
-          <div>Para hindi malito ang system, ito ang dapat content ng CSV file mo:</div>
-          <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6, fontFamily: "monospace", fontSize: 11 }}>
-            #, IGN, Class, UID, Role, Discord<br />
-            1, Ebakook, High Wizard, OBL335675, DPS, taegamingsaaa<br />
-            2, Pulube22, Creator, OBL404266, DPS, weissgaming
-          </div>
-          <div style={{ marginTop: 8 }}>1. Sa Google Sheets, **File → Download → .csv**</div>
-          <div>2. Siguraduhin na ang columns ay may header na **#, IGN, UID** sa mismong data row.</div>
-        </div>
-      </div>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-title">📍 Upload File</div>
-        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "32px 20px", border: "2px dashed var(--border-bright)", borderRadius: 12, cursor: "pointer", background: "rgba(99,130,230,0.03)", marginBottom: 12 }}>
-          <div style={{ fontSize: 32 }}>📄</div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{fileName || "I-click para pumili ng CSV o TSV file"}</div>
-          <div className="text-xs text-muted">Awtomatikong nade-detect ang format at separator (Comma, Tab, Semicolon)</div>
-          <input type="file" accept=".csv,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
-        </label>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", background: "rgba(240,192,64,0.05)", borderRadius: 8, border: "1px solid rgba(240,192,64,0.1)" }}>
-          <div style={{ fontSize: 18 }}>🛡️</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>DEFAULT JOIN DATE</div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Gagamitin ito kapag walang 'Join Date' column sa iyong file.</div>
+      {activeTab === 'import' && (
+        <div className="animate-fade-in">
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">📋 Paano mag-import nang tama</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8 }}>
+              <div>Para hindi malito ang system, ito ang dapat content ng CSV file mo:</div>
+              <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6, fontFamily: "monospace", fontSize: 11 }}>
+                #, IGN, Class, UID, Role, Discord<br />
+                1, Ebakook, High Wizard, OBL335675, DPS, taegamingsaaa<br />
+                2, Pulube22, Creator, OBL404266, DPS, weissgaming
+              </div>
+              <div style={{ marginTop: 8 }}>1. Sa Google Sheets, **File → Download → .csv**</div>
+              <div>2. Siguraduhin na ang columns ay may header na **#, IGN, UID** sa mismong data row.</div>
+            </div>
           </div>
-          <input type="date" className="form-input" style={{ width: "auto", padding: "4px 8px" }} value={defaultJoinDate} onChange={e => setDefaultJoinDate(e.target.value)} />
-        </div>
+          
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">📍 Upload File</div>
+            <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "32px 20px", border: "2px dashed var(--border-bright)", borderRadius: 12, cursor: "pointer", background: "rgba(99,130,230,0.03)", marginBottom: 12 }}>
+              <div style={{ fontSize: 32 }}>📄</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{fileName || "I-click para pumili ng CSV o TSV file"}</div>
+              <div className="text-xs text-muted">Awtomatikong nade-detect ang format at separator (Comma, Tab, Semicolon)</div>
+              <input type="file" accept=".csv,.tsv,.txt" style={{ display: "none" }} onChange={handleFile} />
+            </label>
 
-        {error && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(224,80,80,0.1)", border: "1px solid rgba(224,80,80,0.3)", borderRadius: 8, color: "var(--red)", fontSize: 13 }}>⚠️ {error}</div>}
-        {imported && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(64,201,122,0.1)", border: "1px solid rgba(64,201,122,0.3)", borderRadius: 8, color: "var(--green)", fontSize: 13 }}>✅ Import successful!</div>}
-      </div>
-      {preview.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", background: "rgba(240,192,64,0.05)", borderRadius: 8, border: "1px solid rgba(240,192,64,0.1)" }}>
+              <div style={{ fontSize: 18 }}>🛡️</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>DEFAULT JOIN DATE</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Gagamitin ito kapag walang 'Join Date' column sa iyong file.</div>
+              </div>
+              <input type="date" className="form-input" style={{ width: "auto", padding: "4px 8px" }} value={defaultJoinDate} onChange={e => setDefaultJoinDate(e.target.value)} />
+            </div>
+
+            {error && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(224,80,80,0.1)", border: "1px solid rgba(224,80,80,0.3)", borderRadius: 8, color: "var(--red)", fontSize: 13 }}>⚠️ {error}</div>}
+            {imported && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(64,201,122,0.1)", border: "1px solid rgba(64,201,122,0.3)", borderRadius: 8, color: "var(--green)", fontSize: 13 }}>✅ Import successful!</div>}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'export' && (
+        <div className="animate-fade-in">
+          <div className="card" style={{ marginBottom: 20, background: "rgba(99,130,230,0.05)", border: "1px solid var(--accent)" }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="card-title mb-1">📤 Export Portal Data</div>
+                <div className="text-xs text-muted">I-download ang latest roster mula sa Portal para ma-update ang inyong Master Spreadsheet.</div>
+              </div>
+              <button className="btn btn-primary" onClick={exportToCSV}>
+                <Icon name="save" size={12} /> Download Current Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'discord' && (
+        <div className="animate-fade-in">
+          <DiscordSettings />
+        </div>
+      )}
+
+      {activeTab === 'import' && preview.length > 0 && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <div>
