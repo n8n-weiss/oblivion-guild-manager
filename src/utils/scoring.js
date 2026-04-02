@@ -45,11 +45,15 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
       if (att?.status === "present") {
         presentCount++;
         tempConsecutive = 0;
+      } else if (att?.status === "loa") {
+        absentCount++;
+        tempConsecutive = 0; // Excused absence resets the streak
       } else {
         absentCount++;
         tempConsecutive++;
         if (tempConsecutive > consecutiveAbsent) consecutiveAbsent = tempConsecutive;
       }
+
       if (event.eventType === "Guild League") {
         totalScore += computeScore({ event, att, perf });
       }

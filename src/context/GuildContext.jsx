@@ -47,6 +47,8 @@ export const GuildProvider = ({ children, initialData }) => {
   const [auctionTemplates, setAuctionTemplates] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
+
   const [raidParties, setRaidParties] = useState(() => {
     try {
       const saved = localStorage.getItem('guild_raidParties');
@@ -137,7 +139,8 @@ export const GuildProvider = ({ children, initialData }) => {
           absSnap,
           metaSnap,
           notifSnap,
-          reqSnap
+          reqSnap,
+          joinReqSnap
         ] = await Promise.all([
           getDocs(collection(db, "roster")),
           getDocs(collection(db, "events")),
@@ -147,8 +150,10 @@ export const GuildProvider = ({ children, initialData }) => {
           getDocs(collection(db, "absences")),
           getDoc(doc(db, "metadata", "current")),
           getDocs(collection(db, "notifications")),
-          getDocs(collection(db, "requests"))
+          getDocs(collection(db, "requests")),
+          getDocs(collection(db, "join_requests"))
         ]);
+
 
         const loadedMembers = rosterSnap.docs.map(d => d.data());
         const loadedEvents = eventsSnap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
@@ -234,6 +239,8 @@ export const GuildProvider = ({ children, initialData }) => {
         setAuctionTemplates(metadata.auctionTemplates || []);
         setNotifications(notifSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts)));
         setRequests(reqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        setJoinRequests(joinReqSnap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+
 
         // Load raidParties — prefer Firestore over localStorage
         const cloudRaidRaw = metadata.raidParties || [];
@@ -522,7 +529,103 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const submitJoinRequest = async (data) => {
+    try {
+      // Check for duplicates in roster
+      const exists = members.some(m => m.memberId?.toLowerCase() === data.uid.toLowerCase());
+      if (exists) {
+        showToast("An account with this UID already exists in the roster.", "error");
+        return false;
+      }
+
+      // Check for duplicates in pending join requests
+      const pendingExists = joinRequests.some(r => r.uid?.toLowerCase() === data.uid.toLowerCase() && r.status === "pending");
+      if (pendingExists) {
+        showToast("A registration with this UID is already pending approval.", "error");
+        return false;
+      }
+
+      const req = {
+        ...data,
+        status: "pending",
+        timestamp: new Date().toISOString()
+      };
+      const docRef = doc(collection(db, "join_requests"));
+      await setDoc(docRef, req);
+      const newReq = { ...req, id: docRef.id };
+      setJoinRequests(prev => [newReq, ...prev]);
+      showToast("Registration submitted for approval!", "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to submit registration", "error");
+      return false;
+    }
+  };
+
+  const approveJoinRequest = async (requestId) => {
+    try {
+      const r = joinRequests.find(x => x.id === requestId);
+      if (!r) return;
+
+      const newMember = {
+        memberId: r.uid,
+        ign: r.ign,
+        class: r.jobClass,
+        role: r.role,
+        discord: r.discord,
+        guildRank: "Member",
+        joinDate: new Date().toISOString().split('T')[0]
+      };
+
+      // 1. Add to roster
+      await setDoc(doc(db, "roster", r.uid), newMember);
+      
+      // 2. Update join request status
+      await setDoc(doc(db, "join_requests", requestId), { ...r, status: "approved" });
+
+      setMembers(prev => [...prev, newMember]);
+      setJoinRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "approved" } : x));
+      
+      showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to approve registration", "error");
+      return false;
+    }
+  };
+
+  const rejectJoinRequest = async (requestId) => {
+    try {
+      const r = joinRequests.find(x => x.id === requestId);
+      if (!r) return;
+      await setDoc(doc(db, "join_requests", requestId), { ...r, status: "rejected" });
+      setJoinRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "rejected" } : x));
+      showToast(`Registration rejected`, "info");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to reject registration", "error");
+      return false;
+    }
+  };
+
+  const deleteJoinRequest = async (requestId) => {
+    try {
+      await deleteDoc(doc(db, "join_requests", requestId));
+      setJoinRequests(prev => prev.filter(x => x.id !== requestId));
+      showToast("Registration record deleted", "success");
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast("Failed to delete record", "error");
+      return false;
+    }
+  };
+
   const submitRequest = async (memberId, newData) => {
+
     try {
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
@@ -641,7 +744,9 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionTemplates, setAuctionTemplates,
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
+    joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     resetDatabase
+
   };
 
   return (

@@ -607,6 +607,12 @@
     border: 1px solid rgba(224, 80, 80, 0.3);
   }
 
+  .badge-loa {
+    background: rgba(240, 192, 64, 0.15);
+    color: var(--gold);
+    border: 1px solid rgba(240, 192, 64, 0.3);
+  }
+
   .badge-present {
     background: rgba(64, 201, 122, 0.1);
     color: var(--green);
@@ -1129,6 +1135,12 @@
     background: rgba(224, 80, 80, 0.15);
     color: var(--red);
     border: 1px solid rgba(224, 80, 80, 0.3);
+  }
+
+  .att-toggle.loa {
+    background: rgba(240, 192, 64, 0.1);
+    color: var(--gold);
+    border: 1px solid rgba(240, 192, 64, 0.3);
   }
 
   .att-toggle:hover {

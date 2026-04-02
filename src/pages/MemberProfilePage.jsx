@@ -119,12 +119,46 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const prevAvg = glScores.slice(3, 6).length > 0 ? glScores.slice(3, 6).reduce((a, b) => a + b, 0) / glScores.slice(3, 6).length : currentAvg;
   const glTrend = currentAvg > prevAvg ? "up" : currentAvg < prevAvg ? "down" : "stable";
 
-  // 3. Badges Logic
-  const badges = [];
-  if (totalGLScore >= 80) badges.push({ icon: "🔥", label: "War Hero", color: "var(--color-assassin)" });
-  if (attPct === 100 && memberEvents.length >= 5) badges.push({ icon: "🛡️", label: "Iron Wall", color: "var(--color-knight)" });
-  if (avgGL > (guildAvgGL / (activeMembers.length || 1)) + 5) badges.push({ icon: "⚡", label: "Clutch", color: "var(--accent)" });
-  if (eoRatingsList.length >= 3 && avgEoRating >= 4.5) badges.push({ icon: "⭐", label: "MVP", color: "var(--color-priest)" });
+  // 3. Dynamic Badge System Logic
+  const getBadges = () => {
+    const list = [];
+    
+    // Shield of Reliability: 100% attendance in last 4 guild events (GL or EO)
+    const last4 = memberEvents.slice(0, 4);
+    if (last4.length === 4 && last4.every(e => e.att?.status === "present")) {
+      list.push({ id: "reliability", icon: "🛡️", label: "Reliability Shield", desc: "Solid as a rock. 100% attendance in the last 4 major operations.", color: "#4db8ff" });
+    }
+
+    // Blade of Oblivion: High score (>30) in any GL event
+    if (memberEvents.some(e => e.eventType === "Guild League" && e.score >= 30)) {
+      list.push({ id: "blade", icon: "⚔️", label: "Blade of Oblivion", desc: "A true powerhouse. Achieved a legendary score of 30+ in a single war.", color: "var(--red)" });
+    }
+
+    // Star of the Empire: 5-star EO rating
+    if (eoRatingsList.some(r => r.rating === 5)) {
+      list.push({ id: "star", icon: "🌟", label: "Star of the Empire", desc: "Strategic excellence. Earned a perfect 5-star rating for EO mastery.", color: "var(--gold)" });
+    }
+
+    // Vanguard: Top scorer in the most recent GL event
+    const lastGL = events.slice().sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate)).find(e => e.eventType === "Guild League");
+    if (lastGL) {
+      const glAtt = attendance.filter(a => a.eventId === lastGL.eventId);
+      const glPerf = performance.filter(p => p.eventId === lastGL.eventId);
+      const scores = activeMembers.map(m => {
+        const att = glAtt.find(a => a.memberId === m.memberId);
+        const perf = glPerf.find(p => p.memberId === m.memberId);
+        return { memberId: m.memberId, score: att?.status === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0 };
+      });
+      const topScore = Math.max(...scores.map(s => s.score));
+      if (topScore > 0 && scores.find(s => s.memberId === member.memberId)?.score === topScore) {
+        list.push({ id: "vanguard", icon: "🔥", label: "Frontline Vanguard", desc: "Leading the charge. Top scorer in the guild's most recent operation.", color: "#ff4d4d" });
+      }
+    }
+
+    return list;
+  };
+  const dynamicBadges = getBadges();
+
 
   // 4. Class Theme & Icon
   const classThemes = useMemo(() => {
@@ -525,7 +559,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                   {member.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />} {member.role}
                 </span>
                 <span className={`badge ${attStatus.badge}`}>🎯 {attStatus.label}</span>
-                {badges.map((b, i) => <span key={i} title={b.label} style={{ fontSize: 16 }}>{b.icon}</span>)}
+                {dynamicBadges.map((b, i) => (
+                  <span key={i} title={`${b.label}: ${b.desc}`} style={{ 
+                    fontSize: 18, cursor: "help", filter: `drop-shadow(0 0 6px ${b.color}66)`,
+                    animation: `floatUpDown ${3 + i}s ease-in-out infinite`
+                  }}>
+                    {b.icon}
+                  </span>
+                ))}
+
               </div>
               <div className="rank-label" style={{ color: "var(--text-muted)", fontSize: 12, letterSpacing: 2 }}>{rankInfo.label}</div>
             </div>
@@ -776,6 +818,96 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       )}
 
+      {/* Tab: Achievements (Medal Hall) */}
+      {activeTab === "achievements" && (
+        <div className="animate-fade-in">
+          <div className="card">
+            <div className="flex items-center gap-3 mb-6">
+              <div style={{ padding: 10, background: "rgba(240,192,64,0.1)", borderRadius: 12, color: "var(--gold)" }}>
+                <Icon name="star" size={24} />
+              </div>
+              <div>
+                <h3 className="font-cinzel" style={{ fontSize: 20, margin: 0 }}>Medal Hall</h3>
+                <p className="text-xs text-muted">A testament to your loyalty and combat prowess</p>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+              {[
+                { id: "reliability", icon: "🛡️", label: "Shield of Reliability", criteria: "100% attendance in last 4 events", color: "#4db8ff" },
+                { id: "blade", icon: "⚔️", label: "Blade of Oblivion", criteria: "Score 30+ in a single War", color: "var(--red)" },
+                { id: "star", icon: "🌟", label: "Star of the Empire", criteria: "Earn a 5-star EO rating", color: "var(--gold)" },
+                { id: "vanguard", icon: "🔥", label: "Frontline Vanguard", criteria: "Top scorer in the last War", color: "#ff4d4d" },
+              ].map(medal => {
+                const isEarned = dynamicBadges.some(b => b.id === medal.id);
+                return (
+                  <div key={medal.id} className={`glass-card ${!isEarned ? 'locked' : ''}`} style={{ 
+                    padding: 20, border: `1px solid ${isEarned ? medal.color + '44' : 'var(--border)'}`,
+                    background: isEarned ? `linear-gradient(135deg, ${medal.color}11, transparent)` : 'transparent',
+                    opacity: isEarned ? 1 : 0.4,
+                    transition: "all 0.3s ease",
+                    position: "relative",
+                    overflow: "hidden"
+                  }}>
+                    {isEarned && (
+                      <div style={{ position: "absolute", top: -10, right: -10, width: 40, height: 40, background: medal.color, opacity: 0.1, borderRadius: "50%", filter: "blur(20px)" }} />
+                    )}
+                    <div className="flex items-center gap-4">
+                      <div style={{ 
+                        fontSize: 32, filter: isEarned ? `drop-shadow(0 0 8px ${medal.color})` : 'grayscale(1)',
+                        animation: isEarned ? 'floatUpDown 3s ease-in-out infinite' : 'none'
+                      }}>
+                        {medal.icon}
+                      </div>
+                      <div>
+                        <div style={{ 
+                          fontFamily: "Cinzel, serif", fontSize: 14, fontWeight: 700, 
+                          color: isEarned ? "var(--text-primary)" : "var(--text-muted)" 
+                        }}>
+                          {medal.label}
+                        </div>
+                        <div style={{ fontSize: 10, letterSpacing: 1, color: isEarned ? medal.color : "var(--text-muted)", textTransform: "uppercase", marginTop: 2 }}>
+                          {isEarned ? "Unlocked" : "Locked"}
+                        </div>
+                        <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6, lineHeight: 1.4 }}>
+                          {isEarned ? dynamicBadges.find(b => b.id === medal.id).desc : `Criteria: ${medal.criteria}`}
+                        </p>
+                      </div>
+                    </div>
+                    {!isEarned && (
+                      <div className="achievement-progress-wrap">
+                        <div className="achievement-progress-fill" style={{ width: "30%", opacity: 0.3 }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Participation Milestones */}
+            <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
+               <h4 className="font-cinzel" style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>Participation Milestones</h4>
+               <div className="flex gap-4 flex-wrap">
+                  {[10, 25, 50, 100].map(m => {
+                    const progress = Math.min(100, Math.round((memberEvents.length / m) * 100));
+                    return (
+                      <div key={m} style={{ flex: 1, minWidth: 120, padding: 12, background: "rgba(255,255,255,0.02)", borderRadius: 12, border: "1px solid var(--border)" }}>
+                        <div className="flex justify-between items-end mb-2">
+                          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{m} EVENTS</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: progress === 100 ? "var(--gold)" : "var(--text-secondary)" }}>{progress}%</span>
+                        </div>
+                        <div className="progress-bar-wrap" style={{ height: 4 }}>
+                          <div className="progress-bar-fill" style={{ width: `${progress}%`, background: progress === 100 ? "var(--gold)" : "var(--accent)" }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab: History */}
       {activeTab === "history" && (
         <div className="card animate-fade-in">
@@ -828,67 +960,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Tab: Achievements */}
-      {activeTab === "achievements" && (
-        <div className="animate-fade-in">
-          <div className="card">
-            <div className="card-title">🏆 Achievement Hall</div>
-            <p className="text-xs text-muted mb-6">Earn trophies by participating in guild events and reaching performance milestones.</p>
-            <div className="achievement-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
-              {[
-                { id: 'hero', icon: '🔥', name: 'War Hero', desc: '80+ total GL score', earned: totalGLScore >= 80, current: totalGLScore, goal: 80 },
-                { id: 'wall', icon: '🛡️', name: 'Iron Wall', desc: '100% attendance (5+ events)', earned: attPct === 100 && memberEvents.length >= 5, current: attPct === 100 ? memberEvents.length : 0, goal: 5 },
-                { id: 'clutch', icon: '⚡', name: 'Clutch King', desc: 'Above guild avg skill', earned: avgGL > (guildAvgGL / 10) + 1, current: Math.round(avgGL), goal: Math.round((guildAvgGL / 10) + 1) },
-                { id: 'mvp', icon: '⭐', name: 'MVP Material', desc: '4.5+ EO Rating (3+ reviews)', earned: eoRatingsList.length >= 3 && avgEoRating >= 4.5, current: avgEoRating, goal: 4.5 },
-                { id: 'loyal', icon: '💎', name: 'Old Guard', desc: '10+ events attended', earned: memberEvents.length >= 10, current: memberEvents.length, goal: 10 },
-                { id: 'legend', icon: '👑', name: 'Living Legend', desc: '200+ total score', earned: totalGLScore >= 200, current: totalGLScore, goal: 200 },
-                { id: 'streak3', icon: '🎯', name: 'On a Roll', desc: '3+ attendance streak', earned: winStreak >= 3, current: winStreak, goal: 3 },
-                { id: 'elite', icon: '🏅', name: 'Elite Warrior', desc: 'Reach ELITE rank', earned: totalGLScore >= 150, current: totalGLScore, goal: 150 },
-              ].map(ach => (
-                <div key={ach.id} className={`achievement-item ${!ach.earned ? 'locked' : ''}`} 
-                  style={{ 
-                    padding: "16px", borderRadius: 16, textAlign: "center",
-                    background: ach.earned ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.2)",
-                    border: ach.earned ? `1px solid ${theme.color}44` : "1px solid rgba(255,255,255,0.05)",
-                    opacity: ach.earned ? 1 : 1,
-                    transition: "all 0.3s ease",
-                    position: "relative",
-                    overflow: "hidden"
-                  }}>
-                  {ach.earned && (
-                    <div style={{ 
-                      position: "absolute", inset: 0, 
-                      background: `radial-gradient(circle at center, ${theme.color}11, transparent 70%)`,
-                      pointerEvents: "none"
-                    }} />
-                  )}
-                  <div style={{ fontSize: 32, marginBottom: 8, filter: ach.earned ? "none" : "grayscale(1) opacity(0.5)" }}>{ach.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: ach.earned ? "var(--text-primary)" : "var(--text-muted)", marginBottom: 4 }}>{ach.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.3, marginBottom: 8 }}>{ach.desc}</div>
-                  
-                  {/* Progress Bar */}
-                  {!ach.earned && (
-                    <div className="achievement-progress-wrap">
-                      <div className="achievement-progress-fill" style={{ width: `${Math.min(100, Math.round((ach.current / ach.goal) * 100))}%`, background: theme.color }} />
-                    </div>
-                  )}
-                  <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 4 }}>
-                    {ach.earned ? "COMPLETED" : `${ach.current} / ${ach.goal}`}
-                  </div>
-
-                  {ach.earned && (
-                    <div style={{ 
-                      marginTop: 6, fontSize: 9, color: "var(--green)", fontWeight: 800, 
-                      letterSpacing: 1, textTransform: "uppercase" 
-                    }}>Unlocked</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
@@ -947,7 +1018,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       )}
 
-      {/* Profile Request Modal */}
+      {/* Profile Request Modal Placeholder (Already correctly handled below usually) */}
       {showRequestModal && (
         <div className="modal-overlay" style={{ display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div className="card animate-fade-in" style={{ maxWidth: 450, border: "2px solid var(--accent)" }}>

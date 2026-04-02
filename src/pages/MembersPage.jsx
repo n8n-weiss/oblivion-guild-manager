@@ -95,6 +95,27 @@ function MembersPage({ onViewProfile }) {
     return { rank: "NOVICE", color: "#999999" };
   };
 
+  const { attendance = [], performance = [], events = [], eoRatings = [] } = useGuild();
+  const getMemberBadges = (mId) => {
+    const list = [];
+    const id = (mId || "").toLowerCase();
+    const mEvents = events
+      .map(e => {
+        const att = attendance.find(a => (a.memberId || "").toLowerCase() === id && a.eventId === e.eventId);
+        const perf = performance.find(p => (p.memberId || "").toLowerCase() === id && p.eventId === e.eventId);
+        return { ...e, att, perf };
+      })
+      .filter(e => e.att)
+      .sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate));
+
+    if (mEvents.slice(0, 4).length === 4 && mEvents.slice(0, 4).every(e => e.att?.status === "present")) list.push("🛡️");
+    if (mEvents.some(e => e.eventType === "Guild League" && ((e.perf?.ctfPoints || 0) + (e.perf?.performancePoints || 0)) >= 30)) list.push("⚔️");
+    const mRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === id);
+    if (mRatings.some(r => r.rating === 5)) list.push("🌟");
+    return list;
+  };
+
+
   const saveMember = () => {
     if (!form.ign.trim() || !form.class.trim()) { showToast("Fill all fields", "error"); return; }
     if (editMember) {
@@ -202,12 +223,16 @@ function MembersPage({ onViewProfile }) {
                           </div>
                           <div>
                             <div
-                              style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 14, color: "var(--text-primary)", cursor: "pointer", lineHeight: 1.2 }}
+                              style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 14, color: "var(--text-primary)", cursor: "pointer", lineHeight: 1.2, display: "flex", alignItems: "center", gap: 6 }}
                               onClick={() => onViewProfile && onViewProfile(m)}
                               title="View profile"
                             >
                               {m.ign}
+                              <div style={{ display: "flex", gap: 2 }}>
+                                {getMemberBadges(m.memberId).map((b, bi) => <span key={bi} style={{ fontSize: 12 }}>{b}</span>)}
+                              </div>
                             </div>
+
                             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{m.memberId}</div>
                           </div>
                         </div>
@@ -288,9 +313,13 @@ function MembersPage({ onViewProfile }) {
                         <div style={{ position: "absolute", bottom: -2, right: -2, width: 10, height: 10, borderRadius: "50%", background: theme.color, border: "2px solid var(--bg-deepest)" }} />
                       </div>
                       <div>
-                        <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }} onClick={() => onViewProfile && onViewProfile(m)}>
+                        <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 16, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }} onClick={() => onViewProfile && onViewProfile(m)}>
                           {m.ign}
+                          <div style={{ display: "flex", gap: 2 }}>
+                            {getMemberBadges(m.memberId).map((b, bi) => <span key={bi} style={{ fontSize: 12 }}>{b}</span>)}
+                          </div>
                         </div>
+
                         <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.memberId}</div>
                       </div>
                     </div>

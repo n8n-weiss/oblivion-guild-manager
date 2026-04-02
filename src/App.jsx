@@ -34,7 +34,7 @@ export default function App() {
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
-    notifications, requests
+    notifications, requests, joinRequests
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -42,7 +42,10 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
-  const pendingRequestsCount = requests.filter(r => r.status === "pending").length;
+  const pendingRequestsCount = 
+    requests.filter(r => r.status === "pending").length + 
+    joinRequests.filter(r => r.status === "pending").length;
+
 
   const handleSignOut = async () => {
     await signOut(auth);
