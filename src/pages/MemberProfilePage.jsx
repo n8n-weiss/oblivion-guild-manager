@@ -240,14 +240,48 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const prevLevelScore = Math.pow(level / 5, 2);
   const levelProgress = Math.min(100, Math.round(((totalGLScore - prevLevelScore) / (nextLevelScore - prevLevelScore || 1)) * 100));
 
-  // 6. Radar Chart Comparison
+  // 6. Enhanced Radar Chart Data
   const radarData = [
-    { subject: 'GL Score', A: totalGLScore, B: guildAvgGL, fullMark: Math.max(totalGLScore, guildAvgGL, 100) },
-    { subject: 'Attendance', A: attPct, B: 75, fullMark: 100 },
-    { subject: 'Avg GL', A: avgGL * 10, B: (guildAvgGL / 10) * 10, fullMark: 100 },
-    { subject: 'Reliability', A: 100 - (memberAbsences.length * 10), B: 90, fullMark: 100 },
-    { subject: 'EO Skill', A: avgEoRating * 20, B: 70, fullMark: 100 },
+    { subject: 'Combat', full: 'WAR SCORE', icon: '⚔️', A: totalGLScore, B: guildAvgGL, fullMark: Math.max(totalGLScore, guildAvgGL, 100) },
+    { subject: 'Duty', full: 'ATTENDANCE', icon: '🛡️', A: attPct, B: 75, fullMark: 100 },
+    { subject: 'Stability', full: 'RELIABILITY', icon: '⚖️', A: 100 - (memberAbsences.length * 10), B: 90, fullMark: 100 },
+    { subject: 'Support', full: 'TEAM PLAY', icon: '✨', A: isSupport ? supportIndex : (avgGL * 10), B: isSupport ? 60 : 50, fullMark: 100 },
+    { subject: 'EO Skill', full: 'EO RANKING', icon: '🏰', A: avgEoRating * 20, B: 70, fullMark: 100 },
   ];
+
+  const CustomRadarLabel = ({ x, y, payload, cx, cy }) => {
+    const stat = radarData.find(d => d.subject === payload.value);
+    if (!stat) return null;
+    
+    // Calculate angle to push labels slightly further out
+    const angle = Math.atan2(y - cy, x - cx);
+    const radiusOffset = 22; // Push icons out away from the chart
+    const labelX = x + Math.cos(angle) * radiusOffset;
+    const labelY = y + Math.sin(angle) * radiusOffset;
+    
+    return (
+      <g>
+        <text 
+          x={labelX} y={labelY} 
+          textAnchor="middle" 
+          dominantBaseline="middle"
+          fill={theme.color}
+          style={{ fontSize: 16, filter: `drop-shadow(0 0 8px ${theme.color}66)` }}
+        >
+          {stat.icon}
+        </text>
+        <text 
+          x={labelX} y={labelY + 12} 
+          textAnchor="middle" 
+          dominantBaseline="middle"
+          fill="var(--text-muted)"
+          style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" }}
+        >
+          {stat.subject}
+        </text>
+      </g>
+    );
+  };
 
   // 7. Next Event Logic
   const upcomingEvent = events
@@ -854,18 +888,43 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
           {/* Radar + Chart row */}
           <div className="grid-2 mb-4">
-            <div className="card">
+            <div className="card" style={{ position: "relative", overflow: "hidden" }}>
               <div className="card-title">🛡️ Benchmark Comparison</div>
-              <div style={{ height: 240, width: "100%", marginTop: 10 }}>
+              
+              {/* Background Decorative Rings */}
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -40%)", width: 280, height: 280, pointerEvents: "none", zIndex: 0, opacity: 0.15 }}>
+                 <svg width="100%" height="100%" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="48" fill="none" stroke={theme.color} strokeWidth="0.5" strokeDasharray="2 2" />
+                    <circle cx="50" cy="50" r="35" fill="none" stroke={theme.color} strokeWidth="0.2" />
+                    <circle cx="50" cy="50" r="22" fill="none" stroke={theme.color} strokeWidth="0.2" />
+                    <line x1="50" y1="2" x2="50" y2="98" stroke={theme.color} strokeWidth="0.1" />
+                    <line x1="2" y1="50" x2="98" y2="50" stroke={theme.color} strokeWidth="0.1" />
+                 </svg>
+              </div>
+
+              <div style={{ height: 280, width: "100%", marginTop: 10, position: "relative", zIndex: 1 }}>
                 <ResponsiveContainer width="100%" height="100%" minWidth={1}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 10 }} />
+                  <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
+                    <PolarGrid stroke="rgba(255,255,255,0.06)" />
+                    <PolarAngleAxis dataKey="subject" tick={<CustomRadarLabel cx={0} cy={0} />} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                    <Radar name="You" dataKey="A" stroke={theme.color} fill={theme.color} fillOpacity={0.55} dot={{ r: 3, fill: theme.color }} />
-                    <Radar name="Guild Avg" dataKey="B" stroke="var(--text-muted)" fill="transparent" strokeWidth={1} strokeDasharray="4 4" />
+                    
+                    <Radar 
+                      name="You" dataKey="A" 
+                      stroke={theme.color} fill={theme.color} fillOpacity={0.65} 
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: theme.color, stroke: "#fff", strokeWidth: 1 }} 
+                      isAnimationActive={true}
+                      animationDuration={1500}
+                    />
+                    <Radar 
+                      name="Guild Avg" dataKey="B" 
+                      stroke="var(--text-muted)" fill="rgba(255,255,255,0.05)" 
+                      strokeWidth={1} strokeDasharray="4 4" 
+                    />
+                    
                     <Tooltip content={<RadarTooltip />} />
-                    <Legend />
+                    <Legend iconType="diamond" verticalAlign="bottom" />
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
