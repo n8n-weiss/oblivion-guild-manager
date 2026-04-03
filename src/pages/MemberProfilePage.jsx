@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
@@ -52,6 +53,30 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
+
+  // 3D Card Tilt State
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const rotateX = useTransform(mouseY, [-0.5, 0.5], ["8deg", "-8deg"]);
+  const rotateY = useTransform(mouseX, [-0.5, 0.5], ["-8deg", "8deg"]);
+  const glareX = useTransform(mouseX, [-0.5, 0.5], ["-50%", "50%"]);
+  const glareY = useTransform(mouseY, [-0.5, 0.5], ["-50%", "50%"]);
+  const glareOpacity = useTransform(mouseX, [-0.5, 0, 0.5], [0.6, 0.1, 0.6]);
+
+  const handleMouseMove = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    const xPct = (event.clientX - rect.left) / width - 0.5;
+    const yPct = (event.clientY - rect.top) / height - 0.5;
+    mouseX.set(xPct);
+    mouseY.set(yPct);
+  };
+
+  const handleMouseLeave = () => {
+    mouseX.set(0);
+    mouseY.set(0);
+  };
 
   if (!member) return null;
 
@@ -541,9 +566,39 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       )}
 
       {/* Portal Hero */}
-      <div className="portal-hero animate-fade-in" style={{ borderColor: theme.color, marginBottom: 20 }}>
-        <div className="portal-hero-bg" style={{ background: `radial-gradient(circle at 70% 30%, ${theme.color}, transparent 60%)` }} />
-        <div className="flex flex-col items-center gap-3" style={{ zIndex: 2, position: "relative", minWidth: 150 }}>
+      <div style={{ perspective: 1200 }}>
+        <motion.div 
+          className="portal-hero animate-fade-in" 
+          style={{ 
+            borderColor: theme.color, marginBottom: 20,
+            rotateX, rotateY, transformStyle: "preserve-3d",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+            position: "relative",
+            overflow: "hidden"
+          }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* 3D Glare Overlay */}
+          <motion.div style={{
+            position: "absolute", width: "200%", height: "200%",
+            top: "-50%", left: "-50%", zIndex: 30, pointerEvents: "none",
+            background: `radial-gradient(circle at center, rgba(255,255,255,0.4) 0%, transparent 60%)`,
+            x: glareX, y: glareY, opacity: glareOpacity, mixBlendMode: "overlay"
+          }} />
+
+          {/* Holographic Shimmer Overlay */}
+          <motion.div style={{
+            position: "absolute", inset: "-10%", zIndex: 25, pointerEvents: "none",
+            background: `linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.1) 30%, ${theme.color}44 40%, transparent 50%, rgba(255,255,255,0.1) 60%, transparent 70%)`,
+            backgroundSize: "200% 200%",
+            backgroundPosition: useTransform(mouseX, [-0.5, 0.5], ["0% 50%", "100% 50%"]),
+            opacity: useTransform(mouseX, [-0.5, 0, 0.5], [0.8, 0, 0.8]),
+            mixBlendMode: "color-dodge"
+          }} />
+
+          <div className="portal-hero-bg" style={{ background: `radial-gradient(circle at 70% 30%, ${theme.color}, transparent 60%)` }} />
+          <div className="flex flex-col items-center gap-3" style={{ zIndex: 2, position: "relative", minWidth: 150, transform: "translateZ(30px)" }}>
           <div className="rank-badge-lg" style={{ '--stat-accent': rankInfo.color, '--stat-accent-glow': `${rankInfo.color}66` }}>
             <span className="rank-label">{rankInfo.rank}</span>
             <span className="rank-value">LV.{level}</span>
@@ -668,7 +723,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
+    </div>
 
       {/* Stat Cards */}
       <div className="stats-grid animate-slide-up" style={{ marginBottom: 20 }}>
