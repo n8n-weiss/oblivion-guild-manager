@@ -1860,3 +1860,29 @@ tbody tr:hover {
   animation: cardReveal 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
+/* ── Leaderboard UI Upgrades ── */
+.score-bar-glow {
+  position: relative;
+  overflow: visible !important;
+  box-shadow: 0 0 10px currentColor;
+}
+.score-bar-glow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7));
+  border-radius: 0 10px 10px 0;
+}
+
+.table-row-hover:hover {
+  background: var(--bg-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  position: relative;
+  z-index: 10;
+  border-left: 2px solid var(--accent);
+}
+
