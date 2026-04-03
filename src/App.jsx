@@ -224,7 +224,7 @@ export default function App() {
 
           <div style={{ marginTop: 12, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
             <div style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase" }}>
-              Oblivion Guild Portal v1.0
+              Oblivion Guild Portal v2.5
             </div>
             <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
               Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "#ff4d4d", letterSpacing: 2, fontWeight: 800, textShadow: "0 0 12px rgba(255,77,77,0.7)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>

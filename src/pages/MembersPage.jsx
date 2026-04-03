@@ -7,7 +7,7 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from "./AuditLogPage";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, isArchitect, currentUser } = useGuild();
+  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, isArchitect, currentUser, onlineUsers = [] } = useGuild();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("active");
@@ -207,6 +207,7 @@ function MembersPage({ onViewProfile }) {
                 {filtered.map((m, i) => {
                   const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
                   const idx = members.indexOf(m);
+                  const isOnline = onlineUsers.some(ou => (ou.memberId && ou.memberId === m.memberId) || (ou.displayName && ou.displayName.toLowerCase() === m.ign.toLowerCase()));
                   return (
                     <tr key={m.memberId} className="animate-fade-in" style={{ borderLeft: `3px solid ${theme.color}55` }}>
                       {/* Row number */}
@@ -228,6 +229,8 @@ function MembersPage({ onViewProfile }) {
                               title="View profile"
                             >
                               {m.ign}
+                              {isOnline && <span title="Online" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 8px var(--green)", display: "inline-block", flexShrink: 0 }}></span>}
+
                               <div style={{ display: "flex", gap: 2 }}>
                                 {getMemberBadges(m.memberId).map((b, bi) => <span key={bi} style={{ fontSize: 12 }}>{b}</span>)}
                               </div>
@@ -304,6 +307,7 @@ function MembersPage({ onViewProfile }) {
             {filtered.map((m, i) => {
               const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
               const idx = members.indexOf(m);
+              const isOnline = onlineUsers.some(ou => (ou.memberId && ou.memberId === m.memberId) || (ou.displayName && ou.displayName.toLowerCase() === m.ign.toLowerCase()));
               return (
                 <div key={m.memberId} className="glass-card-mobile animate-fade-in" style={{ borderLeft: `4px solid ${theme.color}` }}>
                   <div className="flex items-start justify-between mb-3">
@@ -315,6 +319,7 @@ function MembersPage({ onViewProfile }) {
                       <div>
                         <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 16, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }} onClick={() => onViewProfile && onViewProfile(m)}>
                           {m.ign}
+                          {isOnline && <span title="Online" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 8px var(--green)", display: "inline-block", flexShrink: 0 }}></span>}
                           <div style={{ display: "flex", gap: 2 }}>
                             {getMemberBadges(m.memberId).map((b, bi) => <span key={bi} style={{ fontSize: 12 }}>{b}</span>)}
                           </div>

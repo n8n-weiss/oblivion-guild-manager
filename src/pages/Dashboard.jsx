@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 
 function Dashboard() {
-  const { members, events, attendance, performance, parties, currentUser, userRole, showToast } = useGuild();
+  const { members, events, attendance, performance, parties, currentUser, userRole, showToast, onlineUsers = [] } = useGuild();
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const totalPresences = attendance.filter(a => a.status === "present").length;
@@ -163,6 +163,12 @@ function Dashboard() {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="page-title">📊 Dashboard</h1>
+            {onlineUsers.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(64, 201, 122, 0.1)", border: "1px solid rgba(64, 201, 122, 0.3)", padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, color: "var(--green)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 8px var(--green)" }}></span>
+                {onlineUsers.length} ONLINE
+              </div>
+            )}
           </div>
           <p className="page-subtitle">Guild overview & performance at a glance</p>
         </div>

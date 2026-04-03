@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -49,6 +49,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
   const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "" });
+  const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
 
   const [raidParties, setRaidParties] = useState(() => {
     try {
@@ -114,6 +115,32 @@ export const GuildProvider = ({ children, initialData }) => {
       setAuthLoading(false);
     });
     return () => unsub();
+  }, []);
+
+  // Presence: write lastSeen on login + heartbeat every 3 minutes
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const writePresence = async () => {
+      try {
+        await setDoc(doc(db, "presence", currentUser.uid), {
+          uid: currentUser.uid,
+          displayName: currentUser.displayName || currentUser.email || "Unknown",
+          lastSeen: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Presence write failed:", err);
+      }
+    };
+
+    writePresence(); // write immediately on login
+    const heartbeat = setInterval(writePresence, 3 * 60 * 1000); // every 3 minutes
+
+    return () => {
+      clearInterval(heartbeat);
+      // Mark as offline on unmount / sign-out by writing a past timestamp
+      // We leave the doc as-is; it will naturally expire from the "online" list after 5 min
+    };
   }, []);
 
   // Data Loading from new Collections
@@ -244,10 +271,23 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.eoRatings = [...flat];
         });
 
+        const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
+          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+          const online = snap.docs
+            .map(d => ({ uid: d.id, ...d.data() }))
+            .filter(p => {
+              if (!p.lastSeen) return false;
+              // Handle both Firestore Timestamp and plain millis
+              const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
+              return ms > fiveMinutesAgo;
+            });
+          setOnlineUsers(online);
+        });
+
         return () => {
           unsubRoster(); unsubEvents(); unsubAbsences(); unsubMetadata();
           unsubNotifs(); unsubReqs(); unsubJoinReqs(); unsubAtt();
-          unsubPerf(); unsubEo();
+          unsubPerf(); unsubEo(); unsubPresence();
         };
 
 
@@ -774,6 +814,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
+    onlineUsers,
     page, setPage,
     toast, setToast, showToast,
     members, setMembers,

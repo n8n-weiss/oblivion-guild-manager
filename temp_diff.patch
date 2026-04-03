@@ -1,0 +1,99 @@
+﻿diff --git a/src/App.jsx b/src/App.jsx
+index ccc0e1e..0d59762 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -224,7 +224,7 @@ export default function App() {
+ 
+           <div style={{ marginTop: 12, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
+             <div style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase" }}>
+-              Oblivion Guild Portal v1.0
++              Oblivion Guild Portal v2.5
+             </div>
+             <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+               Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "#ff4d4d", letterSpacing: 2, fontWeight: 800, textShadow: "0 0 12px rgba(255,77,77,0.7)" }}>ßÅö ≡Éîä ≡Éîë ≡Éîö ≡Éîö</span>
+diff --git a/src/context/GuildContext.jsx b/src/context/GuildContext.jsx
+index 7b15d8e..028b48c 100644
+--- a/src/context/GuildContext.jsx
++++ b/src/context/GuildContext.jsx
+@@ -1,6 +1,6 @@
+ import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+ import { db, auth } from '../firebase';
+-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot } from 'firebase/firestore';
++import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
+ import { onAuthStateChanged } from 'firebase/auth';
+ import { runMigration } from '../utils/migration';
+ 
+@@ -49,6 +49,7 @@ export const GuildProvider = ({ children, initialData }) => {
+   const [requests, setRequests] = useState([]);
+   const [joinRequests, setJoinRequests] = useState([]);
+   const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "" });
++  const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
+ 
+   const [raidParties, setRaidParties] = useState(() => {
+     try {
+@@ -116,6 +117,32 @@ export const GuildProvider = ({ children, initialData }) => {
+     return () => unsub();
+   }, []);
+ 
++  // Presence: write lastSeen on login + heartbeat every 3 minutes
++  useEffect(() => {
++    if (!currentUser) return;
++
++    const writePresence = async () => {
++      try {
++        await setDoc(doc(db, "presence", currentUser.uid), {
++          uid: currentUser.uid,
++          displayName: currentUser.displayName || currentUser.email || "Unknown",
++          lastSeen: serverTimestamp()
++        }, { merge: true });
++      } catch (err) {
++        console.warn("Presence write failed:", err);
++      }
++    };
++
++    writePresence(); // write immediately on login
++    const heartbeat = setInterval(writePresence, 3 * 60 * 1000); // every 3 minutes
++
++    return () => {
++      clearInterval(heartbeat);
++      // Mark as offline on unmount / sign-out by writing a past timestamp
++      // We leave the doc as-is; it will naturally expire from the "online" list after 5 min
++    };
++  }, []);
++
+   // Data Loading from new Collections
+   useEffect(() => {
+     const loadAllData = async () => {
+@@ -244,10 +271,23 @@ export const GuildProvider = ({ children, initialData }) => {
+           prevData.current.eoRatings = [...flat];
+         });
+ 
++        const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
++          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
++          const online = snap.docs
++            .map(d => ({ uid: d.id, ...d.data() }))
++            .filter(p => {
++              if (!p.lastSeen) return false;
++              // Handle both Firestore Timestamp and plain millis
++              const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
++              return ms > fiveMinutesAgo;
++            });
++          setOnlineUsers(online);
++        });
++
+         return () => {
+           unsubRoster(); unsubEvents(); unsubAbsences(); unsubMetadata();
+           unsubNotifs(); unsubReqs(); unsubJoinReqs(); unsubAtt();
+-          unsubPerf(); unsubEo();
++          unsubPerf(); unsubEo(); unsubPresence();
+         };
+ 
+ 
+@@ -774,6 +814,7 @@ export const GuildProvider = ({ children, initialData }) => {
+ 
+   const value = {
+     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
++    onlineUsers,
+     page, setPage,
+     toast, setToast, showToast,
+     members, setMembers,
