@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { auth } from "./firebase";
 import { signOut } from "firebase/auth";
 import { useGuild } from "./context/GuildContext";
-import { NAV_ITEMS } from "./utils/constants";
+import { NAV_ITEMS, JOB_CLASSES } from "./utils/constants";
 
 // Styles & UI
 import "./styles/index.css";
@@ -74,6 +74,52 @@ export default function App() {
       setPage("members");
     }
   }, [isMember, page, setPage]);
+
+  // Dynamic Theme Tinting
+  React.useEffect(() => {
+    let activeColorVar = null;
+    
+    // Find the user's class if they are logged in and linked
+    if (currentUser && members && myMemberId && page !== "import") {
+      const me = members.find(m => m.memberId === myMemberId);
+      if (me && me.class) {
+        for (const branch of JOB_CLASSES) {
+          const job = branch.jobs.find(j => j.name === me.class);
+          if (job) {
+             activeColorVar = job.color;
+             break;
+          }
+        }
+      }
+    }
+    
+    if (activeColorVar) {
+      const rootStyles = getComputedStyle(document.documentElement);
+      const cssVarName = activeColorVar.replace("var(", "").replace(")", ""); // e.g. "--color-knight"
+      const hexColor = rootStyles.getPropertyValue(cssVarName).trim(); 
+      
+      if (hexColor) {
+         document.documentElement.style.setProperty('--accent', hexColor);
+         document.documentElement.style.setProperty('--accent-light', hexColor);
+         
+         const hex = hexColor.replace("#", "");
+         const r = parseInt(hex.substring(0,2), 16) || 0;
+         const g = parseInt(hex.substring(2,4), 16) || 0;
+         const b = parseInt(hex.substring(4,6), 16) || 0;
+         document.documentElement.style.setProperty('--accent-glow', `rgba(${r}, ${g}, ${b}, 0.5)`);
+      }
+    } else {
+      document.documentElement.style.removeProperty('--accent');
+      document.documentElement.style.removeProperty('--accent-light');
+      document.documentElement.style.removeProperty('--accent-glow');
+    }
+    
+    return () => {
+      document.documentElement.style.removeProperty('--accent');
+      document.documentElement.style.removeProperty('--accent-light');
+      document.documentElement.style.removeProperty('--accent-glow');
+    };
+  }, [currentUser, myMemberId, members, page]);
 
   // Show auth loading
   if (authLoading) return (
