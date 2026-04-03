@@ -111,13 +111,22 @@ export default function App() {
     <div className="app-root">
       {/* Sidebar */}
       <nav className="sidebar">
-        <div className="sidebar-logo">
-          <img
-            src={`${import.meta.env.BASE_URL}oblivion-logo.png`}
-            alt="Oblivion Guild"
-            style={{ width: "100%", maxWidth: 160, height: "auto", display: "block", margin: "0 auto 8px", borderRadius: 8 }}
-          />
-          <div className="logo-sub" style={{ textAlign: "center" }}>Guild Manager</div>
+        <div className="sidebar-logo" style={{ textAlign: "center", overflow: "visible" }}>
+          <div className="logo-halo-container" style={{ margin: "16px auto 12px", transform: "scale(0.7)", transformOrigin: "center top" }}>
+            <div className="logo-halo" />
+            <div className="logo-ring" />
+            <div className="logo-frame-shimmer">
+               <div className="logo-inner-frame">
+                 <div className="logo-flare" />
+                 <img
+                   src={`${import.meta.env.BASE_URL}oblivion-logo.png`}
+                   alt="Oblivion Guild"
+                   style={{ width: 160, height: 160, objectFit: "cover", display: "block", position: "relative", zIndex: 1, borderRadius: 8 }}
+                 />
+               </div>
+            </div>
+          </div>
+          <div className="logo-sub">Guild Manager</div>
           
           <div 
             className="absolute top-4 right-4 cursor-pointer hover:scale-110 transition-transform" 

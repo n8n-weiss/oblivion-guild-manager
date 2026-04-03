@@ -129,13 +129,19 @@ function LoginPage() {
           style={{ textAlign: "center" }} 
           className="animate-float"
         >
-          <div style={{ position: "relative", display: "inline-block" }}>
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 160, height: 160, background: "radial-gradient(circle, var(--accent-light) 0%, transparent 70%)", borderRadius: "50%", zIndex: 0, filter: "blur(20px)" }} />
-            <img
-              src={`${import.meta.env.BASE_URL}oblivion-logo.png`}
-              alt="Oblivion Guild"
-              style={{ width: 180, height: 180, objectFit: "cover", borderRadius: 16, border: "1px solid rgba(99,130,230,0.4)", marginBottom: 16, display: "block", margin: "0 auto", position: "relative", zIndex: 1, boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}
-            />
+          <div className="logo-halo-container" style={{ marginBottom: 16 }}>
+            <div className="logo-halo" />
+            <div className="logo-ring" />
+            <div className="logo-frame-shimmer">
+               <div className="logo-inner-frame">
+                 <div className="logo-flare" />
+                 <img
+                   src={`${import.meta.env.BASE_URL}oblivion-logo.png`}
+                   alt="Oblivion Guild"
+                   style={{ width: 160, height: 160, objectFit: "cover", display: "block", position: "relative", zIndex: 1, borderRadius: 8 }}
+                 />
+               </div>
+            </div>
           </div>
           <div style={{ fontSize: 11, letterSpacing: 4, color: "var(--text-muted)", textTransform: "uppercase", marginTop: 16, textShadow: "0 2px 4px rgba(158, 158, 158, 0.72)" }}>Guild Portal</div>
         </motion.div>
