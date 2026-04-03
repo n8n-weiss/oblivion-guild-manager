@@ -47,12 +47,12 @@ function EventsPage() {
     // Discord Notification
     sendDiscordEmbed(
       "📅 New Event Scheduled",
-      `Isang bagong guild event ang itinakda! Siguraduhin na i-check ang inyong attendance.`,
+      `A new guild event has been scheduled! Please check your attendance.`,
       0x6382E6, // Blue
       [
         { name: "Event Type", value: form.eventType, inline: true },
         { name: "Date", value: form.eventDate, inline: true },
-        { name: "Note", value: "Auto-loaded na ang inyong attendance base sa inyong LOA filings." }
+        { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
       ],
       "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
     );

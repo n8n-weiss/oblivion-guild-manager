@@ -48,7 +48,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
-  const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "" });
+  const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "", masterRoleId: "", officerRoleId: "" });
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
 
   const [raidParties, setRaidParties] = useState(() => {
@@ -136,18 +136,14 @@ export const GuildProvider = ({ children, initialData }) => {
     writePresence(); // write immediately on login
     const heartbeat = setInterval(writePresence, 3 * 60 * 1000); // every 3 minutes
 
-    return () => {
-      clearInterval(heartbeat);
-      // Mark as offline on unmount / sign-out by writing a past timestamp
-      // We leave the doc as-is; it will naturally expire from the "online" list after 5 min
-    };
-  }, []);
+    return () => clearInterval(heartbeat);
+  }, [currentUser]);
 
   // Data Loading from new Collections
   useEffect(() => {
-    const loadAllData = async () => {
+    let unsubs = [];
+    const setupListeners = async () => {
       try {
-        // Step 1: Check if migration is needed
         const metaDoc = await getDoc(doc(db, "metadata", "current"));
         if (!metaDoc.exists()) {
           const legacyDoc = await getDoc(doc(db, "guilddata", "main"));
@@ -157,22 +153,20 @@ export const GuildProvider = ({ children, initialData }) => {
           }
         }
 
-        // Track initial loads to hide spinner only when data is ready
         let rosterLoaded = false;
         let metaLoaded = false;
-        const checkReady = () => {
-          if (rosterLoaded && metaLoaded) setLoading(false);
-        };
+        const checkReady = () => { if (rosterLoaded && metaLoaded) setLoading(false); };
 
-        // Step 2: Initialize Real-time Listeners
         const unsubRoster = onSnapshot(collection(db, "roster"), (snap) => {
           const docs = snap.docs.map(d => d.data());
-          const finalDocs = docs.length ? docs : (initialData.INITIAL_MEMBERS || []);
+          const uniqueDocs = Array.from(new Map(docs.map(m => [m.memberId, m])).values());
+          const finalDocs = uniqueDocs.length ? uniqueDocs : (initialData.INITIAL_MEMBERS || []);
           setMembers(finalDocs);
           prevData.current.members = [...finalDocs];
           rosterLoaded = true;
           checkReady();
         });
+        unsubs.push(unsubRoster);
 
         const unsubEvents = onSnapshot(collection(db, "events"), (snap) => {
           const docs = snap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
@@ -180,60 +174,59 @@ export const GuildProvider = ({ children, initialData }) => {
           setEvents(finalDocs);
           prevData.current.events = [...finalDocs];
         });
+        unsubs.push(unsubEvents);
 
         const unsubAbsences = onSnapshot(collection(db, "absences"), (snap) => {
           const docs = snap.docs.map(d => d.data());
           setAbsences(docs);
           prevData.current.absences = [...docs];
         });
+        unsubs.push(unsubAbsences);
 
         const unsubMetadata = onSnapshot(doc(db, "metadata", "current"), (snap) => {
           const data = snap.exists() ? snap.data() : {};
-          
-          // Sync Parties
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setParties(cloudParties);
           prevData.current.parties = [...cloudParties];
-
-          // Sync Raid Parties
           const cloudRaidRaw = data.raidParties || [];
           const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setRaidParties(cloudRaid);
           prevData.current.raidParties = [...cloudRaid];
-
-          // Sync Configs
           setAuctionSessions(data.auctionSessions || []);
           setAuctionTemplates(data.auctionTemplates || []);
-          setDiscordConfig(data.discord || { webhookUrl: "" });
+          const disc = data.discord || { webhookUrl: "", masterRoleId: "", officerRoleId: "" };
+          setDiscordConfig(disc);
+          prevData.current.discordConfig = { ...disc };
           prevData.current.auctionSessions = [...(data.auctionSessions || [])];
           prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
-          prevData.current.discordConfig = { ...(data.discord || { webhookUrl: "" }) };
-          
           if (data.partyNames) {
             setPartyNames(data.partyNames);
             prevData.current.partyNames = [...data.partyNames];
           }
           if (data.raidPartyNames) setRaidPartyNames(data.raidPartyNames);
-          
           metaLoaded = true;
           checkReady();
         });
+        unsubs.push(unsubMetadata);
 
         const unsubNotifs = onSnapshot(collection(db, "notifications"), (snap) => {
           const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts));
           setNotifications(docs);
         });
+        unsubs.push(unsubNotifs);
 
         const unsubReqs = onSnapshot(collection(db, "requests"), (snap) => {
           const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
           setRequests(docs);
         });
+        unsubs.push(unsubReqs);
 
         const unsubJoinReqs = onSnapshot(collection(db, "join_requests"), (snap) => {
           const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
           setJoinRequests(docs);
         });
+        unsubs.push(unsubJoinReqs);
 
         const unsubAtt = onSnapshot(collection(db, "attendance"), (snap) => {
           const flat = [];
@@ -246,30 +239,21 @@ export const GuildProvider = ({ children, initialData }) => {
           setAttendance(flat);
           prevData.current.attendance = [...flat];
         });
+        unsubs.push(unsubAtt);
 
         const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
-          const flat = [];
-          snap.docs.forEach(d => {
-            const { eventId, members: perfMembers } = d.data();
-            Object.entries(perfMembers || {}).forEach(([memberId, metrics]) => {
-              flat.push({ ...metrics, eventId, memberId });
-            });
-          });
-          setPerformance(flat);
-          prevData.current.performance = [...flat];
+          const docs = snap.docs.map(d => d.data());
+          setPerformance(docs);
+          prevData.current.performance = [...docs];
         });
+        unsubs.push(unsubPerf);
 
-        const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
-          const flat = [];
-          snap.docs.forEach(d => {
-            const { eventId, ratings: rates } = d.data();
-            Object.entries(rates || {}).forEach(([memberId, rating]) => {
-              flat.push({ eventId, memberId, rating });
-            });
-          });
-          setEoRatings(flat);
-          prevData.current.eoRatings = [...flat];
+        const unsubEo = onSnapshot(collection(db, "eo_ratings"), (snap) => {
+          const docs = snap.docs.map(d => d.data());
+          setEoRatings(docs);
+          prevData.current.eoRatings = [...docs];
         });
+        unsubs.push(unsubEo);
 
         const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
           const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
@@ -277,64 +261,44 @@ export const GuildProvider = ({ children, initialData }) => {
             .map(d => ({ uid: d.id, ...d.data() }))
             .filter(p => {
               if (!p.lastSeen) return false;
-              // Handle both Firestore Timestamp and plain millis
               const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
               return ms > fiveMinutesAgo;
             });
           setOnlineUsers(online);
         });
-
-        return () => {
-          unsubRoster(); unsubEvents(); unsubAbsences(); unsubMetadata();
-          unsubNotifs(); unsubReqs(); unsubJoinReqs(); unsubAtt();
-          unsubPerf(); unsubEo(); unsubPresence();
-        };
-
+        unsubs.push(unsubPresence);
 
       } catch (err) {
-        console.error("Firebase load error:", err);
+        console.error("Listener setup error:", err);
         setLoading(false);
       }
     };
-    loadAllData();
-  }, [initialData]);
+    setupListeners();
+    return () => { unsubs.forEach(u => u()); };
+  }, [initialData, isAdmin, isOfficer, isArchitect]);
 
-  // Granular Save Logic (Debounced)
   useEffect(() => {
     if (loading) return;
-
     const saveData = async () => {
       try {
         const batch = writeBatch(db);
         let changesCount = 0;
-
-        // 1. Save Members (Only if changed)
         if (JSON.stringify(members) !== JSON.stringify(prevData.current.members)) {
-          // Identify removed members
-          const currentMemberIds = new Set(members.map(m => m.memberId));
+          const uniqueMembers = Array.from(new Map(members.map(m => [m.memberId, m])).values());
+          const currentMemberIds = new Set(uniqueMembers.map(m => m.memberId));
           const removedMemberIds = prevData.current.members
             .filter(m => !currentMemberIds.has(m.memberId))
             .map(m => m.memberId);
-          
-          removedMemberIds.forEach(mid => {
-            if (mid) batch.delete(doc(db, "roster", mid));
-          });
-
-          // Update/Set existing members
-          members.forEach(m => batch.set(doc(db, "roster", m.memberId), m));
-          
-          prevData.current.members = [...members];
+          removedMemberIds.forEach(mid => { if (mid) batch.delete(doc(db, "roster", mid)); });
+          uniqueMembers.forEach(m => batch.set(doc(db, "roster", m.memberId), m));
+          prevData.current.members = [...uniqueMembers];
           changesCount++;
         }
-
-        // 2. Save Events
         if (JSON.stringify(events) !== JSON.stringify(prevData.current.events)) {
-          // Identify removed events
           const currentEventIds = new Set(events.map(e => e.eventId));
           const removedEventIds = prevData.current.events
             .filter(e => !currentEventIds.has(e.eventId))
             .map(e => e.eventId);
-          
           removedEventIds.forEach(eid => {
             if (eid) {
               batch.delete(doc(db, "events", eid));
@@ -343,13 +307,10 @@ export const GuildProvider = ({ children, initialData }) => {
               batch.delete(doc(db, "eoRatings", eid));
             }
           });
-
           events.forEach(e => batch.set(doc(db, "events", e.eventId), e));
           prevData.current.events = [...events];
           changesCount++;
         }
-
-        // 3. Save Attendance (Grouped)
         if (JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance)) {
           const grouped = {};
           attendance.forEach(a => {
@@ -360,8 +321,6 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.attendance = [...attendance];
           changesCount++;
         }
-
-        // 4. Save Performance
         if (JSON.stringify(performance) !== JSON.stringify(prevData.current.performance)) {
           const grouped = {};
           performance.forEach(p => {
@@ -372,8 +331,6 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.performance = [...performance];
           changesCount++;
         }
-
-        // 5. Save EO Ratings
         if (JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings)) {
           const grouped = {};
           eoRatings.forEach(r => {
@@ -384,7 +341,6 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.eoRatings = [...eoRatings];
           changesCount++;
         }
-
         if (
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
@@ -394,7 +350,6 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
           JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig)
         ) {
-          // Wrap nested arrays for Firestore
           const wrappedParties = parties.map(p => ({ members: p }));
           const wrappedRaids = raidParties.map(p => ({ members: p }));
           batch.set(doc(db, "metadata", "current"), {
@@ -413,40 +368,23 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.discordConfig = { ...discordConfig };
           changesCount++;
         }
-
-        // 7. Save Absences
         if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
-          // Identify removed absences
           const currentIds = new Set(absences.map(a => a.id));
           const removedIds = prevData.current.absences.filter(a => !currentIds.has(a.id)).map(a => a.id);
-          
-          removedIds.forEach(rid => {
-            if (rid) batch.delete(doc(db, "absences", rid));
-          });
-
-          // Set existing/new absences
-          absences.forEach(a => {
-            if (a.id) batch.set(doc(db, "absences", a.id), a);
-          });
-          
+          removedIds.forEach(rid => { if (rid) batch.delete(doc(db, "absences", rid)); });
+          absences.forEach(a => { if (a.id) batch.set(doc(db, "absences", a.id), a); });
           prevData.current.absences = [...absences];
           changesCount++;
         }
-
         if (changesCount > 0) {
           await batch.commit();
-          console.log(`Auto-saved ${changesCount} categories.`);
         }
-      } catch (err) {
-        console.error("Firebase save error:", err);
-      }
+      } catch (err) { console.error("Firebase save error:", err); }
     };
-
     const timeout = setTimeout(saveData, 1000);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, loading]);
+  }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, loading]);
 
-  // Immediate localStorage backup with timestamp
   useEffect(() => {
     if (loading) return;
     localStorage.setItem('guild_parties', JSON.stringify({ data: parties, ts: Date.now() }));
@@ -469,24 +407,22 @@ export const GuildProvider = ({ children, initialData }) => {
 
   const sendNotification = async (targetId, title, message, type = "info") => {
     const notif = {
-      targetId, // memberId or "all"
+      targetId,
       title,
       message,
       type,
       ts: new Date().toISOString(),
-      readBy: [] // track who read it (for global) or simple status for personal
+      readBy: []
     };
-    const docRef = await setDoc(doc(collection(db, "notifications")), notif);
-    setNotifications(prev => [notif, ...prev]);
+    await setDoc(doc(collection(db, "notifications")), notif);
     showToast("Notification sent", "success");
   };
 
-  const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null) => {
+  const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, mentionType = "none") => {
     if (!discordConfig?.webhookUrl) {
       showToast("Discord Webhook URL not set. Please go to Import > Discord.", "error");
       throw new Error("Webhook URL missing");
     }
-
     try {
       const embed = {
         title,
@@ -496,21 +432,23 @@ export const GuildProvider = ({ children, initialData }) => {
         timestamp: new Date().toISOString(),
         footer: { text: "Oblivion Guild Portal" }
       };
-
       if (thumbnail) embed.thumbnail = { url: thumbnail };
-
+      let content = "";
+      if (mentionType === "master" && discordConfig.masterRoleId) {
+        content = `<@&${discordConfig.masterRoleId}>`;
+      } else if (mentionType === "officer" && discordConfig.officerRoleId) {
+        content = `<@&${discordConfig.officerRoleId}>`;
+      } else if (mentionType === "both") {
+        const mId = discordConfig.masterRoleId ? `<@&${discordConfig.masterRoleId}>` : "";
+        const oId = discordConfig.officerRoleId ? `<@&${discordConfig.officerRoleId}>` : "";
+        content = `${mId} ${oId}`.trim();
+      }
       const response = await fetch(discordConfig.webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embeds: [embed] })
+        body: JSON.stringify({ content, embeds: [embed] })
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Discord API Error:", errorData);
-        throw new Error(errorData.message || `Discord Error: ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`Discord Error: ${response.status}`);
       return true;
     } catch (err) {
       console.error("Discord Webhook Network Error:", err);
@@ -519,13 +457,10 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const markNotifRead = async (id) => {
-    // For simplicity, we'll just update local state and Firestore if it's personal
-    // If it's global, we won't mark it read for everyone
     try {
       const n = notifications.find(x => x.id === id);
       if (n && n.targetId !== "all") {
         await setDoc(doc(db, "notifications", id), { ...n, isRead: true });
-        setNotifications(prev => prev.map(x => x.id === id ? { ...x, isRead: true } : x));
       }
     } catch(err) { console.error(err); }
   };
@@ -534,37 +469,18 @@ export const GuildProvider = ({ children, initialData }) => {
     setLoading(true);
     try {
       const batch = writeBatch(db);
-      
-      // Get all docs in all collections
       const collections = ["roster", "events", "attendance", "performance", "eoRatings", "absences", "requests"];
       for (const collName of collections) {
         const snap = await getDocs(collection(db, collName));
         snap.forEach(d => batch.delete(d.ref));
       }
-      
-      // Reset metadata
       batch.set(doc(db, "metadata", "current"), { 
         parties: [], auctionSessions: [], auctionTemplates: [], 
         isInitialized: true, lastReset: new Date().toISOString() 
       });
-      
       await batch.commit();
-      
-      // Clear local state
-      setMembers([]);
-      setEvents([]);
-      setAttendance([]);
-      setPerformance([]);
-      setAbsences([]);
-      setParties([]);
-      setEoRatings([]);
-      setAuctionSessions([]);
-      setAuctionTemplates([]);
-      setRequests([]);
-      
       localStorage.removeItem('guild_parties');
       localStorage.removeItem('guild_partyNames');
-      
       showToast("Database reset successfully", "success");
     } catch (err) {
       console.error("Reset error:", err);
@@ -576,35 +492,26 @@ export const GuildProvider = ({ children, initialData }) => {
 
   const submitJoinRequest = async (data) => {
     try {
-      // Check for duplicates in roster
       const exists = members.some(m => m.memberId?.toLowerCase() === data.uid.toLowerCase());
       if (exists) {
         showToast("An account with this UID already exists in the roster.", "error");
         return false;
       }
-
-      // Check for duplicates in pending join requests
       const pendingExists = joinRequests.some(r => r.uid?.toLowerCase() === data.uid.toLowerCase() && r.status === "pending");
       if (pendingExists) {
         showToast("A registration with this UID is already pending approval.", "error");
         return false;
       }
-
       const req = {
         ...data,
         status: "pending",
         timestamp: new Date().toISOString()
       };
-      const docRef = doc(collection(db, "join_requests"));
-      await setDoc(docRef, req);
-      const newReq = { ...req, id: docRef.id };
-      setJoinRequests(prev => [newReq, ...prev]);
-      
-      // Discord Notification
+      await setDoc(doc(collection(db, "join_requests")), req);
       sendDiscordEmbed(
         "📝 New Join Request",
-        `Isang bagong recruitment application ang natanggap mula kay **${data.ign}**!`,
-        0xF0C040, // Gold
+        `A new recruitment application has been received from **${data.ign}**!`,
+        0xF0C040,
         [
           { name: "IGN", value: data.ign, inline: true },
           { name: "Class", value: data.jobClass, inline: true },
@@ -612,9 +519,9 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "UID", value: data.uid, inline: true },
           { name: "Discord", value: data.discord, inline: true }
         ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "both"
       );
-
       showToast("Registration submitted for approval!", "success");
       return true;
     } catch(err) {
@@ -628,7 +535,6 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
-
       const newMember = {
         memberId: r.uid,
         ign: r.ign,
@@ -638,21 +544,12 @@ export const GuildProvider = ({ children, initialData }) => {
         guildRank: "Member",
         joinDate: new Date().toISOString().split('T')[0]
       };
-
-      // 1. Add to roster
       await setDoc(doc(db, "roster", r.uid), newMember);
-      
-      // 2. Update join request status
       await setDoc(doc(db, "join_requests", requestId), { ...r, status: "approved" });
-
-      setMembers(prev => [...prev, newMember]);
-      setJoinRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "approved" } : x));
-      
-      // Discord Notification
       sendDiscordEmbed(
         "🎉 New Member Joined!",
-        `Maligayang pagdating kay **${r.ign}** sa ating Guild Portal!`,
-        0x40C97A, // Green
+        `Welcome **${r.ign}** to our Guild Portal!`,
+        0x40C97A,
         [
           { name: "IGN", value: r.ign, inline: true },
           { name: "Job Class", value: r.jobClass, inline: true },
@@ -660,7 +557,6 @@ export const GuildProvider = ({ children, initialData }) => {
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
       );
-
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
       return true;
     } catch(err) {
@@ -675,7 +571,6 @@ export const GuildProvider = ({ children, initialData }) => {
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
       await setDoc(doc(db, "join_requests", requestId), { ...r, status: "rejected" });
-      setJoinRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "rejected" } : x));
       showToast(`Registration rejected`, "info");
       return true;
     } catch(err) {
@@ -688,7 +583,6 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteJoinRequest = async (requestId) => {
     try {
       await deleteDoc(doc(db, "join_requests", requestId));
-      setJoinRequests(prev => prev.filter(x => x.id !== requestId));
       showToast("Registration record deleted", "success");
       return true;
     } catch(err) {
@@ -699,7 +593,6 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const submitRequest = async (memberId, newData) => {
-
     try {
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
@@ -711,20 +604,17 @@ export const GuildProvider = ({ children, initialData }) => {
         status: "pending",
         timestamp: new Date().toISOString()
       };
-      const docRef = doc(collection(db, "requests"));
-      await setDoc(docRef, req);
-      const newReq = { ...req, id: docRef.id };
-      setRequests(prev => [newReq, ...prev]);
-      
-      // Discord Notification
+      await setDoc(doc(collection(db, "requests")), req);
       sendDiscordEmbed(
         "🛡️ Vanguard Request (Profile Update)",
-        `Ang member na si **${m.ign}** ay nag-submit ng profile update request.`,
-        0x6382E6, // Blue
+        `Member **${m.ign}** has submitted a profile update request.`,
+        0x6382E6,
         [
           { name: "Requester", value: m.ign, inline: true },
           { name: "Updates", value: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
-        ]
+        ],
+        null,
+        "officer"
       );
 
       showToast("Request submitted for approval!", "success");
@@ -754,9 +644,7 @@ export const GuildProvider = ({ children, initialData }) => {
       // Update Request Status
       await setDoc(doc(db, "requests", requestId), { ...r, status: "approved" });
 
-      setMembers(updatedMembers);
-      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "approved" } : x));
-      
+      // Removed optimistic setMembers/setRequests to allow onSnapshot to handle it
       showToast(`Request approved for ${r.requesterIgn}`, "success");
       return true;
     } catch(err) {
@@ -771,7 +659,8 @@ export const GuildProvider = ({ children, initialData }) => {
       const r = requests.find(x => x.id === requestId);
       if (!r) return;
       await setDoc(doc(db, "requests", requestId), { ...r, status: "rejected" });
-      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: "rejected" } : x));
+      
+      // Removed optimistic setRequests to allow onSnapshot to handle it
       showToast(`Request rejected`, "info");
       return true;
     } catch(err) {
@@ -784,7 +673,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteRequest = async (requestId) => {
     try {
       await deleteDoc(doc(db, "requests", requestId));
-      setRequests(prev => prev.filter(x => x.id !== requestId));
+      // Removed optimistic setRequests to allow onSnapshot to handle it
       showToast("Request deleted from history", "success");
       return true;
     } catch(err) {
