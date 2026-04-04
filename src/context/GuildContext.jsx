@@ -242,16 +242,28 @@ export const GuildProvider = ({ children, initialData }) => {
         unsubs.push(unsubAtt);
 
         const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
-          const docs = snap.docs.map(d => d.data());
-          setPerformance(docs);
-          prevData.current.performance = [...docs];
+          const flat = [];
+          snap.docs.forEach(d => {
+            const { eventId, members: perfMembers } = d.data();
+            Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
+              flat.push({ ...pData, eventId, memberId });
+            });
+          });
+          setPerformance(flat);
+          prevData.current.performance = [...flat];
         });
         unsubs.push(unsubPerf);
 
-        const unsubEo = onSnapshot(collection(db, "eo_ratings"), (snap) => {
-          const docs = snap.docs.map(d => d.data());
-          setEoRatings(docs);
-          prevData.current.eoRatings = [...docs];
+        const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
+          const flat = [];
+          snap.docs.forEach(d => {
+            const { eventId, ratings: eoRatingsMap } = d.data();
+            Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
+              flat.push({ eventId, memberId, rating });
+            });
+          });
+          setEoRatings(flat);
+          prevData.current.eoRatings = [...flat];
         });
         unsubs.push(unsubEo);
 
