@@ -4,6 +4,24 @@ import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnap
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
+const migrateMentions = (cat, defaultType = "none") => {
+  if (!cat) return { enabled: true, webhookUrl: "", mentions: { [defaultType]: true } };
+  if (cat.mentions) return cat; // Already migrated
+  
+  const m = cat.mention || defaultType;
+  const mentions = {};
+  if (m === "master") mentions.master = true;
+  else if (m === "officer") mentions.officer = true;
+  else if (m === "both") { mentions.master = true; mentions.officer = true; }
+  else if (m === "member") mentions.member = true;
+  
+  return { 
+    enabled: cat.enabled !== undefined ? cat.enabled : true, 
+    webhookUrl: cat.webhookUrl || "", 
+    mentions 
+  };
+};
+
 const GuildContext = createContext();
 
 export const useGuild = () => useContext(GuildContext);
@@ -52,12 +70,13 @@ export const GuildProvider = ({ children, initialData }) => {
     webhookUrl: "", 
     masterRoleId: "", 
     officerRoleId: "",
+    oblivionRoleId: "",
     notifications: {
-      join_requests: { enabled: true, webhookUrl: "", mention: "both" },
-      welcome: { enabled: true, webhookUrl: "", mention: "member" },
-      vanguard: { enabled: true, webhookUrl: "", mention: "officer" },
-      events: { enabled: true, webhookUrl: "", mention: "none" },
-      absences: { enabled: true, webhookUrl: "", mention: "member" }
+      join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true, oblivion: false, member: false } },
+      welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
+      vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
+      events: { enabled: true, webhookUrl: "", mentions: {} },
+      absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } }
     },
     templates: {
       new_join: { title: "📝 New Join Request", description: "A new recruitment application has been received from **{ign}**!" },
@@ -219,12 +238,13 @@ export const GuildProvider = ({ children, initialData }) => {
              webhookUrl: discRaw.webhookUrl || "",
              masterRoleId: discRaw.masterRoleId || "",
              officerRoleId: discRaw.officerRoleId || "",
+             oblivionRoleId: discRaw.oblivionRoleId || "",
              notifications: {
-               join_requests: discRaw.notifications?.join_requests || discRaw.notifications?.recruitment || { enabled: true, webhookUrl: "", mention: "both" },
-               welcome: discRaw.notifications?.welcome || discRaw.notifications?.recruitment || { enabled: true, webhookUrl: "", mention: "member" },
-               vanguard: discRaw.notifications?.vanguard || { enabled: true, webhookUrl: "", mention: "officer" },
-               events: discRaw.notifications?.events || { enabled: true, webhookUrl: "", mention: "none" },
-               absences: discRaw.notifications?.absences || { enabled: true, webhookUrl: "", mention: "member" }
+               join_requests: migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both"),
+               welcome: migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member"),
+               vanguard: migrateMentions(discRaw.notifications?.vanguard, "officer"),
+               events: migrateMentions(discRaw.notifications?.events, "none"),
+               absences: migrateMentions(discRaw.notifications?.absences, "member")
              },
              templates: {
                new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
@@ -507,23 +527,18 @@ export const GuildProvider = ({ children, initialData }) => {
       if (thumbnail) embed.thumbnail = { url: thumbnail };
       
       let content = "";
-      const effectiveMention = mentionType !== "none" ? mentionType : (catConfig?.mention || "none");
-
-      if (effectiveMention === "master" && discordConfig.masterRoleId) {
-        content = `<@&${discordConfig.masterRoleId}>`;
-      } else if (effectiveMention === "officer" && discordConfig.officerRoleId) {
-        content = `<@&${discordConfig.officerRoleId}>`;
-      } else if (effectiveMention === "both") {
-        const mId = discordConfig.masterRoleId ? `<@&${discordConfig.masterRoleId}>` : "";
-        const oId = discordConfig.officerRoleId ? `<@&${discordConfig.officerRoleId}>` : "";
-        content = `${mId} ${oId}`.trim();
-      } else if (effectiveMention === "member" && memberMentionId) {
-        // Validation: Only mention if numeric ID
+      const catMentions = catConfig?.mentions || {};
+      
+      // Build dynamic content string
+      const mentionParts = [];
+      if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
+      if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
+      if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
+      if (catMentions.member && memberMentionId) {
         const cleanId = memberMentionId.replace(/[^0-9]/g, "");
-        if (cleanId && cleanId.length >= 15) {
-          content = `<@${cleanId}>`;
-        }
+        if (cleanId && cleanId.length >= 15) mentionParts.push(`<@${cleanId}>`);
       }
+      content = mentionParts.join(" ");
 
       const response = await fetch(targetUrl, {
         method: "POST",

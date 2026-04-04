@@ -29,6 +29,11 @@ const DiscordSettings = () => {
     }));
   };
 
+  const toggleMention = (cat, type) => {
+    const current = localConfig.notifications[cat].mentions || {};
+    updateNotif(cat, "mentions", { ...current, [type]: !current[type] });
+  };
+
   const updateTemplate = (key, field, val) => {
     setLocalConfig(prev => ({
       ...prev,
@@ -95,27 +100,44 @@ const DiscordSettings = () => {
     );
   };
 
+  const renderMentionToggle = (cat, type, label, color) => {
+    const isActive = localConfig.notifications[cat].mentions?.[type];
+    return (
+      <button 
+        key={type}
+        className={`btn btn-xs ${isActive ? '' : 'btn-ghost'}`}
+        onClick={() => toggleMention(cat, type)}
+        style={{ 
+          background: isActive ? color : 'rgba(255,255,255,0.05)',
+          color: isActive ? '#fff' : 'var(--text-muted)',
+          fontSize: '9px',
+          padding: '2px 8px',
+          border: isActive ? 'none' : '1px solid var(--border)'
+        }}
+      >
+        {isActive ? '✅' : ''} {label}
+      </button>
+    );
+  };
+
   const renderCategoryHead = (cat, title) => (
     <>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold">{title}</span>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted">Mention:</span>
-            <select className="form-select text-[10px]" style={{ padding: "2px 4px", height: "auto" }} value={localConfig.notifications[cat].mention || "none"} onChange={e => updateNotif(cat, "mention", e.target.value)}>
-              <option value="none">None</option>
-              <option value="master">Master Role</option>
-              <option value="officer">Officer Role</option>
-              <option value="both">Both Roles</option>
-              <option value="member">Member Involved</option>
-            </select>
-          </div>
-          <label className="switch">
-            <input type="checkbox" checked={localConfig.notifications[cat].enabled} onChange={e => updateNotif(cat, "enabled", e.target.checked)} />
-            <span className="slider round" style={{ transform: 'scale(0.8)' }}></span>
-          </label>
-        </div>
+        <label className="switch">
+          <input type="checkbox" checked={localConfig.notifications[cat].enabled} onChange={e => updateNotif(cat, "enabled", e.target.checked)} />
+          <span className="slider round" style={{ transform: 'scale(0.8)' }}></span>
+        </label>
       </div>
+
+      <div className="flex items-center gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
+        <span className="text-[10px] text-muted mr-1">Mentions:</span>
+        {renderMentionToggle(cat, "master", "Master", "var(--gold)")}
+        {renderMentionToggle(cat, "officer", "Officer", "var(--accent)")}
+        {renderMentionToggle(cat, "oblivion", "Oblivion", "#8A2BE2")}
+        {renderMentionToggle(cat, "member", "Member", "#40C97A")}
+      </div>
+
       <div className="form-group mb-4">
         <label className="text-[10px] font-bold mb-1 block">WEBHOOK OVERRIDE (OPTIONAL)</label>
         <div className="flex gap-2">
@@ -165,14 +187,18 @@ const DiscordSettings = () => {
                 </div>
                 <p className="text-[10px] text-muted mt-1">Gagamitin ito sa lahat ng alerts maliban kung may 'Override Webhook' sa specific category.</p>
               </div>
-              <div className="grid-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                 <div className="form-group">
-                  <label className="text-xs font-bold mb-1 block text-gold">👑 MASTER ROLE ID</label>
+                  <label className="text-xs font-bold mb-1 block text-gold">👑 MASTER ID</label>
                   <input className="form-input" value={localConfig.masterRoleId} onChange={e => setLocalConfig(p => ({ ...p, masterRoleId: e.target.value }))} />
                 </div>
                 <div className="form-group">
-                  <label className="text-xs font-bold mb-1 block text-accent">⚔️ OFFICER ROLE ID</label>
+                  <label className="text-xs font-bold mb-1 block text-accent">⚔️ OFFICER ID</label>
                   <input className="form-input" value={localConfig.officerRoleId} onChange={e => setLocalConfig(p => ({ ...p, officerRoleId: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="text-xs font-bold mb-1 block" style={{ color: '#8A2BE2' }}>⚖️ OBLIVION ID</label>
+                  <input className="form-input" value={localConfig.oblivionRoleId} onChange={e => setLocalConfig(p => ({ ...p, oblivionRoleId: e.target.value }))} />
                 </div>
               </div>
               <div style={{ marginTop: 24, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 10, border: "1px solid var(--border)" }}>
