@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
+import { MemberAvatar } from '../components/common/MemberAvatar';
 
 function AuctionBuilder() {
   const {
     members, auctionSessions, setAuctionSessions,
-    auctionTemplates, setAuctionTemplates, showToast
+    auctionTemplates, setAuctionTemplates, showToast,
+    attendance, events
   } = useGuild();
-  const [view, setView] = useState("sessions"); // "sessions" | "editor"
+  const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
   const [showNewSession, setShowNewSession] = useState(false);
   const [showNewTemplate, setShowNewTemplate] = useState(false);
+  const [showHistoryGuide, setShowHistoryGuide] = useState(true);
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const [newSessionForm, setNewSessionForm] = useState({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -21,6 +24,43 @@ function AuctionBuilder() {
   const [dragging, setDragging] = useState(null); // memberId
   const [dragOver, setDragOver] = useState(null); // "table" | "pool"
   const [poolSearch, setPoolSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyFilter, setHistoryFilter] = useState("all"); // "all" | "wins" | "outbids"
+
+  // Aggregate ALL loot history
+  const lootHistory = React.useMemo(() => {
+    const history = [];
+    auctionSessions.forEach(s => {
+      if (!s.cells) return;
+      Object.entries(s.cells).forEach(([key, tags]) => {
+        if (!tags || tags.length === 0) return;
+        
+        // Robust parsing: Find which column ID matches the END of the key
+        const col = s.columns?.find(c => key.endsWith(`_${c.id}`));
+        if (!col) return;
+        
+        const mIdFromKey = key.substring(0, key.length - col.id.length - 1).trim().toLowerCase();
+        const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mIdFromKey);
+        if (!member) return;
+        
+        tags.forEach(tag => {
+          history.push({
+            id: `${s.id}_${key}_${tag}`,
+            sessionId: s.id,
+            sessionName: s.name,
+            date: s.date,
+            memberId: member.memberId,
+            ign: member.ign,
+            colId: col.id,
+            colName: col.name,
+            tag: tag,
+            isOutbid: tag.startsWith("!")
+          });
+        });
+      });
+    });
+    return history.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [auctionSessions, members]);
 
   // Get active session data
   const session = auctionSessions.find(s => s.id === activeSession);
@@ -103,6 +143,21 @@ function AuctionBuilder() {
     }));
   };
 
+  const toggleOutbid = (memberId, colId, tagIdx) => {
+    const key = getCellKey(memberId, colId);
+    updateSession(s => {
+      const tags = [...(s.cells[key] || [])];
+      if (tags[tagIdx]) {
+        if (tags[tagIdx].startsWith("!")) {
+          tags[tagIdx] = tags[tagIdx].substring(1);
+        } else {
+          tags[tagIdx] = "!" + tags[tagIdx];
+        }
+      }
+      return { ...s, cells: { ...s.cells, [key]: tags } };
+    });
+  };
+
   // Drag handlers
   const onDragStart = (memberId) => setDragging(memberId);
   const onDragEnd = () => { setDragging(null); setDragOver(null); };
@@ -137,7 +192,17 @@ function AuctionBuilder() {
   };
 
   const tagColor = (tag) => {
-    const t = tag.toLowerCase();
+    const isOutbid = tag.startsWith("!");
+    const t = (isOutbid ? tag.substring(1) : tag).toLowerCase();
+    
+    if (isOutbid) return { 
+      bg: "rgba(224,80,80,0.05)", 
+      color: "rgba(255,255,255,0.4)", 
+      border: "rgba(224,80,80,0.2)",
+      textDecoration: "line-through",
+      opacity: 0.6
+    };
+
     if (t.includes("upto")) return { bg: "rgba(240,192,64,0.15)", color: "var(--gold)", border: "rgba(240,192,64,0.3)" };
     if (t.includes("rw")) return { bg: "rgba(224,92,138,0.15)", color: "var(--accent2)", border: "rgba(224,92,138,0.3)" };
     return { bg: "rgba(64,201,122,0.15)", color: "var(--green)", border: "rgba(64,201,122,0.3)" };
@@ -171,6 +236,11 @@ function AuctionBuilder() {
       <div className="page-header">
         <h1 className="page-title">📜 Auction Builder</h1>
         <p className="page-subtitle">Distribute resources per member per session</p>
+      </div>
+
+      <div className="flex gap-2 mb-6" style={{ background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 10, width: "fit-content" }}>
+        <button className={`btn btn-sm ${view === "sessions" ? "btn-primary" : "btn-ghost"}`} onClick={() => setView("sessions")}>Sessions</button>
+        <button className={`btn btn-sm ${view === "history" ? "btn-primary" : "btn-ghost"}`} onClick={() => setView("history")}>Loot History</button>
       </div>
 
       <div className="grid-2" style={{ marginBottom: 20 }}>
@@ -244,6 +314,85 @@ function AuctionBuilder() {
     </div>
   );
 
+  // ── HISTORY VIEW
+  if (view === "history") {
+    const filtered = lootHistory.filter(h => {
+      const matchSearch = h.ign.toLowerCase().includes(historySearch.toLowerCase()) || h.sessionName.toLowerCase().includes(historySearch.toLowerCase());
+      const matchFilter = historyFilter === "all" || (historyFilter === "wins" && !h.isOutbid) || (historyFilter === "outbids" && h.isOutbid);
+      return matchSearch && matchFilter;
+    });
+
+    return (
+      <div>
+        <div className="page-header">
+          <button className="btn btn-ghost mb-3" onClick={() => setView("sessions")}><Icon name="arrow-left" size={14} /> Back to Sessions</button>
+          <h1 className="page-title">📊 Loot History Summary</h1>
+          <p className="page-subtitle">Comprehensive record of all resource distribution</p>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between gap-4 mb-4" style={{ flexWrap: "wrap" }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+              <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Search member or session..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
+              <div style={{ position: "absolute", left: 12, top: 10, opacity: 0.5 }}><Icon name="search" size={14} /></div>
+            </div>
+            <div className="flex gap-2">
+              {["all", "wins", "outbids"].map(f => (
+                <button key={f} className={`btn btn-sm ${historyFilter === f ? "btn-primary" : "btn-ghost"}`} onClick={() => setHistoryFilter(f)}>
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Date</th>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Session</th>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Member</th>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Resource</th>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Tag</th>
+                  <th style={{ padding: "12px 16px", textAlign: "left" }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No matching history found</td></tr>}
+                {filtered.map(h => {
+                  const tc = tagColor(h.tag);
+                  return (
+                    <tr key={h.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td className="text-secondary" style={{ padding: "12px 16px", fontSize: 13 }}>{h.date}</td>
+                      <td style={{ padding: "12px 16px", fontWeight: 600 }}>{h.sessionName}</td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <div className="flex items-center gap-2">
+                          <MemberAvatar ign={h.ign} size={24} />
+                          <span style={{ fontWeight: 700 }}>{h.ign}</span>
+                        </div>
+                      </td>
+                      <td className="text-secondary" style={{ padding: "12px 16px" }}>{h.colName}</td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span style={{ background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, opacity: h.isOutbid ? 0.7 : 1 }}>
+                          {h.isOutbid ? h.tag.substring(1) : h.tag}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span className={`badge ${h.isOutbid ? "badge-loa" : "badge-active"}`}>
+                          {h.isOutbid ? "Outbid" : "Won"}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── EDITOR VIEW
   if (!session) return null;
 
@@ -259,6 +408,10 @@ function AuctionBuilder() {
             </div>
           </div>
           <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+            <button className={`btn ${showHistoryGuide ? "btn-primary" : "btn-ghost"}`} onClick={() => setShowHistoryGuide(!showHistoryGuide)}>
+              <Icon name="book" size={14} /> 
+              {showHistoryGuide ? "Hide History Guide" : "Show History Guide"}
+            </button>
             {showNewTemplate ? (
               <div className="flex gap-2 items-center">
                 <input className="form-input" style={{ width: 180, padding: "6px 12px", fontSize: 13 }} placeholder="Template name..." value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} />
@@ -441,11 +594,17 @@ function AuctionBuilder() {
                                     <span key={ti} style={{
                                       background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`,
                                       fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                                      display: "inline-flex", alignItems: "center", gap: 4
+                                      display: "inline-flex", alignItems: "center", gap: 4,
+                                      textDecoration: tc.textDecoration || "none"
                                     }}>
-                                      {tag}
-                                      <span style={{ cursor: "pointer", opacity: 0.7, fontSize: 12, lineHeight: 1 }}
-                                        onClick={e => { e.stopPropagation(); removeTag(m.memberId, col.id, ti); }}>×</span>
+                                      {tc.opacity ? tag.substring(1) : tag}
+                                      <div className="flex items-center gap-1 ml-1" style={{ borderLeft: "1px solid rgba(255,255,255,0.1)", paddingLeft: 4 }}>
+                                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "white", opacity: 0.5, fontSize: 10, padding: 0 }}
+                                          title="Toggle Outbid status"
+                                          onClick={e => { e.stopPropagation(); toggleOutbid(m.memberId, col.id, ti); }}>🔄</button>
+                                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", opacity: 0.7, fontSize: 13, lineHeight: 1, padding: 0 }}
+                                          onClick={e => { e.stopPropagation(); removeTag(m.memberId, col.id, ti); }}>×</button>
+                                      </div>
                                     </span>
                                   );
                                 })}
@@ -479,6 +638,77 @@ function AuctionBuilder() {
             <div style={{ textAlign: "center", fontSize: 12, color: "var(--accent)", marginTop: 4 }}>Drop here to add member</div>
           )}
         </div>
+
+        {/* Member History Guide Sidebar */}
+        {showHistoryGuide && (
+          <div style={{ width: 280, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", overflowY: "auto" }} className="custom-scrollbar">
+            <div className="card" style={{ height: "100%", padding: 16 }}>
+              <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+                <Icon name="book" size={14} /> Member History Guide
+              </div>
+              <p className="text-xs text-muted mb-4">Select a column or member cell to see their past resource winnings.</p>
+              
+              {editingCell ? (
+                <div style={{ animation: "fade-in 0.3s" }}>
+                  <div className="space-y-4">
+                    {(() => {
+                      const currentMember = members.find(m => (m.memberId || "").trim().toLowerCase() === (editingCell.memberId || "").trim().toLowerCase());
+                      const allPastWins = lootHistory.filter(h => 
+                        (h.memberId || "").trim().toLowerCase() === (editingCell.memberId || "").trim().toLowerCase() && 
+                        !h.isOutbid && 
+                        h.sessionId !== activeSession
+                      );
+
+                      if (allPastWins.length === 0) {
+                        return (
+                          <div className="text-center py-8">
+                            <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)", marginBottom: 4 }}>{currentMember?.ign || "Unknown Member"}</div>
+                            <div className="text-muted text-xs">No past resource history found.</div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          <div style={{ padding: "14px", background: "rgba(99,130,230,0.1)", border: "1px solid rgba(99,130,230,0.2)", borderRadius: 12, marginBottom: 16 }}>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: "white", fontFamily: "Cinzel, serif" }}>{currentMember?.ign}</div>
+                            <div style={{ fontSize: 10, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700, marginTop: 4 }}>
+                              Total Winnings: {allPastWins.length}
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            {allPastWins.map(w => (
+                              <div key={w.id} style={{ borderLeft: "2px solid var(--accent)", paddingLeft: 12, paddingBottom: 4 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2 }}>
+                                  {w.sessionName} — <span style={{ fontWeight: 400, opacity: 0.6 }}>{w.date}</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+                                  Category: <span style={{ fontWeight: 600 }}>{w.colName}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                   <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Loot (Row):</span>
+                                   <span style={{ background: "rgba(64,201,122,0.12)", color: "var(--green)", border: "1px solid rgba(64,201,122,0.2)", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 6 }}>
+                                     {w.tag}
+                                   </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: 12 }}>
+                  <Icon name="mouse-pointer" size={24} style={{ opacity: 0.2, marginBottom: 12 }} />
+                  <br />Click on a resource cell to view that member's past wins for that category.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
