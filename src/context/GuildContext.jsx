@@ -82,7 +82,7 @@ export const GuildProvider = ({ children, initialData }) => {
       new_join: { title: "📝 New Join Request", description: "A new recruitment application has been received from **{ign}**!" },
       welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
       vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
-      event_created: { title: "📅 New Event Scheduled", description: "A new guild event has been scheduled! Please check your attendance." },
+      event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
       absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
       absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." }
     }
@@ -250,7 +250,7 @@ export const GuildProvider = ({ children, initialData }) => {
                new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
                welcome: discRaw.templates?.welcome || { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
                vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
-               event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled", description: "A new guild event has been scheduled!" },
+               event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
                absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
                absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." }
              }
@@ -492,13 +492,19 @@ export const GuildProvider = ({ children, initialData }) => {
    const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, mentionType = "none", category = null, templateKey = null, placeholders = {}, memberMentionId = null) => {
      const catConfig = category ? discordConfig.notifications?.[category] : null;
 
-     if (catConfig && !catConfig.enabled) return;
+     if (catConfig && !catConfig.enabled) {
+       if (isAdmin) showToast(`Discord: Notification category '${category}' is disabled.`, "info");
+       return;
+     }
 
-     const targetUrl = (catConfig?.webhookUrl) 
+     const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
        ? catConfig.webhookUrl 
        : discordConfig.webhookUrl;
 
-     if (!targetUrl) return;
+     if (!targetUrl || targetUrl.trim() === "") {
+       if (isAdmin) showToast(`Discord: No Webhook URL set for '${category || "global"}'.`, "error");
+       return;
+     }
 
      let finalTitle = title;
      let finalDesc = description;
@@ -829,7 +835,7 @@ export const GuildProvider = ({ children, initialData }) => {
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
-    discordConfig, setDiscordConfig,
+    discordConfig, setDiscordConfig, sendDiscordEmbed,
     resetDatabase
 
   };

@@ -29,7 +29,7 @@ function EventsPage() {
   const [form, setForm] = useState({ eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0] });
   const [perfEdits, setPerfEdits] = useState({});
 
-  const createEvent = () => {
+  const createEvent = async () => {
     const eventId = `EVT${Date.now()}`;
     const newEvent = { eventId, ...form };
     setEvents(prev => [...prev, newEvent]);
@@ -45,7 +45,7 @@ function EventsPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
     
     // Discord Notification
-    sendDiscordEmbed(
+    await sendDiscordEmbed(
       "📅 New Event Scheduled",
       `A new guild event has been scheduled! Please check your attendance.`,
       0x6382E6, // Blue
