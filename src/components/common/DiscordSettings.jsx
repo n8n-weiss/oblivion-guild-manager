@@ -4,49 +4,61 @@ import Icon from '../ui/icons';
 
 const DiscordSettings = () => {
   const { discordConfig, setDiscordConfig, showToast, isArchitect } = useGuild();
-  const [url, setUrl] = useState(discordConfig?.webhookUrl || "");
-  const [masterId, setMasterId] = useState(discordConfig?.masterRoleId || "");
-  const [officerId, setOfficerId] = useState(discordConfig?.officerRoleId || "");
+  const [localConfig, setLocalConfig] = useState(discordConfig);
+  const [activeSection, setActiveSection] = useState("general");
   const [isTesting, setIsTesting] = useState(false);
 
-  // Sync local state when global config loads from Firestore
   useEffect(() => {
-    if (discordConfig?.webhookUrl) setUrl(discordConfig.webhookUrl);
-    if (discordConfig?.masterRoleId) setMasterId(discordConfig.masterRoleId);
-    if (discordConfig?.officerRoleId) setOfficerId(discordConfig.officerRoleId);
+    setLocalConfig(discordConfig);
   }, [discordConfig]);
 
   if (!isArchitect) return null;
 
   const handleSave = () => {
-    setDiscordConfig({ 
-      ...discordConfig, 
-      webhookUrl: url,
-      masterRoleId: masterId,
-      officerRoleId: officerId
-    });
-    showToast("Discord settings saved!", "success");
+    setDiscordConfig(localConfig);
+    showToast("Discord configuration saved!", "success");
   };
 
-  const testWebhook = async () => {
-    if (!url) return showToast("Please enter a Webhook URL first", "error");
+  const updateNotif = (cat, field, val) => {
+    setLocalConfig(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        [cat]: { ...prev.notifications[cat], [field]: val }
+      }
+    }));
+  };
+
+  const updateTemplate = (key, field, val) => {
+    setLocalConfig(prev => ({
+      ...prev,
+      templates: {
+        ...prev.templates,
+        [key]: { ...prev.templates[key], [field]: val }
+      }
+    }));
+  };
+
+  const testWebhook = async (urlOverride = null) => {
+    const targetUrl = urlOverride || localConfig.webhookUrl;
+    if (!targetUrl) return showToast("Please enter a Webhook URL first", "error");
     setIsTesting(true);
     try {
-      const response = await fetch(url, {
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           embeds: [{
             title: "🔌 Connection Test",
-            description: "Ang inyong Web App ay matagumpay na naka-konekta sa Discord! ✅",
+            description: "Ang inyong Discord integration ay matagumpay na naka-konekta! ✅",
             color: 0x6382E6,
             timestamp: new Date().toISOString(),
-            footer: { text: "Oblivion Guild Manager" }
+            footer: { text: "Oblivion Guild Portal" }
           }]
         })
       });
       if (response.ok) showToast("Test notification sent!", "success");
-      else throw new Error("Failed to send");
+      else throw new Error("Failed");
     } catch (err) {
       showToast("Error connecting to Discord Webhook", "error");
     } finally {
@@ -54,70 +66,163 @@ const DiscordSettings = () => {
     }
   };
 
-  return (
-    <div className="card" style={{ marginTop: 20 }}>
-      <div className="card-title flex items-center gap-2">
-        <Icon name="discord" size={20} color="#5865F2" />
-        🤖 Discord Integration (Power Feature)
-      </div>
-      <p className="text-xs text-muted mb-4">
-        I-input ang inyong Discord Webhook URL para mag-send ng automatic alerts for recruitment and profile updates.
-      </p>
+  const sections = [
+    { id: "general", label: "General", icon: "settings" },
+    { id: "join_requests", label: "Join Requests", icon: "add-user" },
+    { id: "welcome", label: "Member Welcome", icon: "users" },
+    { id: "vanguard", label: "Vanguard", icon: "edit" },
+    { id: "events", label: "Events", icon: "calendar" },
+    { id: "absences", label: "Absences", icon: "absence" }
+  ];
 
-      <div className="form-group pb-4">
-        <label className="text-xs font-bold mb-2 block">DISCORD WEBHOOK URL</label>
+  const renderTemplateEditor = (key, title, placeholders) => {
+    const temp = localConfig.templates?.[key] || { title: "", description: "" };
+    return (
+      <div className="card-inner p-3 mb-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", marginBottom: 8, textTransform: "uppercase" }}>Editing: {title}</div>
+        <div className="form-group mb-2">
+          <label className="text-[10px] text-muted mb-1 block">EMBED TITLE</label>
+          <input className="form-input form-input-sm" value={temp.title} onChange={e => updateTemplate(key, "title", e.target.value)} />
+        </div>
+        <div className="form-group mb-2">
+          <label className="text-[10px] text-muted mb-1 block">EMBED DESCRIPTION</label>
+          <textarea className="form-input form-input-sm" rows={2} value={temp.description} onChange={e => updateTemplate(key, "description", e.target.value)} />
+        </div>
+        <div className="text-[9px] text-muted">
+          Available: {placeholders.map(p => <code key={p} style={{ color: "var(--gold)", marginRight: 5 }}>{`{${p}}`}</code>)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCategoryHead = (cat, title) => (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold">{title}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted">Mention:</span>
+            <select className="form-select text-[10px]" style={{ padding: "2px 4px", height: "auto" }} value={localConfig.notifications[cat].mention || "none"} onChange={e => updateNotif(cat, "mention", e.target.value)}>
+              <option value="none">None</option>
+              <option value="master">Master Role</option>
+              <option value="officer">Officer Role</option>
+              <option value="both">Both Roles</option>
+              <option value="member">Member Involved</option>
+            </select>
+          </div>
+          <label className="switch">
+            <input type="checkbox" checked={localConfig.notifications[cat].enabled} onChange={e => updateNotif(cat, "enabled", e.target.checked)} />
+            <span className="slider round" style={{ transform: 'scale(0.8)' }}></span>
+          </label>
+        </div>
+      </div>
+      <div className="form-group mb-4">
+        <label className="text-[10px] font-bold mb-1 block">WEBHOOK OVERRIDE (OPTIONAL)</label>
         <div className="flex gap-2">
-          <input
-            type="password"
-            className="form-input flex-1"
-            placeholder="https://discord.com/api/webhooks/..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            style={{ fontFamily: url ? 'password' : 'inherit' }}
-          />
-          <button 
-            className="btn btn-secondary" 
-            onClick={testWebhook}
-            disabled={isTesting}
-          >
-            {isTesting ? "Testing..." : "Test"}
-          </button>
-        </div>
-        <p className="text-[10px] text-muted mt-2">
-          💡 Go to Server Settings &gt; Integrations &gt; Webhooks to create one.
-        </p>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px", padding: "16px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", border: "1px solid var(--border)" }}>
-        <div className="form-group">
-          <label className="text-xs font-bold mb-2 block text-gold">👑 MASTER ROLE ID</label>
-          <input
-            className="form-input"
-            placeholder="e.g. 123456789..."
-            value={masterId}
-            onChange={(e) => setMasterId(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label className="text-xs font-bold mb-2 block" style={{ color: "var(--accent)" }}>⚔️ OFFICER ROLE ID</label>
-          <input
-            className="form-input"
-            placeholder="e.g. 123456789..."
-            value={officerId}
-            onChange={(e) => setOfficerId(e.target.value)}
-          />
-        </div>
-        <div style={{ gridColumn: "1/-1", marginTop: "8px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "8px" }}>
-          <p className="text-[10px] text-muted">
-            <strong>How to get Role ID:</strong> Enable <strong>Developer Mode</strong> in Discord Settings &gt; Advanced. Then right-click a Role in Server Settings and select <strong>Copy Role ID</strong>.
-          </p>
+          <input type="password" className="form-input form-input-sm" placeholder="Default global webhook will be used if blank..." value={localConfig.notifications[cat].webhookUrl} onChange={e => updateNotif(cat, "webhookUrl", e.target.value)} />
+          <button className="btn btn-ghost btn-sm" onClick={() => testWebhook(localConfig.notifications[cat].webhookUrl)} disabled={isTesting}>Test</button>
         </div>
       </div>
+    </>
+  );
 
-      <div className="flex justify-end pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-        <button className="btn btn-primary" onClick={handleSave}>
-          💾 Save Discord Config
-        </button>
+  return (
+    <div className="card animate-fade-in" style={{ marginTop: 20 }}>
+      <div className="card-title flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon name="discord" size={20} color="#5865F2" />
+          🤖 Discord Alert Center
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save All Config</button>
+      </div>
+
+      <div className="flex gap-4 mt-4" style={{ minHeight: 450 }}>
+        {/* Sidebar */}
+        <div style={{ width: 160, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
+          {sections.map(s => (
+            <button key={s.id} onClick={() => setActiveSection(s.id)}
+              className={`btn btn-sm btn-ghost`} style={{ justifyContent: "flex-start", color: activeSection === s.id ? "var(--accent)" : "var(--text-muted)", background: activeSection === s.id ? "rgba(99,130,230,0.1)" : "transparent" }}>
+              <Icon name={s.icon} size={14} /> {s.label}
+            </button>
+          ))}
+          <div style={{ marginTop: "auto", padding: "10px", background: "rgba(240,192,64,0.05)", borderRadius: "8px", border: "1px solid rgba(240,192,64,0.1)" }}>
+             <div style={{ color: "var(--gold)", fontSize: 9, fontWeight: 700, marginBottom: 4 }}>💡 MULTI-CHANNEL TIPS</div>
+             <p style={{ fontSize: 8, color: "var(--text-muted)", lineHeight: 1.4 }}>
+               I-leave as <strong>blank</strong> ang Webhook Override para gamitin ang Global channel. Para sa <strong>Mentions</strong>, gamitin ang Numeric User ID sa roster.
+             </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, paddingLeft: 10 }}>
+          {activeSection === "general" && (
+            <div className="animate-fade-in">
+               <div className="form-group mb-4">
+                <label className="text-xs font-bold mb-2 block">GLOBAL WEBHOOK URL</label>
+                <div className="flex gap-2">
+                  <input type="password" className="form-input" placeholder="https://discord.com/api/webhooks/..." value={localConfig.webhookUrl} onChange={e => setLocalConfig(p => ({ ...p, webhookUrl: e.target.value }))} style={{ fontFamily: localConfig.webhookUrl ? 'password' : 'inherit' }} />
+                  <button className="btn btn-secondary btn-sm" onClick={() => testWebhook()} disabled={isTesting}>Test</button>
+                </div>
+                <p className="text-[10px] text-muted mt-1">Gagamitin ito sa lahat ng alerts maliban kung may 'Override Webhook' sa specific category.</p>
+              </div>
+              <div className="grid-2 gap-4">
+                <div className="form-group">
+                  <label className="text-xs font-bold mb-1 block text-gold">👑 MASTER ROLE ID</label>
+                  <input className="form-input" value={localConfig.masterRoleId} onChange={e => setLocalConfig(p => ({ ...p, masterRoleId: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="text-xs font-bold mb-1 block text-accent">⚔️ OFFICER ROLE ID</label>
+                  <input className="form-input" value={localConfig.officerRoleId} onChange={e => setLocalConfig(p => ({ ...p, officerRoleId: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ marginTop: 24, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 10, border: "1px solid var(--border)" }}>
+                  <div className="text-xs font-bold mb-2 text-accent">📖 How to get Numeric IDs:</div>
+                  <ol style={{ paddingLeft: 16, fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <li>Buksan ang <strong>Settings &gt; Advanced</strong> sa Discord.</li>
+                    <li>I-on ang <strong>Developer Mode</strong>.</li>
+                    <li>I-right click ang <strong>Role</strong> o <strong>User Profile</strong>.</li>
+                    <li>Piliin ang <strong>Copy Role ID</strong> o <strong>Copy User ID</strong>.</li>
+                  </ol>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "join_requests" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("join_requests", "JOIN REQUESTS (PENDING)")}
+              {renderTemplateEditor("new_join", "Application Received alert", ["ign", "class", "role", "uid", "discord"])}
+            </div>
+          )}
+
+          {activeSection === "welcome" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("welcome", "MEMBER WELCOME (APPROVED)")}
+              {renderTemplateEditor("welcome", "Public Welcome Message", ["ign", "class", "role"])}
+            </div>
+          )}
+
+          {activeSection === "vanguard" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("vanguard", "VANGUARD REQUESTS")}
+              {renderTemplateEditor("vanguard", "Profile Update Request", ["ign", "updates"])}
+            </div>
+          )}
+
+          {activeSection === "events" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("events", "EVENT SCHEDULING")}
+              {renderTemplateEditor("event_created", "New Event Created", ["type", "date"])}
+            </div>
+          )}
+
+          {activeSection === "absences" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("absences", "ABSENCE ALERTS")}
+              {renderTemplateEditor("absence_filed", "New Absence Filed", ["ign", "event", "date", "reason", "online"])}
+              {renderTemplateEditor("absence_removed", "Absence Records Removed", ["ign", "event", "date"])}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -48,7 +48,26 @@ export const GuildProvider = ({ children, initialData }) => {
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
-  const [discordConfig, setDiscordConfig] = useState({ webhookUrl: "", masterRoleId: "", officerRoleId: "" });
+  const [discordConfig, setDiscordConfig] = useState({ 
+    webhookUrl: "", 
+    masterRoleId: "", 
+    officerRoleId: "",
+    notifications: {
+      join_requests: { enabled: true, webhookUrl: "", mention: "both" },
+      welcome: { enabled: true, webhookUrl: "", mention: "member" },
+      vanguard: { enabled: true, webhookUrl: "", mention: "officer" },
+      events: { enabled: true, webhookUrl: "", mention: "none" },
+      absences: { enabled: true, webhookUrl: "", mention: "member" }
+    },
+    templates: {
+      new_join: { title: "📝 New Join Request", description: "A new recruitment application has been received from **{ign}**!" },
+      welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
+      vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
+      event_created: { title: "📅 New Event Scheduled", description: "A new guild event has been scheduled! Please check your attendance." },
+      absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
+      absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." }
+    }
+  });
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
 
   const [raidParties, setRaidParties] = useState(() => {
@@ -195,9 +214,29 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.raidParties = [...cloudRaid];
           setAuctionSessions(data.auctionSessions || []);
           setAuctionTemplates(data.auctionTemplates || []);
-          const disc = data.discord || { webhookUrl: "", masterRoleId: "", officerRoleId: "" };
-          setDiscordConfig(disc);
-          prevData.current.discordConfig = { ...disc };
+           const discRaw = data.discord || {};
+           const disc = {
+             webhookUrl: discRaw.webhookUrl || "",
+             masterRoleId: discRaw.masterRoleId || "",
+             officerRoleId: discRaw.officerRoleId || "",
+             notifications: {
+               join_requests: discRaw.notifications?.join_requests || discRaw.notifications?.recruitment || { enabled: true, webhookUrl: "", mention: "both" },
+               welcome: discRaw.notifications?.welcome || discRaw.notifications?.recruitment || { enabled: true, webhookUrl: "", mention: "member" },
+               vanguard: discRaw.notifications?.vanguard || { enabled: true, webhookUrl: "", mention: "officer" },
+               events: discRaw.notifications?.events || { enabled: true, webhookUrl: "", mention: "none" },
+               absences: discRaw.notifications?.absences || { enabled: true, webhookUrl: "", mention: "member" }
+             },
+             templates: {
+               new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
+               welcome: discRaw.templates?.welcome || { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
+               vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
+               event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled", description: "A new guild event has been scheduled!" },
+               absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
+               absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." }
+             }
+           };
+           setDiscordConfig(disc);
+           prevData.current.discordConfig = { ...disc };
           prevData.current.auctionSessions = [...(data.auctionSessions || [])];
           prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
           if (data.partyNames) {
@@ -430,32 +469,63 @@ export const GuildProvider = ({ children, initialData }) => {
     showToast("Notification sent", "success");
   };
 
-  const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, mentionType = "none") => {
-    if (!discordConfig?.webhookUrl) {
-      showToast("Discord Webhook URL not set. Please go to Import > Discord.", "error");
-      throw new Error("Webhook URL missing");
-    }
-    try {
-      const embed = {
-        title,
-        description,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-        footer: { text: "Oblivion Guild Portal" }
-      };
+   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, mentionType = "none", category = null, templateKey = null, placeholders = {}, memberMentionId = null) => {
+     const catConfig = category ? discordConfig.notifications?.[category] : null;
+
+     if (catConfig && !catConfig.enabled) return;
+
+     const targetUrl = (catConfig?.webhookUrl) 
+       ? catConfig.webhookUrl 
+       : discordConfig.webhookUrl;
+
+     if (!targetUrl) return;
+
+     let finalTitle = title;
+     let finalDesc = description;
+
+     if (templateKey && discordConfig.templates?.[templateKey]) {
+       const template = discordConfig.templates[templateKey];
+       finalTitle = template.title || title;
+       finalDesc = template.description || description;
+       
+       Object.entries(placeholders).forEach(([key, val]) => {
+         const regex = new RegExp(`{${key}}`, 'g');
+         finalTitle = finalTitle.replace(regex, val);
+         finalDesc = finalDesc.replace(regex, val);
+       });
+     }
+
+     try {
+       const embed = {
+         title: finalTitle,
+         description: finalDesc,
+         color,
+         fields,
+         timestamp: new Date().toISOString(),
+         footer: { text: "Oblivion Guild Portal" }
+       };
       if (thumbnail) embed.thumbnail = { url: thumbnail };
+      
       let content = "";
-      if (mentionType === "master" && discordConfig.masterRoleId) {
+      const effectiveMention = mentionType !== "none" ? mentionType : (catConfig?.mention || "none");
+
+      if (effectiveMention === "master" && discordConfig.masterRoleId) {
         content = `<@&${discordConfig.masterRoleId}>`;
-      } else if (mentionType === "officer" && discordConfig.officerRoleId) {
+      } else if (effectiveMention === "officer" && discordConfig.officerRoleId) {
         content = `<@&${discordConfig.officerRoleId}>`;
-      } else if (mentionType === "both") {
+      } else if (effectiveMention === "both") {
         const mId = discordConfig.masterRoleId ? `<@&${discordConfig.masterRoleId}>` : "";
         const oId = discordConfig.officerRoleId ? `<@&${discordConfig.officerRoleId}>` : "";
         content = `${mId} ${oId}`.trim();
+      } else if (effectiveMention === "member" && memberMentionId) {
+        // Validation: Only mention if numeric ID
+        const cleanId = memberMentionId.replace(/[^0-9]/g, "");
+        if (cleanId && cleanId.length >= 15) {
+          content = `<@${cleanId}>`;
+        }
       }
-      const response = await fetch(discordConfig.webhookUrl, {
+
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, embeds: [embed] })
@@ -532,7 +602,10 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Discord", value: data.discord, inline: true }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "both"
+        "both",
+        "join_requests",
+        "new_join",
+        { ign: data.ign, class: data.jobClass, role: data.role, uid: data.uid, discord: data.discord }
       );
       showToast("Registration submitted for approval!", "success");
       return true;
@@ -567,7 +640,12 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Job Class", value: r.jobClass, inline: true },
           { name: "Role", value: r.role, inline: true }
         ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png"
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "none",
+        "welcome",
+        "welcome",
+        { ign: r.ign, class: r.jobClass, role: r.role },
+        r.discord
       );
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
       return true;
@@ -626,7 +704,10 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Updates", value: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
         ],
         null,
-        "officer"
+        "officer",
+        "vanguard",
+        "vanguard",
+        { ign: m.ign, updates: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
       );
 
       showToast("Request submitted for approval!", "success");

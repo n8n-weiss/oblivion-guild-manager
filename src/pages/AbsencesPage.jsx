@@ -31,7 +31,13 @@ function AbsencesPage() {
         { name: "Event", value: `${form.eventType} (${form.eventDate})`, inline: true },
         { name: "Reason", value: form.reason },
         { name: "Will be Online?", value: form.onlineStatus, inline: true }
-      ]
+      ],
+      null,
+      "none",
+      "absences",
+      "absence_filed",
+      { ign: member?.ign || form.memberId, event: form.eventType, date: form.eventDate, reason: form.reason, online: form.onlineStatus },
+      member?.discord
     );
 
     setForm(f => ({ ...f, reason: "" }));
@@ -52,7 +58,13 @@ function AbsencesPage() {
       [
         { name: "Member", value: member?.ign || absence?.memberId, inline: true },
         { name: "Event", value: `${absence?.eventType} (${absence?.eventDate})`, inline: true }
-      ]
+      ],
+      null,
+      "none",
+      "absences",
+      "absence_removed",
+      { ign: member?.ign || absence?.memberId, event: absence?.eventType, date: absence?.eventDate },
+      member?.discord
     );
   };
 
