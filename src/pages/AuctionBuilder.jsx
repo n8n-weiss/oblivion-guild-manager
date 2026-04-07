@@ -148,6 +148,19 @@ function AuctionBuilder() {
     setEditingColId(null);
   };
 
+  // Sync selectedMapColId when activeSession changes
+  React.useEffect(() => {
+    if (activeSession) {
+      const sess = auctionSessions.find(s => s.id === activeSession);
+      if (sess && sess.columns?.length > 0) {
+        // Only switch if current colId isn't in new session
+        if (!sess.columns.some(c => c.id === selectedMapColId)) {
+          setSelectedMapColId(sess.columns[0].id);
+        }
+      }
+    }
+  }, [activeSession, auctionSessions]);
+
   const deleteColumn = (colId) => {
     const session = auctionSessions.find(s => s.id === activeSession);
     if (!session) return;
@@ -271,7 +284,17 @@ function AuctionBuilder() {
   const resourceHistory = React.useMemo(() => {
     const data = {};
     const cats = resourceCategories || ["Card Album", "Light & Dark"];
-    cats.forEach(c => data[c] = {});
+    
+    // Use a normalization map to handle casing duplicates
+    const normMap = {}; 
+    cats.forEach(c => {
+      const lower = c.toLowerCase().trim();
+      if (!normMap[lower]) {
+        normMap[lower] = c;
+        data[c] = {};
+      }
+    });
+
     const session = auctionSessions.find(s => s.id === activeSession);
 
     const expandTags = (tags) => {
@@ -286,7 +309,9 @@ function AuctionBuilder() {
 
     // 1. Process Past Sessions
     lootHistory.filter(h => !h.isOutbid && h.sessionId !== activeSession).forEach(h => {
-      const cat = h.colName;
+      const lowerCat = h.colName.toLowerCase().trim();
+      const cat = normMap[lowerCat] || h.colName;
+      
       if (!data[cat]) data[cat] = {};
       if (!data[cat][h.memberId]) data[cat][h.memberId] = { total: 0, allTags: [], sessions: {} };
       
@@ -314,7 +339,8 @@ function AuctionBuilder() {
         if (!col) return;
         const memberId = key.substring(0, key.length - col.id.length - 1);
         
-        const cat = col.name;
+        const lowerCat = col.name.toLowerCase().trim();
+        const cat = normMap[lowerCat] || col.name;
         const validTags = (tags || []).filter(t => !t.startsWith("!"));
         
         if (!data[cat]) data[cat] = {};
@@ -351,25 +377,34 @@ function AuctionBuilder() {
   };
 
   const handleDropdownAssignment = (page, row, memberId) => {
-    const session = auctionSessions.find(s => s.id === activeSession);
-    const targetColId = selectedMapColId || session?.columns?.[0]?.id;
-    if (!targetColId) { showToast("Create a column first!", "error"); return; }
+    const sess = auctionSessions.find(s => s.id === activeSession);
+    let targetColId = selectedMapColId;
+    
+    // Fallback if no col selected or selected col not in this session
+    if (!targetColId || !sess?.columns?.some(c => c.id === targetColId)) {
+      targetColId = sess?.columns?.find(c => isCardColumn(c.name))?.id || sess?.columns?.[0]?.id;
+    }
+
+    if (!targetColId) { showToast("No resource column found", "error"); return; }
     
     const tag = row ? `P${page}R${row}` : `P${page}`;
+    const key = getCellKey(memberId, targetColId);
 
     updateSession(s => {
       const newCells = { ...s.cells };
-      // 1. Remove this tag from ANY member in this specific column
-      Object.keys(newCells).forEach(k => {
-        if (k.endsWith(`_${targetColId}`)) {
-          newCells[k] = (newCells[k] || []).filter(t => t !== tag);
+      
+      // 1. Remove this tag from ALL members in this specific column
+      Object.keys(newCells).forEach(ck => {
+        if (ck.endsWith(`_${targetColId}`)) {
+          newCells[ck] = (newCells[ck] || []).filter(t => t !== tag);
         }
       });
-      // 2. Add it to the new member if one is selected
-      if (memberId && memberId !== "none") {
-        const key = getCellKey(memberId, targetColId);
+
+      // 2. Add tag to new member if not 'none'
+      if (memberId !== "none") {
         newCells[key] = [...(newCells[key] || []), tag];
       }
+
       return { ...s, cells: newCells };
     });
     showToast(`Page ${page} assigned successfully!`, "success");
@@ -855,9 +890,8 @@ function AuctionBuilder() {
                                 border: isEditing ? "2px solid rgba(64,201,122,0.4)" : "none",
                                 boxShadow: isEditing ? "inset 0 0 10px rgba(64,201,122,0.1)" : "none",
                                 transition: "all 0.2s"
-                              }}
-                              onClick={() => { if (!isEditing) { setEditingCell({ memberId: m.memberId, colId: col.id }); setCellInput(""); } }}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, cursor: "pointer", minHeight: 28, alignItems: "flex-start" }}>
+                              }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, cursor: "default", minHeight: 28, alignItems: "flex-start" }}>
                                   {tags.map((tag, ti) => {
                                     const tc = tagColor(tag, col.name);
                                     return (
@@ -879,21 +913,7 @@ function AuctionBuilder() {
                                       </span>
                                     );
                                   })}
-                                {isEditing ? (
-                                  <input autoFocus className="form-input"
-                                    style={{ width: 80, padding: "2px 8px", fontSize: 12, display: "inline-block" }}
-                                    placeholder="Pg1..."
-                                    value={cellInput}
-                                    onChange={e => setCellInput(e.target.value)}
-                                    onKeyDown={e => {
-                                      if (e.key === "Enter" && cellInput.trim()) { addTag(m.memberId, col.id, cellInput); setCellInput(""); }
-                                      if (e.key === "Escape") setEditingCell(null);
-                                    }}
-                                    onBlur={() => { if (cellInput.trim()) addTag(m.memberId, col.id, cellInput); setEditingCell(null); setCellInput(""); }}
-                                  />
-                                ) : (
-                                  tags.length === 0 && <span style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.5 }}>Click to add...</span>
-                                )}
+                                {tags.length === 0 && <span style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.4 }}>Use Map to Assign</span>}
                               </div>
                             </td>
                           );
@@ -1052,7 +1072,7 @@ function AuctionBuilder() {
                    );
                  })()}
                </div>
-            </div>
+             </div>
 
 {/* 2. Global World Master Tracker */}
             <div className="card custom-scrollbar" style={{ flex: 1, padding: 16, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column" }}>
@@ -1060,7 +1080,7 @@ function AuctionBuilder() {
                  <Icon name="shield" size={14} color="var(--gold)" /> World Master Tracker
                </div>
                <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "rgba(255,255,255,0.05)", padding: 4, borderRadius: 8, flexWrap: "wrap" }}>
-                 {Array.from(new Set([...(resourceCategories || ["Card Album", "Light & Dark"]), ...Object.keys(resourceHistory)])).filter(cat => (resourceCategories || []).includes(cat) || Object.keys(resourceHistory[cat] || {}).length > 0).map(cat => (
+                 {Object.keys(resourceHistory).map(cat => (
                    <button key={cat} onClick={() => setTrackerTab(cat)} style={{ flex: "1 1 auto", padding: "5px 10px", fontSize: 10, fontWeight: 900, borderRadius: 6, background: trackerTab === cat ? "var(--bg-card)" : "transparent", color: trackerTab === cat ? (isLDColumn(cat) ? "#c080ff" : "var(--accent)") : "var(--text-muted)", border: "none", cursor: "pointer", transition: "all 0.2s" }}>
                      {cat.toUpperCase()}
                    </button>
