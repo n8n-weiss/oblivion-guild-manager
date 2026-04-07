@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import html2canvas from 'html2canvas';
 
 function AuctionBuilder() {
   const {
@@ -88,6 +89,37 @@ function AuctionBuilder() {
     .filter(m => !sessionMemberIds.has(m.memberId))
     .filter(m => !poolSearch || m.ign.toLowerCase().includes(poolSearch.toLowerCase()) || m.class.toLowerCase().includes(poolSearch.toLowerCase()));
   const sessionMembers = (session?.members || []).map(sm => members.find(m => m.memberId === sm.memberId)).filter(Boolean);
+
+  const exportTableToImage = async () => {
+    const element = document.getElementById('auction-table-export');
+    if (!element) return;
+    
+    showToast("Generating image...", "info");
+    
+    try {
+      const canvas = await html2canvas(element, {
+        backgroundColor: '#080a0f', // Match app background
+        scale: 2, // Higher resolution
+        logging: false,
+        useCORS: true,
+        onclone: (clonedDoc) => {
+          // Adjust cloned element if needed (e.g. ensure scroll containers are expanded or hidden)
+          const el = clonedDoc.getElementById('auction-table-export');
+          if (el) el.style.maxHeight = 'none'; // Ensure everything is visible
+        }
+      });
+      
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `Oblivion_Loot_${session.name}_${session.date}.png`;
+      link.href = dataUrl;
+      link.click();
+      showToast("Table exported successfully!", "success");
+    } catch (err) {
+      console.error("Export failed:", err);
+      showToast("Failed to export image", "error");
+    }
+  };
 
   const createSession = () => {
     if (!newSessionForm.name.trim()) { showToast("Enter session name", "error"); return; }
@@ -716,6 +748,9 @@ function AuctionBuilder() {
             ) : (
               <button className="btn btn-ghost" onClick={() => setShowNewTemplate(true)}><Icon name="save" size={14} /> Save as Template</button>
             )}
+            <button className="btn btn-primary" onClick={exportTableToImage} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <Icon name="camera" size={14} /> 📸 Export Image
+            </button>
             <button className="btn btn-primary" onClick={addColumn}><Icon name="plus" size={14} /> Add Column</button>
           </div>
         </div>
@@ -806,8 +841,8 @@ function AuctionBuilder() {
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Table Wrap for Image Capture */}
+        <div id="auction-table-export" style={{ flex: 1, minWidth: 0, padding: 12, background: "var(--bg-dark)", borderRadius: 16 }}>
           <div style={{
             minHeight: 80, borderRadius: 10,
             border: `2px dashed ${dragOver === "table" ? "var(--accent)" : "transparent"}`,
