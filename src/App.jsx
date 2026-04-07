@@ -45,7 +45,7 @@ const PageWrapper = ({ children, id }) => (
 
 export default function App() {
   const {
-    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
@@ -324,105 +324,123 @@ export default function App() {
       <main className="main-content">
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
         
-        <AnimatePresence mode="wait">
-          {page === "dashboard" && (
-            <PageWrapper id="dashboard">
-              <Dashboard />
-            </PageWrapper>
-          )}
+        {(!isStatusActive && !isArchitect) ? (
+          <PageWrapper id="access-revoked">
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80vh", textAlign: "center", padding: 24 }}>
+              <div style={{ fontSize: 64, marginBottom: 20 }}>🛡️</div>
+              <h2 style={{ fontFamily: "Cinzel, serif", fontSize: 24, color: "var(--accent)", marginBottom: 12 }}>Access Restricted</h2>
+              <p style={{ color: "var(--text-secondary)", maxWidth: 450, margin: "0 auto 24px", lineHeight: 1.6 }}>
+                Ang iyong access sa Oblivion Guild Portal ay pansamantalang naka-disable dahil ikaw ay kasalukuyang nasa **Archived** status (Left Guild).
+              </p>
+              <div style={{ padding: "16px 20px", background: "rgba(224,80,80,0.1)", border: "1px solid rgba(224,80,80,0.2)", borderRadius: 12, color: "var(--red)", fontSize: 13, display: "flex", alignItems: "center", gap: 10, marginBottom: 30 }}>
+                ⚠️ Please contact any Guild Officer or Administrator if this is a mistake or if you have returned to the guild.
+              </div>
+              <button className="btn btn-ghost" onClick={handleSignOut} style={{ gap: 10 }}>
+                <Icon name="x" size={16} /> Exit System
+              </button>
+            </div>
+          </PageWrapper>
+        ) : (
+          <AnimatePresence mode="wait">
+            {page === "dashboard" && (
+              <PageWrapper id="dashboard">
+                <Dashboard />
+              </PageWrapper>
+            )}
 
-          {page === "members" && (
-            <PageWrapper id={profileMember ? `profile-${profileMember.memberId}` : "members"}>
-              {isMember ? (
-                members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
-                  <MemberProfilePage
-                    member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
-                    isOwnProfile={true}
-                  />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-muted)", textAlign: "center", padding: 20 }}>
-                    <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
-                    <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
-                    <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
-                      Your account is not linked to any active guild member in the current roster.<br /><br />
-                      If the database was recently wiped for update, please wait for an Admin to upload the new roster.
+            {page === "members" && (
+              <PageWrapper id={profileMember ? `profile-${profileMember.memberId}` : "members"}>
+                {isMember ? (
+                  members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
+                    <MemberProfilePage
+                      member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
+                      isOwnProfile={true}
+                    />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-muted)", textAlign: "center", padding: 20 }}>
+                      <div style={{ fontSize: 48, filter: "grayscale(1) opacity(0.5)", marginBottom: 16 }}>👻</div>
+                      <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: "var(--text-primary)", marginBottom: 8 }}>Profile Data Missing</div>
+                      <div style={{ fontSize: 13, maxWidth: 400, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                        Your account is not linked to any active guild member in the current roster.<br /><br />
+                        If the database was recently wiped for update, please wait for an Admin to upload the new roster.
+                      </div>
                     </div>
-                  </div>
-                )
-              ) : (
-                profileMember ? (
-                  <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
+                  )
                 ) : (
-                  <MembersPage onViewProfile={setProfileMember} />
-                )
-              )}
-            </PageWrapper>
-          )}
-
-          {page === "events" && (
-            <PageWrapper id="events">
-              <EventsPage />
-            </PageWrapper>
-          )}
-
-          {page === "absences" && (
-            <PageWrapper id="absences">
-              <AbsencesPage />
-            </PageWrapper>
-          )}
-
-          {page === "leaderboard" && (
-            <PageWrapper id={profileMember ? `profile-lb-${profileMember.memberId}` : "leaderboard"}>
-                {profileMember ? (
-                  <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
-                ) : (
-                  <LeaderboardPage onViewProfile={setProfileMember} />
+                  profileMember ? (
+                    <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
+                  ) : (
+                    <MembersPage onViewProfile={setProfileMember} />
+                  )
                 )}
-            </PageWrapper>
-          )}
+              </PageWrapper>
+            )}
 
-          {page === "party" && (
-            <PageWrapper id="party">
-              <PartyBuilder />
-            </PageWrapper>
-          )}
+            {page === "events" && (
+              <PageWrapper id="events">
+                <EventsPage />
+              </PageWrapper>
+            )}
 
-          {page === "import" && (
-            <PageWrapper id="import">
-              <ImportPage />
-            </PageWrapper>
-          )}
+            {page === "absences" && (
+              <PageWrapper id="absences">
+                <AbsencesPage />
+              </PageWrapper>
+            )}
 
-          {page === "report" && (
-            <PageWrapper id="report">
-              <WeeklyReportPage />
-            </PageWrapper>
-          )}
+            {page === "leaderboard" && (
+              <PageWrapper id={profileMember ? `profile-lb-${profileMember.memberId}` : "leaderboard"}>
+                  {profileMember ? (
+                    <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
+                  ) : (
+                    <LeaderboardPage onViewProfile={setProfileMember} />
+                  )}
+              </PageWrapper>
+            )}
 
-          {page === "auction" && (
-            <PageWrapper id="auction">
-              <AuctionBuilder />
-            </PageWrapper>
-          )}
+            {page === "party" && (
+              <PageWrapper id="party">
+                <PartyBuilder />
+              </PageWrapper>
+            )}
 
-          {page === "users" && isArchitect && (
-            <PageWrapper id="users">
-              <UserManagementPage />
-            </PageWrapper>
-          )}
+            {page === "import" && (
+              <PageWrapper id="import">
+                <ImportPage />
+              </PageWrapper>
+            )}
 
-          {page === "auditlog" && isAdmin && (
-            <PageWrapper id="auditlog">
-              <AuditLogPage />
-            </PageWrapper>
-          )}
+            {page === "report" && (
+              <PageWrapper id="report">
+                <WeeklyReportPage />
+              </PageWrapper>
+            )}
 
-          {page === "requests" && isOfficer && (
-            <PageWrapper id="requests">
-              <RequestsPage />
-            </PageWrapper>
-          )}
-        </AnimatePresence>
+            {page === "auction" && (
+              <PageWrapper id="auction">
+                <AuctionBuilder />
+              </PageWrapper>
+            )}
+
+            {page === "users" && isArchitect && (
+              <PageWrapper id="users">
+                <UserManagementPage />
+              </PageWrapper>
+            )}
+
+            {page === "auditlog" && isAdmin && (
+              <PageWrapper id="auditlog">
+                <AuditLogPage />
+              </PageWrapper>
+            )}
+
+            {page === "requests" && isOfficer && (
+              <PageWrapper id="requests">
+                <RequestsPage />
+              </PageWrapper>
+            )}
+          </AnimatePresence>
+        )}
       </main>
 
       {showTreasury && <TreasuryModal onClose={() => setShowTreasury(false)} />}

@@ -118,14 +118,15 @@ export const GuildProvider = ({ children, initialData }) => {
   const cleanMyId = (myMemberId || "").trim().toLowerCase();
   const myProfile = members.find(m => m.memberId?.trim().toLowerCase() === cleanMyId);
   const myRank = myProfile?.guildRank || "Member";
+  const isStatusActive = (myProfile?.status || "active") === "active";
   
   const isArchitect = myRank === "System Architect" || myRank === "Creator" || userRole === "architect";
   const hasAdminRank = ["Guild Master", "Vice Guild Master", "Commander"].includes(myRank) || isArchitect;
   const hasOfficerRank = ["Charisma Baby", "Baby Charisma", "Officer"].includes(myRank) || hasAdminRank;
 
-  const isAdmin = userRole === "admin" || userRole === "architect" || hasAdminRank;
-  const isOfficer = isAdmin || userRole === "officer" || hasOfficerRank;
-  const isMember = userRole === "member";
+  const isAdmin = (userRole === "admin" || userRole === "architect" || hasAdminRank) && (isStatusActive || isArchitect);
+  const isOfficer = (isAdmin || userRole === "officer" || hasOfficerRank) && (isStatusActive || isArchitect);
+  const isMember = (userRole === "member") && (isStatusActive || isArchitect);
 
   // Auth Listener
   useEffect(() => {
@@ -846,7 +847,7 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const value = {
-    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect,
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
     page, setPage,
     toast, setToast, showToast,
