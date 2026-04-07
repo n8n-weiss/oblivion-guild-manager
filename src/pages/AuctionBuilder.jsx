@@ -936,14 +936,19 @@ function AuctionBuilder() {
           <div style={{ width: 330, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 10 }}>
             
             {/* Sidebar Tab Switcher */}
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", padding: 4, borderRadius: 10, gap: 4 }}>
+            <div style={{ 
+              display: "flex", background: "rgba(0,0,0,0.4)", padding: 4, borderRadius: 12, gap: 4, 
+              border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" 
+            }}>
               <button 
                 onClick={() => setSidebarTab("map")}
                 style={{ 
-                  flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: "pointer", border: "none", transition: "all 0.2s",
+                  flex: 1, padding: "10px", borderRadius: 10, fontSize: 10, fontWeight: 900, letterSpacing: 1.5, cursor: "pointer", border: "none", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                   background: sidebarTab === "map" ? "var(--accent)" : "transparent",
                   color: sidebarTab === "map" ? "white" : "var(--text-muted)",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: sidebarTab === "map" ? "0 4px 15px rgba(99,130,230,0.3)" : "none",
+                  transform: sidebarTab === "map" ? "scale(1.02)" : "scale(1)"
                 }}
               >
                 <Icon name="grid" size={14} /> MAP
@@ -951,10 +956,12 @@ function AuctionBuilder() {
               <button 
                 onClick={() => setSidebarTab("tracker")}
                 style={{ 
-                  flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: "pointer", border: "none", transition: "all 0.2s",
+                  flex: 1, padding: "10px", borderRadius: 10, fontSize: 10, fontWeight: 900, letterSpacing: 1.5, cursor: "pointer", border: "none", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                   background: sidebarTab === "tracker" ? "var(--gold)" : "transparent",
                   color: sidebarTab === "tracker" ? "white" : "var(--text-muted)",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: sidebarTab === "tracker" ? "0 4px 15px rgba(240,192,64,0.3)" : "none",
+                  transform: sidebarTab === "tracker" ? "scale(1.02)" : "scale(1)"
                 }}
               >
                 <Icon name="shield" size={14} /> TRACKER
@@ -1006,18 +1013,29 @@ function AuctionBuilder() {
                            else if (assignments.some(a => a.length > 0)) status = "partial";
 
                            return (
-                             <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
-                               style={{
-                                 position: "relative", width: 28, height: 28, borderRadius: 6, fontSize: 11, fontWeight: 800,
-                                 background: isSelected ? "var(--accent)" : "rgba(255,255,255,0.03)",
-                                 color: isSelected ? "white" : "var(--text-muted)",
-                                 border: `1px solid ${isSelected ? "var(--accent)" : "rgba(255,255,255,0.1)"}`,
-                                 transition: "all 0.2s", cursor: "pointer"
-                               }}
-                             >
-                               {p} {status !== "empty" && <div style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)", border: "2px solid rgba(10,12,18,1)" }} />}
-                             </button>
-                           );
+                              <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
+                                style={{
+                                  position: "relative", width: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: 900,
+                                  background: isSelected ? "var(--accent)" : "rgba(255,255,255,0.03)",
+                                  color: isSelected ? "white" : "var(--text-muted)",
+                                  border: `1px solid ${isSelected ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)", cursor: "pointer",
+                                  boxShadow: isSelected ? `0 0 15px rgba(99,130,230,0.4)` : "none"
+                                }}
+                                onMouseEnter={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                                onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                              >
+                                {p} 
+                                {status !== "empty" && (
+                                  <div style={{ 
+                                    position: "absolute", top: -3, right: -3, width: 10, height: 10, borderRadius: "50%", 
+                                    background: status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)", 
+                                    border: "2px solid #080a0f",
+                                    boxShadow: `0 0 8px ${status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)"}`
+                                  }} />
+                                )}
+                              </button>
+                            );
                          })}
                          <button className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0, fontSize: 14 }} onMouseDown={e => e.preventDefault()} onClick={() => { const nx = totalPages + 1; setMaxVisiblePage(nx); setSelectedMapPage(nx); }}>+</button>
                        </div>
@@ -1066,30 +1084,35 @@ function AuctionBuilder() {
 
                                 return (
                                   <div key={row} style={{ 
-                                    padding: "6px 8px", borderRadius: 6, 
-                                    background: hasConflict ? "rgba(224,80,80,0.15)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.1)" : "rgba(255,255,255,0.03)",
-                                    border: `1px solid ${hasConflict ? "var(--red)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.3)" : "rgba(255,255,255,0.05)"}`,
+                                    padding: "8px 10px", borderRadius: 10, 
+                                    background: hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)",
+                                    border: `1px solid ${hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)"}`,
                                     position: "relative",
-                                    boxShadow: currentMemId !== "none" && !hasConflict ? "inset 0 0 10px rgba(42, 191, 107, 0.05)" : "none",
-                                    backdropFilter: "blur(4px)",
-                                    transition: "all 0.2s"
+                                    boxShadow: currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none",
+                                    backdropFilter: "blur(8px)",
+                                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                                    animation: hasConflict ? "pulse-red 2s infinite" : currentMemId !== "none" ? "pulse-green 4s infinite" : "none",
+                                    minHeight: 52,
+                                    display: "flex", flexDirection: "column", justifyContent: "center"
                                   }}>
-                                    <div style={{ opacity: currentMemId !== "none" ? 0.8 : 0.5, fontWeight: 800, fontSize: 8, marginBottom: 4, color: currentMemId !== "none" ? "var(--green)" : "inherit" }}>{`Row ${row}`}</div>
-                                    <select 
-                                      value={currentMemId}
-                                      onChange={e => handleDropdownAssignment(selectedMapPage, row, e.target.value)}
-                                      style={{ 
-                                        width: "100%", background: "none", border: "none", color: hasConflict ? "var(--red)" : currentMemId !== "none" ? "white" : "rgba(255,255,255,0.5)", 
-                                        fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", appearance: "none", paddingRight: 10
-                                      }}
-                                    >
-                                      <option value="none" style={{ background: "#1a1e2e" }}>--- EMPTY ---</option>
-                                      {sessionMembers.map(m => (
-                                        <option key={m.memberId} value={m.memberId} style={{ background: "#1a1e2e" }}>{m.ign}</option>
-                                      ))}
-                                    </select>
-                                    <div style={{ position: "absolute", right: 8, bottom: 8, opacity: currentMemId !== "none" ? 0.5 : 0.2, pointerEvents: "none" }}>▼</div>
-                                    {hasConflict && <div style={{ fontSize: 7, color: "var(--red)", marginTop: 2, position: "absolute", bottom: 2, right: 28, fontWeight: 900 }}>DUP!</div>}
+                                    <div style={{ opacity: 0.6, fontWeight: 900, fontSize: 8, marginBottom: 4, color: currentMemId !== "none" ? "var(--green)" : "inherit", letterSpacing: 1 }}>{`SLOT ${row}`}</div>
+                                    <div style={{ position: "relative" }}>
+                                      <select 
+                                        value={currentMemId}
+                                        onChange={e => handleDropdownAssignment(selectedMapPage, row, e.target.value)}
+                                        style={{ 
+                                          width: "100%", background: "none", border: "none", color: hasConflict ? "var(--red)" : currentMemId !== "none" ? "white" : "rgba(255,255,255,0.3)", 
+                                          fontSize: 12, fontWeight: 800, outline: "none", cursor: "pointer", appearance: "none", paddingRight: 12
+                                        }}
+                                      >
+                                        <option value="none" style={{ background: "#0a0e18" }}>-- UNASSIGNED --</option>
+                                        {sessionMembers.map(m => (
+                                          <option key={m.memberId} value={m.memberId} style={{ background: "#0a0e18" }}>{m.ign}</option>
+                                        ))}
+                                      </select>
+                                      <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", opacity: 0.4, pointerEvents: "none", fontSize: 10 }}>▼</div>
+                                    </div>
+                                    {hasConflict && <div style={{ fontSize: 8, color: "#ff4d4d", marginTop: 2, fontWeight: 900, textShadow: "0 0 8px rgba(255,77,77,0.5)" }}>DUPLICATE!</div>}
                                   </div>
                                 );
                               })}
@@ -1138,36 +1161,60 @@ function AuctionBuilder() {
                      .filter(m => {
                        if (!cardSearch) return m.total > 0;
                        return m.ign.toLowerCase().includes(cardSearch.toLowerCase()) || m.allTags.some(c => c.toLowerCase().includes(cardSearch.toLowerCase()));
-                     })
-                     .sort((a, b) => b.total - a.total);
-                     
-                   if (activeMembersWithResources.length === 0) {
-                     return <div className="text-xs text-muted py-8 text-center">{`No ${trackerTab} records found.`}</div>;
-                   }
-                   
-                   return activeMembersWithResources.map(m => {
-                     const isExpanded = !!expandedTrackerMembers[m.memberId];
-                     const seshArray = Object.values(m.sessions).sort((a, b) => new Date(b.date) - new Date(a.date));
+                     });
+                    
+                    const sortedMembers = activeMembersWithResources
+                      .sort((a, b) => b.total - a.total);
+                    
+                    const grandTotal = activeMembersWithResources.reduce((sum, m) => sum + m.total, 0);
 
-                     return (
-                       <div key={m.memberId} style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.05)", marginBottom: 6, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                         {/* Main Banner */}
-                         <div 
-                           onClick={() => setExpandedTrackerMembers(p => ({...p, [m.memberId]: !p[m.memberId]}))}
-                           style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px", cursor: "pointer", transition: "background 0.2s" }}
-                           onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                         >
-                           <MemberAvatar ign={m.ign} size={28} />
-                           <div style={{ flex: 1, minWidth: 0 }}>
-                             <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)" }}>{m.ign}</div>
-                             {!isExpanded && m.total > 0 && <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>{seshArray.length} recorded event{seshArray.length > 1 ? "s" : ""}</div>}
-                           </div>
-                           <div style={{ fontSize: 18, fontWeight: 900, color: badgeColor, flexShrink: 0, display: "flex", gap: 8, alignItems: "center" }}>
-                             {m.total}
-                             <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color="var(--text-muted)" />
-                           </div>
-                         </div>
+                    if (activeMembersWithResources.length === 0) {
+                      return <div className="text-xs text-muted py-8 text-center">{`No ${trackerTab} records found.`}</div>;
+                    }
+                    
+                    return sortedMembers.map((m, idx) => {
+                      const isExpanded = !!expandedTrackerMembers[m.memberId];
+                      const seshArray = Object.values(m.sessions).sort((a, b) => new Date(b.date) - new Date(a.date));
+                      const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
+
+                      return (
+                        <div key={m.memberId} style={{ 
+                          background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)", 
+                          borderRadius: 12, 
+                          border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)", 
+                          marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
+                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                          boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
+                        }}>
+                          {/* Main Banner */}
+                          <div 
+                            onClick={() => setExpandedTrackerMembers(p => ({...p, [m.memberId]: !p[m.memberId]}))}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                          >
+                            <MemberAvatar ign={m.ign} size={isExpanded ? 36 : 28} />
+                            
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)", letterSpacing: 0.5 }}>{m.ign}</div>
+                                {idx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
+                                {idx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
+                                {idx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                                <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                                  <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
+                                </div>
+                                <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
+                              </div>
+                            </div>
+                            
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{m.total}</div>
+                              <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
+                            </div>
+                          </div>
 
                          {/* Collapsible Session List */}
                          {isExpanded && (
