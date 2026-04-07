@@ -668,29 +668,54 @@ function AuctionBuilder() {
                         );
                       }
 
+                      // Group by Column Name
+                      const grouped = {};
+                      allPastWins.forEach(w => {
+                        if (!grouped[w.colName]) grouped[w.colName] = [];
+                        grouped[w.colName].push(w);
+                      });
+
                       return (
                         <>
                           <div style={{ padding: "14px", background: "rgba(99,130,230,0.1)", border: "1px solid rgba(99,130,230,0.2)", borderRadius: 12, marginBottom: 16 }}>
                             <div style={{ fontSize: 18, fontWeight: 800, color: "white", fontFamily: "Cinzel, serif" }}>{currentMember?.ign}</div>
                             <div style={{ fontSize: 10, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700, marginTop: 4 }}>
-                              Total Winnings: {allPastWins.length}
+                              Lifetime Winnings: {allPastWins.length}
                             </div>
                           </div>
 
-                          <div className="space-y-4">
-                            {allPastWins.map(w => (
-                              <div key={w.id} style={{ borderLeft: "2px solid var(--accent)", paddingLeft: 12, paddingBottom: 4 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2 }}>
-                                  {w.sessionName} — <span style={{ fontWeight: 400, opacity: 0.6 }}>{w.date}</span>
+                          {/* Quick Summary Grid */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
+                            {Object.entries(grouped).map(([category, items]) => (
+                              <div key={category} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}>
+                                <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>{category}</div>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--accent)" }}>{items.length}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Grouped History List */}
+                          <div className="space-y-6">
+                            {Object.entries(grouped).map(([category, items]) => (
+                              <div key={category}>
+                                <div style={{ fontSize: 10, fontWeight: 800, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span>{category}</span>
+                                  <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, var(--accent-light), transparent)" }} />
                                 </div>
-                                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
-                                  Category: <span style={{ fontWeight: 600 }}>{w.colName}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                   <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Loot (Row):</span>
-                                   <span style={{ background: "rgba(64,201,122,0.12)", color: "var(--green)", border: "1px solid rgba(64,201,122,0.2)", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 6 }}>
-                                     {w.tag}
-                                   </span>
+                                <div className="space-y-2">
+                                  {items.map(w => (
+                                    <div key={w.id} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8, padding: "8px 10px", transition: "all 0.2s" }}>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.sessionName}</div>
+                                          <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{w.date}</div>
+                                        </div>
+                                        <div style={{ background: "rgba(64,201,122,0.12)", color: "var(--green)", border: "1px solid rgba(64,201,122,0.2)", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 6, flexShrink: 0 }}>
+                                          {w.tag}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             ))}
