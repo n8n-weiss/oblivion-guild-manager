@@ -9,7 +9,12 @@ const DiscordSettings = () => {
   const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
-    setLocalConfig(discordConfig);
+    // Only update local config if it's different from context (e.g. initial load or after save)
+    // and ONLY if the user doesn't have unsaved changes or we just saved.
+    const isSame = JSON.stringify(localConfig) === JSON.stringify(discordConfig);
+    if (!isSame) {
+      setLocalConfig(discordConfig);
+    }
   }, [discordConfig]);
 
   if (!isArchitect) return null;

@@ -179,6 +179,9 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // Data Loading from new Collections
   useEffect(() => {
+    // Only setup listeners once per user session
+    if (!currentUser && !initialData) return;
+
     let unsubs = [];
     const setupListeners = async () => {
       try {
@@ -199,8 +202,11 @@ export const GuildProvider = ({ children, initialData }) => {
           const docs = snap.docs.map(d => d.data());
           const uniqueDocs = Array.from(new Map(docs.map(m => [m.memberId, m])).values());
           const finalDocs = uniqueDocs.length ? uniqueDocs : (initialData.INITIAL_MEMBERS || []);
-          setMembers(finalDocs);
-          prevData.current.members = [...finalDocs];
+          
+          if (JSON.stringify(finalDocs) !== JSON.stringify(prevData.current.members)) {
+             setMembers(finalDocs);
+             prevData.current.members = [...finalDocs];
+          }
           rosterLoaded = true;
           checkReady();
         });
@@ -209,54 +215,72 @@ export const GuildProvider = ({ children, initialData }) => {
         const unsubEvents = onSnapshot(collection(db, "events"), (snap) => {
           const docs = snap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
           const finalDocs = docs.length ? docs : (initialData.INITIAL_EVENTS || []);
-          setEvents(finalDocs);
-          prevData.current.events = [...finalDocs];
+          if (JSON.stringify(finalDocs) !== JSON.stringify(prevData.current.events)) {
+            setEvents(finalDocs);
+            prevData.current.events = [...finalDocs];
+          }
         });
         unsubs.push(unsubEvents);
 
         const unsubAbsences = onSnapshot(collection(db, "absences"), (snap) => {
           const docs = snap.docs.map(d => d.data());
-          setAbsences(docs);
-          prevData.current.absences = [...docs];
+          if (JSON.stringify(docs) !== JSON.stringify(prevData.current.absences)) {
+            setAbsences(docs);
+            prevData.current.absences = [...docs];
+          }
         });
         unsubs.push(unsubAbsences);
 
         const unsubMetadata = onSnapshot(doc(db, "metadata", "current"), (snap) => {
           const data = snap.exists() ? snap.data() : {};
+          
+          // Only update if there is actually a change in the metadata doc
+          const currentMetaString = JSON.stringify(data);
+          if (currentMetaString === prevData.current.lastMetaRaw) return;
+          prevData.current.lastMetaRaw = currentMetaString;
+
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setParties(cloudParties);
           prevData.current.parties = [...cloudParties];
+
           const cloudRaidRaw = data.raidParties || [];
           const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           setRaidParties(cloudRaid);
           prevData.current.raidParties = [...cloudRaid];
+
           setAuctionSessions(data.auctionSessions || []);
           setAuctionTemplates(data.auctionTemplates || []);
-           const discRaw = data.discord || {};
-           const disc = {
-             webhookUrl: discRaw.webhookUrl || "",
-             masterRoleId: discRaw.masterRoleId || "",
-             officerRoleId: discRaw.officerRoleId || "",
-             oblivionRoleId: discRaw.oblivionRoleId || "",
-             notifications: {
-               join_requests: migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both"),
-               welcome: migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member"),
-               vanguard: migrateMentions(discRaw.notifications?.vanguard, "officer"),
-               events: migrateMentions(discRaw.notifications?.events, "none"),
-               absences: migrateMentions(discRaw.notifications?.absences, "member")
-             },
-             templates: {
-               new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
-               welcome: discRaw.templates?.welcome || { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
-               vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
-               event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
-               absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
-               absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." }
-             }
-           };
-           setDiscordConfig(disc);
-           prevData.current.discordConfig = { ...disc };
+          
+          const discRaw = data.discord || {};
+          const disc = {
+            webhookUrl: discRaw.webhookUrl || "",
+            masterRoleId: discRaw.masterRoleId || "",
+            officerRoleId: discRaw.officerRoleId || "",
+            oblivionRoleId: discRaw.oblivionRoleId || "",
+            notifications: {
+              join_requests: migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both"),
+              welcome: migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member"),
+              vanguard: migrateMentions(discRaw.notifications?.vanguard, "officer"),
+              events: migrateMentions(discRaw.notifications?.events, "none"),
+              absences: migrateMentions(discRaw.notifications?.absences, "member")
+            },
+            templates: {
+              new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
+              welcome: discRaw.templates?.welcome || { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
+              vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
+              event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
+              absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
+              absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." }
+            }
+          };
+
+          // Synchronize discordConfig carefully
+          if (JSON.stringify(disc) !== JSON.stringify(prevData.current.discordConfig)) {
+            setDiscordConfig(disc);
+            prevData.current.discordConfig = { ...disc };
+          }
+
           prevData.current.auctionSessions = [...(data.auctionSessions || [])];
           prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
           if (data.partyNames) {
@@ -295,8 +319,10 @@ export const GuildProvider = ({ children, initialData }) => {
               flat.push({ eventId, memberId, status });
             });
           });
-          setAttendance(flat);
-          prevData.current.attendance = [...flat];
+          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.attendance)) {
+            setAttendance(flat);
+            prevData.current.attendance = [...flat];
+          }
         });
         unsubs.push(unsubAtt);
 
@@ -308,8 +334,10 @@ export const GuildProvider = ({ children, initialData }) => {
               flat.push({ ...pData, eventId, memberId });
             });
           });
-          setPerformance(flat);
-          prevData.current.performance = [...flat];
+          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.performance)) {
+            setPerformance(flat);
+            prevData.current.performance = [...flat];
+          }
         });
         unsubs.push(unsubPerf);
 
@@ -321,8 +349,10 @@ export const GuildProvider = ({ children, initialData }) => {
               flat.push({ eventId, memberId, rating });
             });
           });
-          setEoRatings(flat);
-          prevData.current.eoRatings = [...flat];
+          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.eoRatings)) {
+            setEoRatings(flat);
+            prevData.current.eoRatings = [...flat];
+          }
         });
         unsubs.push(unsubEo);
 
@@ -346,7 +376,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
-  }, [initialData, isAdmin, isOfficer, isArchitect]);
+  }, [initialData, currentUser]);
 
   useEffect(() => {
     if (loading) return;

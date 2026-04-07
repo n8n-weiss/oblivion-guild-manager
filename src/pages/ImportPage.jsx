@@ -252,11 +252,9 @@ function ImportPage() {
         </div>
       )}
 
-      {activeTab === 'discord' && (
-        <div className="animate-fade-in">
-          <DiscordSettings />
-        </div>
-      )}
+      <div className={activeTab === 'discord' ? 'animate-fade-in' : 'hidden'}>
+        <DiscordSettings />
+      </div>
 
       {activeTab === 'import' && preview.length > 0 && (
         <div className="card">
