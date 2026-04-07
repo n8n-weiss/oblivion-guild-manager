@@ -247,6 +247,8 @@ function AuctionBuilder() {
   const getCellKey = (memberId, colId) => `${memberId}_${colId}`;
   const getCellTags = (memberId, colId) => session?.cells?.[getCellKey(memberId, colId)] || [];
 
+  const isCellForColumn = (ck, col) => col && (ck.endsWith(`_${col.id}`) || ck.endsWith(`_${col.name}`));
+
   const addTag = (memberId, colId, tag) => {
     if (!tag.trim()) return;
     const key = getCellKey(memberId, colId);
@@ -368,9 +370,14 @@ function AuctionBuilder() {
     // 2. Process Current Active Session
     if (session?.cells) {
       Object.entries(session.cells).forEach(([key, tags]) => {
-        const col = session.columns?.find(c => key.endsWith(`_${c.id}`));
+        const col = session.columns?.find(c => isCellForColumn(key, c));
         if (!col) return;
-        const memberId = key.substring(0, key.length - col.id.length - 1);
+        
+        let mId = "";
+        if (key.endsWith(`_${col.id}`)) mId = key.substring(0, key.length - col.id.length - 1);
+        else mId = key.substring(0, key.length - col.name.length - 1);
+        
+        const memberId = mId.trim().toLowerCase();
         
         const lowerCat = col.name.toLowerCase().trim();
         const cat = normMap[lowerCat] || col.name;
@@ -412,10 +419,12 @@ function AuctionBuilder() {
   const handleDropdownAssignment = (page, row, memberId) => {
     const sess = auctionSessions.find(s => s.id === activeSession);
     let targetColId = selectedMapColId;
+    let targetCol = sess?.columns?.find(c => c.id === targetColId);
     
     // Fallback if no col selected or selected col not in this session
-    if (!targetColId || !sess?.columns?.some(c => c.id === targetColId)) {
-      targetColId = sess?.columns?.find(c => isCardColumn(c.name))?.id || sess?.columns?.[0]?.id;
+    if (!targetCol) {
+      targetCol = sess?.columns?.find(c => isCardColumn(c.name)) || sess?.columns?.[0];
+      targetColId = targetCol?.id;
     }
 
     if (!targetColId) { showToast("No resource column found", "error"); return; }
@@ -426,9 +435,9 @@ function AuctionBuilder() {
     updateSession(s => {
       const newCells = { ...s.cells };
       
-      // 1. Remove this tag from ALL members in this specific column
+      // 1. Remove this tag from ALL members in this specific column (robust match)
       Object.keys(newCells).forEach(ck => {
-        if (ck.endsWith(`_${targetColId}`)) {
+        if (isCellForColumn(ck, targetCol)) {
           newCells[ck] = (newCells[ck] || []).filter(t => t !== tag);
         }
       });
@@ -866,26 +875,71 @@ function AuctionBuilder() {
                       {session.columns.map(col => (
                         <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid rgba(255,255,255,0.1)", minWidth: 160 }}>
                           {editingColId === col.id ? (
-                            <select className="form-input" style={{ padding: "3px 8px", fontSize: 12, width: "100%", background: "rgba(0,0,0,0.3)", color: "white" }} autoFocus
-                              value={col.name}
-                              onChange={e => handleColumnRename(col.id, e.target.value)}
-                              onBlur={() => setEditingColId(null)}
-                            >
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, animation: "fade-in 0.2s" }}>
                               {availableCategories.map(rc => (
-                                <option key={rc} value={rc} style={{ background: "#1a1e2e" }}>{rc}</option>
+                                <button key={rc}
+                                  onClick={() => handleColumnRename(col.id, rc)}
+                                  style={{ 
+                                    padding: "4px 8px", fontSize: 10, borderRadius: 6, cursor: "pointer", fontWeight: 900,
+                                    background: col.name === rc ? "var(--accent)" : "rgba(255,255,255,0.05)",
+                                    color: col.name === rc ? "white" : "var(--text-muted)",
+                                    border: `1px solid ${col.name === rc ? "var(--accent)" : "rgba(255,255,255,0.1)"}`,
+                                    transition: "all 0.2s"
+                                  }}
+                                  onMouseEnter={e => { if (col.name !== rc) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+                                  onMouseLeave={e => { if (col.name !== rc) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                                >
+                                  {rc}
+                                </button>
                               ))}
-                              <option value="__new__" style={{ background: "#1a1e2e" }}>+ Add Custom Resource...</option>
-                            </select>
+                              <button 
+                                onClick={() => handleColumnRename(col.id, "__new__")}
+                                style={{ 
+                                  padding: "4px 8px", fontSize: 10, borderRadius: 6, cursor: "pointer", fontWeight: 900,
+                                  background: "rgba(99,130,230,0.1)", color: "var(--accent)", border: "1px solid rgba(99,130,230,0.3)"
+                                }}
+                              >
+                                🖋 Custom
+                              </button>
+                              <button 
+                                onClick={() => setEditingColId(null)}
+                                style={{ 
+                                  padding: "4px 8px", fontSize: 10, borderRadius: 6, cursor: "pointer",
+                                  background: "rgba(255,77,77,0.1)", color: "var(--red)", border: "1px solid rgba(255,77,77,0.3)"
+                                }}
+                                title="Cancel"
+                              >
+                                ❌
+                              </button>
+                            </div>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                               <span style={{ fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{col.name}</span>
-                              <div style={{ display: "flex", gap: 4, opacity: 0.8 }}>
-                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 12, padding: "0 2px" }}
-                                  onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
-                                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-secondary)"}
-                                  onClick={() => { setEditingColId(col.id); setColNameInput(col.name); }}>✎</button>
-                                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 14, padding: "0 2px" }}
-                                  onClick={() => deleteColumn(col.id)}>×</button>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button 
+                                  style={{ 
+                                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", 
+                                    color: "var(--text-secondary)", fontSize: 13, padding: "4px 6px", borderRadius: 6, transition: "all 0.2s"
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "white"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                                  onClick={() => { setEditingColId(col.id); setColNameInput(col.name); }}
+                                  title="Edit column name"
+                                >
+                                  ✎
+                                </button>
+                                <button 
+                                  style={{ 
+                                    background: "rgba(255,77,77,0.05)", border: "1px solid rgba(255,77,77,0.1)", cursor: "pointer", 
+                                    color: "var(--red)", fontSize: 16, padding: "4px 6px", borderRadius: 6, transition: "all 0.2s", lineHeight: 1
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,77,77,0.15)"; e.currentTarget.style.borderColor = "var(--red)"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,77,77,0.05)"; e.currentTarget.style.borderColor = "rgba(255,77,77,0.1)"; }}
+                                  onClick={() => deleteColumn(col.id)}
+                                  title="Delete column"
+                                >
+                                  ×
+                                </button>
                               </div>
                             </div>
                           )}
@@ -1079,12 +1133,65 @@ function AuctionBuilder() {
                        <div key={selectedMapPage} style={{ animation: "fade-in 0.2s" }}>
                          <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", textTransform: "uppercase" }}>Page {selectedMapPage}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", textTransform: "uppercase" }}>Page {selectedMapPage}</div>
+                                {(() => {
+                                   const currentSess = auctionSessions.find(s => s.id === activeSession);
+                                   const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
+                                   const pageSlots = [1, 2, 3, 4].map(r => `P${selectedMapPage}R${r}`);
+                                   const assignments = [];
+                                   pageSlots.forEach(slot => {
+                                     Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
+                                       const isAssigned = (tags || []).some(t => t === slot || t === `P${selectedMapPage}`);
+                                       if (isCellForColumn(cKey, targetCol) && isAssigned) {
+                                         let mId = "";
+                                         if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
+                                         else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
+                                         assignments.push(mId.trim());
+                                       }
+                                     });
+                                   });
+                                  if (assignments.length === 4 && new Set(assignments).size === 1) {
+                                    const owner = members.find(m => m.memberId === assignments[0]);
+                                    return (
+                                      <span style={{ 
+                                        fontSize: 8, background: "rgba(42, 191, 107, 0.15)", color: "var(--green)", 
+                                        padding: "2px 6px", borderRadius: 4, fontWeight: 900, border: "1px solid rgba(42, 191, 107, 0.3)",
+                                        letterSpacing: 0.5, animation: "fade-in 0.3s"
+                                      }}>
+                                        FULL PAGE: {owner?.ign || assignments[0]}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                               {/* Full Page Prompt */}
                               <select 
+                                value={(() => {
+                                   const currentSess = auctionSessions.find(s => s.id === activeSession);
+                                   const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
+                                   const pageSlots = [1, 2, 3, 4].map(r => `P${selectedMapPage}R${r}`);
+                                   const assignments = [];
+                                   pageSlots.forEach(slot => {
+                                     Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
+                                       const isAssigned = (tags || []).some(t => t === slot || t === `P${selectedMapPage}`);
+                                       if (isCellForColumn(cKey, targetCol) && isAssigned) {
+                                         let mId = "";
+                                         if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
+                                         else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
+                                         assignments.push(mId.trim());
+                                       }
+                                     });
+                                   });
+                                  return (assignments.length === 4 && new Set(assignments).size === 1) ? assignments[0] : "none";
+                                })()}
                                 onChange={e => handleDropdownAssignment(selectedMapPage, null, e.target.value)}
-                                style={{ fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white", borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer" }}
-                                defaultValue="none"
+                                style={{ 
+                                  fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white", 
+                                  borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer",
+                                  borderColor: (new Set([1,2,3,4].map(r => `P${selectedMapPage}R${r}`)).size === 4) ? "var(--green)" : "var(--accent)"
+                                }}
                               >
                                 <option value="none" disabled style={{ background: "#1a1e2e" }}>Set Full Page To...</option>
                                 {sessionMembers.map(m => (
@@ -1109,11 +1216,18 @@ function AuctionBuilder() {
                                 const assigned = currentSessionGrid[key] || [];
                                 const hasConflict = assigned.length > 1;
                                 
-                                // Find current member ID for this slot from session cells
+                                // Find current member ID for this slot from session cells (robust match)
                                 let currentMemId = "none";
+                                const currentSess = auctionSessions.find(s => s.id === activeSession);
+                                const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
+
                                 Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
-                                  if (cKey.endsWith(`_${targetColId}`) && tags.includes(key)) {
-                                    currentMemId = cKey.split("_")[0];
+                                  const isAssigned = (tags || []).some(t => t === key || t === `P${selectedMapPage}`);
+                                  if (isCellForColumn(cKey, targetCol) && isAssigned) {
+                                    let mId = "";
+                                    if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
+                                    else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
+                                    currentMemId = mId.trim();
                                   }
                                 });
 
