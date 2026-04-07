@@ -87,6 +87,7 @@ export const GuildProvider = ({ children, initialData }) => {
       absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." }
     }
   });
+  const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
 
   const [raidParties, setRaidParties] = useState(() => {
@@ -110,8 +111,8 @@ export const GuildProvider = ({ children, initialData }) => {
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
 
-  const showToast = (message, type = "success") => {
-    setToast({ message, type, key: Date.now() });
+  const showToast = (message, type = "success", action = null) => {
+    setToast({ message, type, action, key: Date.now() });
   };
 
   // Derive rank from members if myMemberId is set
@@ -284,6 +285,10 @@ export const GuildProvider = ({ children, initialData }) => {
 
           prevData.current.auctionSessions = [...(data.auctionSessions || [])];
           prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
+          if (data.resourceCategories) {
+            setResourceCategories(data.resourceCategories);
+            prevData.current.resourceCategories = [...data.resourceCategories];
+          }
           if (data.partyNames) {
             setPartyNames(data.partyNames);
             prevData.current.partyNames = [...data.partyNames];
@@ -450,7 +455,8 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
           JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
           JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
-          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig)
+          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig) ||
+          JSON.stringify(resourceCategories) !== JSON.stringify(prevData.current.resourceCategories)
         ) {
           const wrappedParties = parties.map(p => ({ members: p }));
           const wrappedRaids = raidParties.map(p => ({ members: p }));
@@ -459,6 +465,7 @@ export const GuildProvider = ({ children, initialData }) => {
             raidParties: wrappedRaids, raidPartyNames,
             auctionSessions, auctionTemplates,
             discord: discordConfig,
+            resourceCategories,
             lastUpdate: new Date().toISOString()
           });
           prevData.current.parties = [...parties];
@@ -468,6 +475,7 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.raidParties = [...raidParties];
           prevData.current.raidPartyNames = [...raidPartyNames];
           prevData.current.discordConfig = { ...discordConfig };
+          prevData.current.resourceCategories = [...resourceCategories];
           changesCount++;
         }
         if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
@@ -867,6 +875,7 @@ export const GuildProvider = ({ children, initialData }) => {
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed,
+    resourceCategories, setResourceCategories,
     resetDatabase
 
   };

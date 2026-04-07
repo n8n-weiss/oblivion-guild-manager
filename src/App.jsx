@@ -444,7 +444,7 @@ export default function App() {
       </main>
 
       {showTreasury && <TreasuryModal onClose={() => setShowTreasury(false)} />}
-      {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
+      {toast && <Toast key={toast.key} message={toast.message} type={toast.type} action={toast.action} onDone={() => setToast(null)} />}
     </div>
   );
 }

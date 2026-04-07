@@ -10,22 +10,26 @@ const TOAST_CONFIG = {
 
 const DURATION = 2800;
 
-function Toast({ message, type = "success", onDone }) {
+function Toast({ message, type = "success", onDone, action }) {
   const [progress, setProgress] = useState(100);
+  const [isHovered, setIsHovered] = useState(false);
   const config = TOAST_CONFIG[type] || TOAST_CONFIG.success;
 
   useEffect(() => {
+    if (isHovered) return;
     const interval = setInterval(() => {
       setProgress((p) => Math.max(0, p - (100 / (DURATION / 50))));
     }, 50);
     const timeout = setTimeout(onDone, DURATION);
     return () => { clearTimeout(timeout); clearInterval(interval); };
-  }, [onDone]);
+  }, [onDone, isHovered]);
 
   return (
     <AnimatePresence>
       <motion.div
         key="toast"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         initial={{ x: 120, opacity: 0, scale: 0.9 }}
         animate={{ x: 0, opacity: 1, scale: 1 }}
         exit={{ x: 120, opacity: 0, scale: 0.9 }}
@@ -65,6 +69,25 @@ function Toast({ message, type = "success", onDone }) {
             <div style={{ fontSize: 13, color: "#e8eaf6", lineHeight: 1.5, fontWeight: 500 }}>
               {message}
             </div>
+            {action && (
+              <button
+                onClick={() => { action.onClick(); onDone(); }}
+                style={{
+                  marginTop: 6,
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  background: config.borderColor,
+                  color: "white",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: `0 0 10px ${config.glowColor}`
+                }}
+              >
+                {action.label.toUpperCase()}
+              </button>
+            )}
           </div>
           <button
             onClick={onDone}
