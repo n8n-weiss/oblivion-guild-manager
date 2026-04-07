@@ -32,6 +32,7 @@ function AuctionBuilder() {
   const [mapResourceFilter, setMapResourceFilter] = useState("cards"); // "cards" | "other"
   const [selectedMapColId, setSelectedMapColId] = useState(null);
   const [trackerTab, setTrackerTab] = useState("Card Album"); // Default initial tab
+  const [sidebarTab, setSidebarTab] = useState("map"); // "map" | "tracker"
   const [expandedTrackerMembers, setExpandedTrackerMembers] = useState({});
   const [lastDeletedColumn, setLastDeletedColumn] = useState(null); // { column, cellData, sessionId }
 
@@ -932,10 +933,37 @@ function AuctionBuilder() {
 
         {/* Member History Guide Sidebar */}
         {showHistoryGuide && (
-          <div style={{ width: 320, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ width: 330, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 10 }}>
             
-            {/* 1. NEW: Compact Live Resource Map Locator with Dropdowns */}
-            <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", maxHeight: "40%", background: "rgba(10,12,18,0.7)" }}>
+            {/* Sidebar Tab Switcher */}
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", padding: 4, borderRadius: 10, gap: 4 }}>
+              <button 
+                onClick={() => setSidebarTab("map")}
+                style={{ 
+                  flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: "pointer", border: "none", transition: "all 0.2s",
+                  background: sidebarTab === "map" ? "var(--accent)" : "transparent",
+                  color: sidebarTab === "map" ? "white" : "var(--text-muted)",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                }}
+              >
+                <Icon name="grid" size={14} /> MAP
+              </button>
+              <button 
+                onClick={() => setSidebarTab("tracker")}
+                style={{ 
+                  flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: "pointer", border: "none", transition: "all 0.2s",
+                  background: sidebarTab === "tracker" ? "var(--gold)" : "transparent",
+                  color: sidebarTab === "tracker" ? "white" : "var(--text-muted)",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                }}
+              >
+                <Icon name="shield" size={14} /> TRACKER
+              </button>
+            </div>
+
+            {/* 1. Resource Map Tab */}
+            {sidebarTab === "map" && (
+              <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
                   <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, margin: 0, whiteSpace: "nowrap" }}>
                     <Icon name="grid" size={14} color="var(--accent)" /> Resource Map
@@ -1073,9 +1101,11 @@ function AuctionBuilder() {
                  })()}
                </div>
              </div>
-
-{/* 2. Global World Master Tracker */}
-            <div className="card custom-scrollbar" style={{ flex: 1, padding: 16, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column" }}>
+            )}
+ 
+            {/* 2. Global World Master Tracker Tab */}
+            {sidebarTab === "tracker" && (
+              <div className="card custom-scrollbar" style={{ flex: 1, padding: 16, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column", animation: "fade-in 0.3s" }}>
                <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                  <Icon name="shield" size={14} color="var(--gold)" /> World Master Tracker
                </div>
@@ -1161,8 +1191,9 @@ function AuctionBuilder() {
                      );
                    });
                  })()}
-               </div>
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
