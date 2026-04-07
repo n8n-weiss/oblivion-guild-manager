@@ -8,7 +8,8 @@ function AuctionBuilder() {
   const {
     members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
-    attendance, events, resourceCategories, setResourceCategories
+    attendance, events, resourceCategories, setResourceCategories,
+    sendDiscordImage
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -118,6 +119,38 @@ function AuctionBuilder() {
     } catch (err) {
       console.error("Export failed:", err);
       showToast("Failed to export image", "error");
+    }
+  };
+
+  const postTableToDiscord = async () => {
+    const element = document.getElementById('auction-table-export');
+    if (!element) return;
+    
+    showToast("Capturing table for Discord...", "info");
+    
+    try {
+      const canvas = await html2canvas(element, {
+        backgroundColor: '#080a0f',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById('auction-table-export');
+          if (el) el.style.maxHeight = 'none';
+        }
+      });
+      
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          showToast("Failed to generate image blob", "error");
+          return;
+        }
+        await sendDiscordImage(blob, `Loot_${session.name}.png`, `Loot session results for **${session.name}** are now available! 🏛️💎`, "auction_results", { name: session.name });
+      }, 'image/png');
+      
+    } catch (err) {
+      console.error("Discord post failed:", err);
+      showToast("Failed to post to Discord", "error");
     }
   };
 
@@ -759,6 +792,9 @@ function AuctionBuilder() {
             )}
             <button className="btn btn-primary" onClick={exportTableToImage} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
               <Icon name="camera" size={14} /> 📸 Export Image
+            </button>
+            <button className="btn btn-primary" onClick={postTableToDiscord} style={{ background: "rgba(88,101,242,0.15)", color: "#5865F2", border: "1px solid rgba(88,101,242,0.3)" }}>
+              <Icon name="discord" size={14} /> 🚀 Post to Discord
             </button>
             <button className="btn btn-primary" onClick={addColumn}><Icon name="plus" size={14} /> Add Column</button>
           </div>

@@ -76,7 +76,8 @@ export const GuildProvider = ({ children, initialData }) => {
       welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
       vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       events: { enabled: true, webhookUrl: "", mentions: {} },
-      absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } }
+      absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
+      auction_results: { enabled: true, webhookUrl: "", mentions: {} }
     },
     templates: {
       new_join: { title: "📝 New Join Request", description: "A new recruitment application has been received from **{ign}**!" },
@@ -84,7 +85,11 @@ export const GuildProvider = ({ children, initialData }) => {
       vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
       event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
       absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
-      absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." }
+      absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." },
+      auction_results: { 
+        title: "🏛️ Auction Table Results", 
+        description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)" 
+      }
     }
   });
   const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
@@ -265,7 +270,8 @@ export const GuildProvider = ({ children, initialData }) => {
               welcome: migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member"),
               vanguard: migrateMentions(discRaw.notifications?.vanguard, "officer"),
               events: migrateMentions(discRaw.notifications?.events, "none"),
-              absences: migrateMentions(discRaw.notifications?.absences, "member")
+              absences: migrateMentions(discRaw.notifications?.absences, "member"),
+              auction_results: migrateMentions(discRaw.notifications?.auction_results, "none")
             },
             templates: {
               new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
@@ -273,7 +279,11 @@ export const GuildProvider = ({ children, initialData }) => {
               vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
               event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
               absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
-              absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." }
+              absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." },
+              auction_results: discRaw.templates?.auction_results || { 
+                title: "🏛️ Auction Table Results", 
+                description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)" 
+              }
             }
           };
 
@@ -598,6 +608,54 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const sendDiscordImage = async (blob, fileName, caption, category = "auction_results", placeholders = {}) => {
+    const catConfig = discordConfig.notifications?.[category];
+    if (catConfig && !catConfig.enabled) return;
+
+    const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
+      ? catConfig.webhookUrl 
+      : discordConfig.webhookUrl;
+
+    if (!targetUrl || targetUrl.trim() === "") {
+      if (isAdmin) showToast(`Discord: No Webhook URL set for '${category}'.`, "error");
+      return;
+    }
+
+    let finalDesc = caption;
+    if (discordConfig.templates?.[category]) {
+      finalDesc = discordConfig.templates[category].description || caption;
+      Object.entries(placeholders).forEach(([key, val]) => {
+        finalDesc = finalDesc.replace(new RegExp(`{${key}}`, 'g'), val);
+      });
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      formData.append('payload_json', JSON.stringify({
+        content: "",
+        embeds: [{
+          title: discordConfig.templates?.[category]?.title || "Results Attachment",
+          description: finalDesc,
+          color: 0x6382e6,
+          timestamp: new Date().toISOString()
+        }]
+      }));
+
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) throw new Error(`Discord Image Error: ${response.status}`);
+      showToast("Successfully posted to Discord!", "success");
+      return true;
+    } catch (err) {
+      console.error("Discord Image Upload Error:", err);
+      showToast("Failed to upload image to Discord", "error");
+      throw err;
+    }
+  };
+
   const markNotifRead = async (id) => {
     try {
       const n = notifications.find(x => x.id === id);
@@ -874,7 +932,7 @@ export const GuildProvider = ({ children, initialData }) => {
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
-    discordConfig, setDiscordConfig, sendDiscordEmbed,
+    discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
     resetDatabase
 

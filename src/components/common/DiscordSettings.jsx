@@ -82,7 +82,8 @@ const DiscordSettings = () => {
     { id: "welcome", label: "Member Welcome", icon: "users" },
     { id: "vanguard", label: "Vanguard", icon: "edit" },
     { id: "events", label: "Events", icon: "calendar" },
-    { id: "absences", label: "Absences", icon: "absence" }
+    { id: "absences", label: "Absences", icon: "absence" },
+    { id: "auction_results", label: "Auction Results", icon: "trophy" }
   ];
 
   const renderTemplateEditor = (key, title, placeholders) => {
@@ -96,7 +97,13 @@ const DiscordSettings = () => {
         </div>
         <div className="form-group mb-2">
           <label className="text-[10px] text-muted mb-1 block">EMBED DESCRIPTION</label>
-          <textarea className="form-input form-input-sm" rows={2} value={temp.description} onChange={e => updateTemplate(key, "description", e.target.value)} />
+          <textarea 
+            className="form-input form-input-sm" 
+            rows={5} 
+            style={{ minHeight: 80, fontSize: 11, lineHeight: 1.4 }}
+            value={temp.description} 
+            onChange={e => updateTemplate(key, "description", e.target.value)} 
+          />
         </div>
         <div className="text-[9px] text-muted">
           Available: {placeholders.map(p => <code key={p} style={{ color: "var(--gold)", marginRight: 5 }}>{`{${p}}`}</code>)}
@@ -106,7 +113,7 @@ const DiscordSettings = () => {
   };
 
   const renderMentionToggle = (cat, type, label, color) => {
-    const isActive = localConfig.notifications[cat].mentions?.[type];
+    const isActive = localConfig.notifications?.[cat]?.mentions?.[type];
     return (
       <button 
         key={type}
@@ -130,7 +137,7 @@ const DiscordSettings = () => {
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold">{title}</span>
         <label className="switch">
-          <input type="checkbox" checked={localConfig.notifications[cat].enabled} onChange={e => updateNotif(cat, "enabled", e.target.checked)} />
+          <input type="checkbox" checked={localConfig.notifications?.[cat]?.enabled || false} onChange={e => updateNotif(cat, "enabled", e.target.checked)} />
           <span className="slider round" style={{ transform: 'scale(0.8)' }}></span>
         </label>
       </div>
@@ -146,7 +153,7 @@ const DiscordSettings = () => {
       <div className="form-group mb-4">
         <label className="text-[10px] font-bold mb-1 block">WEBHOOK OVERRIDE (OPTIONAL)</label>
         <div className="flex gap-2">
-          <input type="password" className="form-input form-input-sm" placeholder="Default global webhook will be used if blank..." value={localConfig.notifications[cat].webhookUrl} onChange={e => updateNotif(cat, "webhookUrl", e.target.value)} />
+          <input type="password" className="form-input form-input-sm" placeholder="Default global webhook will be used if blank..." value={localConfig.notifications?.[cat]?.webhookUrl || ""} onChange={e => updateNotif(cat, "webhookUrl", e.target.value)} />
           <button className="btn btn-ghost btn-sm" onClick={() => testWebhook(localConfig.notifications[cat].webhookUrl)} disabled={isTesting}>Test</button>
         </div>
       </div>
@@ -251,6 +258,24 @@ const DiscordSettings = () => {
               {renderCategoryHead("absences", "ABSENCE ALERTS")}
               {renderTemplateEditor("absence_filed", "New Absence Filed", ["ign", "event", "date", "reason", "online"])}
               {renderTemplateEditor("absence_removed", "Absence Records Removed", ["ign", "event", "date"])}
+            </div>
+          )}
+          
+          {activeSection === "auction_results" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("auction_results", "AUCTION RESULTS (LOOT TABLE)")}
+              <div style={{ padding: "12px", background: "rgba(99,130,230,0.08)", borderRadius: 10, border: "1px solid rgba(99,130,230,0.2)", marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>📖 Discord Image Post Guide</div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+                  This will send an <strong>IMAGE</strong> of the auction table. You can use the legend below in your description template to help members understand the codes:
+                </p>
+                <div style={{ background: "rgba(0,0,0,0.3)", padding: 8, borderRadius: 6, fontSize: 10, fontFamily: "monospace", color: "#ddd" }}>
+                  📖 **Legend:**<br/>
+                  • **P1** = Full Page 1 (Bulk Win)<br/>
+                  • **P1R1** = Page 1, Row 1 (Individual Slot)
+                </div>
+              </div>
+              {renderTemplateEditor("auction_results", "Loot Session Finalized alert", ["name"])}
             </div>
           )}
         </div>
