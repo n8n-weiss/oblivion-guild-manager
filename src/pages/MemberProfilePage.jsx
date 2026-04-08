@@ -23,6 +23,112 @@ import {
   PolarRadiusAxis
 } from 'recharts';
 
+const ProfileRadarChartCard = React.memo(function ProfileRadarChartCard({ radarData, themeColor }) {
+  const RadarLabel = React.useCallback(({ x, y, payload, cx, cy }) => {
+    const stat = radarData.find(d => d.subject === payload.value);
+    if (!stat) return null;
+    const angle = Math.atan2(y - cy, x - cx);
+    const radiusOffset = 22;
+    const labelX = x + Math.cos(angle) * radiusOffset;
+    const labelY = y + Math.sin(angle) * radiusOffset;
+    return (
+      <g>
+        <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle" fill={themeColor} style={{ fontSize: 16, filter: `drop-shadow(0 0 8px ${themeColor}66)` }}>
+          {stat.icon}
+        </text>
+        <text x={labelX} y={labelY + 12} textAnchor="middle" dominantBaseline="middle" fill="var(--text-muted)" style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" }}>
+          {stat.subject}
+        </text>
+      </g>
+    );
+  }, [radarData, themeColor]);
+
+  const radarTooltip = React.useCallback(({ active, payload }) => {
+    if (!(active && payload && payload.length)) return null;
+    return (
+      <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
+        <p className="font-cinzel text-sm mb-1" style={{ color: "var(--accent)" }}>{payload[0].payload.subject}</p>
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between gap-4">
+            <span className="text-xs text-muted">You:</span>
+            <span className="text-xs font-bold" style={{ color: themeColor }}>{payload[0].value}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-xs text-muted">Guild Avg:</span>
+            <span className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>{payload[1].value}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }, [themeColor]);
+
+  return (
+    <div className="card" style={{ position: "relative", overflow: "hidden" }}>
+      <div className="card-title">🛡️ Benchmark Comparison</div>
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -40%)", width: 280, height: 280, pointerEvents: "none", zIndex: 0, opacity: 0.15 }}>
+        <svg width="100%" height="100%" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="48" fill="none" stroke={themeColor} strokeWidth="0.5" strokeDasharray="2 2" />
+          <circle cx="50" cy="50" r="35" fill="none" stroke={themeColor} strokeWidth="0.2" />
+          <circle cx="50" cy="50" r="22" fill="none" stroke={themeColor} strokeWidth="0.2" />
+          <line x1="50" y1="2" x2="50" y2="98" stroke={themeColor} strokeWidth="0.1" />
+          <line x1="2" y1="50" x2="98" y2="50" stroke={themeColor} strokeWidth="0.1" />
+        </svg>
+      </div>
+      <div style={{ height: 280, width: "100%", marginTop: 10, position: "relative", zIndex: 1 }}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={1}>
+          <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
+            <PolarGrid stroke="rgba(255,255,255,0.06)" />
+            <PolarAngleAxis dataKey="subject" tick={RadarLabel} />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+            <Radar name="You" dataKey="A" stroke={themeColor} fill={themeColor} fillOpacity={0.65} strokeWidth={2} dot={{ r: 4, fill: themeColor, stroke: "#fff", strokeWidth: 1 }} isAnimationActive animationDuration={1500} />
+            <Radar name="Guild Avg" dataKey="B" stroke="var(--text-muted)" fill="rgba(255,255,255,0.05)" strokeWidth={1} strokeDasharray="4 4" />
+            <Tooltip content={radarTooltip} />
+            <Legend iconType="diamond" verticalAlign="bottom" />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
+
+const ProfilePerformanceChartCard = React.memo(function ProfilePerformanceChartCard({ chartData, themeColor }) {
+  const customTooltip = React.useCallback(({ active, payload }) => {
+    if (!(active && payload && payload.length)) return null;
+    const data = payload[0].payload;
+    return (
+      <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
+        <p className="text-xs text-muted mb-1">{data.fullDate}</p>
+        <p className="font-cinzel text-sm mb-1" style={{ color: data.type === "Guild League" ? "var(--accent)" : "var(--gold)" }}>{data.type}</p>
+        {data.score !== null && <p className="text-sm font-bold" style={{ color: "var(--green)" }}>Score: {data.score}</p>}
+        {data.rating !== null && <p className="text-sm font-bold" style={{ color: "var(--gold)" }}>Rating: ★{data.rating}</p>}
+        <p className="text-xs mt-1" style={{ color: data.present ? "var(--green)" : "var(--red)" }}>{data.present ? "✅ Present" : "❌ Absent"}</p>
+      </div>
+    );
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="card-title">📈 Performance Chart</div>
+      <div style={{ height: 240, width: "100%", marginTop: 10 }}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={1}>
+          <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} />
+            <Tooltip content={customTooltip} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+            <Bar dataKey="score" name="GL Score" barSize={16} radius={[4, 4, 0, 0]}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.present ? themeColor : "rgba(224,80,80,0.25)"} />
+              ))}
+            </Bar>
+            <Line type="monotone" dataKey="rating" name="EO Rating" stroke="var(--gold)" strokeWidth={2} dot={{ r: 3, fill: "var(--gold)" }} connectNulls />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
+
 function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const { 
     members, events, attendance, performance, absences, eoRatings, 
@@ -282,39 +388,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     { subject: 'EO Skill', full: 'EO RANKING', icon: '🏰', A: avgEoRating * 20, B: 70, fullMark: 100 },
   ];
 
-  const CustomRadarLabel = ({ x, y, payload, cx, cy }) => {
-    const stat = radarData.find(d => d.subject === payload.value);
-    if (!stat) return null;
-    
-    // Calculate angle to push labels slightly further out
-    const angle = Math.atan2(y - cy, x - cx);
-    const radiusOffset = 22; // Push icons out away from the chart
-    const labelX = x + Math.cos(angle) * radiusOffset;
-    const labelY = y + Math.sin(angle) * radiusOffset;
-    
-    return (
-      <g>
-        <text 
-          x={labelX} y={labelY} 
-          textAnchor="middle" 
-          dominantBaseline="middle"
-          fill={theme.color}
-          style={{ fontSize: 16, filter: `drop-shadow(0 0 8px ${theme.color}66)` }}
-        >
-          {stat.icon}
-        </text>
-        <text 
-          x={labelX} y={labelY + 12} 
-          textAnchor="middle" 
-          dominantBaseline="middle"
-          fill="var(--text-muted)"
-          style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" }}
-        >
-          {stat.subject}
-        </text>
-      </g>
-    );
-  };
 
   // 7. Next Event Logic
   const { nextEvent, isUpcoming } = React.useMemo(() => {
@@ -438,54 +511,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     }));
   }, [memberEvents]);
 
-  const renderCustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
-          <p className="text-xs text-muted mb-1">{data.fullDate}</p>
-          <p className="font-cinzel text-sm mb-1" style={{ color: data.type === "Guild League" ? "var(--accent)" : "var(--gold)" }}>
-            {data.type}
-          </p>
-          {data.score !== null && (
-            <p className="text-sm font-bold" style={{ color: "var(--green)" }}>
-              Score: {data.score}
-            </p>
-          )}
-          {data.rating !== null && (
-            <p className="text-sm font-bold" style={{ color: "var(--gold)" }}>
-              Rating: ★{data.rating}
-            </p>
-          )}
-          <p className="text-xs mt-1" style={{ color: data.present ? "var(--green)" : "var(--red)" }}>
-            {data.present ? "✅ Present" : "❌ Absent"}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderRadarTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
-          <p className="font-cinzel text-sm mb-1" style={{ color: "var(--accent)" }}>{payload[0].payload.subject}</p>
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between gap-4">
-              <span className="text-xs text-muted">You:</span>
-              <span className="text-xs font-bold" style={{ color: theme.color }}>{payload[0].value}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-xs text-muted">Guild Avg:</span>
-              <span className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>{payload[1].value}</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
 
   const submitAbsence = () => {
     if (!absenceForm.reason.trim()) { showToast("Please provide a reason", "error"); return; }
@@ -969,66 +994,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           {/* Radar + Chart row */}
           {(!isMobile || mobileShowCharts) && (
           <div className="grid-2 mb-4">
-            <div className="card" style={{ position: "relative", overflow: "hidden" }}>
-              <div className="card-title">🛡️ Benchmark Comparison</div>
-              
-              {/* Background Decorative Rings */}
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -40%)", width: 280, height: 280, pointerEvents: "none", zIndex: 0, opacity: 0.15 }}>
-                 <svg width="100%" height="100%" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="48" fill="none" stroke={theme.color} strokeWidth="0.5" strokeDasharray="2 2" />
-                    <circle cx="50" cy="50" r="35" fill="none" stroke={theme.color} strokeWidth="0.2" />
-                    <circle cx="50" cy="50" r="22" fill="none" stroke={theme.color} strokeWidth="0.2" />
-                    <line x1="50" y1="2" x2="50" y2="98" stroke={theme.color} strokeWidth="0.1" />
-                    <line x1="2" y1="50" x2="98" y2="50" stroke={theme.color} strokeWidth="0.1" />
-                 </svg>
-              </div>
-
-              <div style={{ height: 280, width: "100%", marginTop: 10, position: "relative", zIndex: 1 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={1}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.06)" />
-                    <PolarAngleAxis dataKey="subject" tick={CustomRadarLabel} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                    
-                    <Radar 
-                      name="You" dataKey="A" 
-                      stroke={theme.color} fill={theme.color} fillOpacity={0.65} 
-                      strokeWidth={2}
-                      dot={{ r: 4, fill: theme.color, stroke: "#fff", strokeWidth: 1 }} 
-                      isAnimationActive={true}
-                      animationDuration={1500}
-                    />
-                    <Radar 
-                      name="Guild Avg" dataKey="B" 
-                      stroke="var(--text-muted)" fill="rgba(255,255,255,0.05)" 
-                      strokeWidth={1} strokeDasharray="4 4" 
-                    />
-                    
-                    <Tooltip content={renderRadarTooltip} />
-                    <Legend iconType="diamond" verticalAlign="bottom" />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div className="card">
-              <div className="card-title">📈 Performance Chart</div>
-              <div style={{ height: 240, width: "100%", marginTop: 10 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={1}>
-                  <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} />
-                    <Tooltip content={renderCustomTooltip} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
-                    <Bar dataKey="score" name="GL Score" barSize={16} radius={[4, 4, 0, 0]}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.present ? theme.color : "rgba(224,80,80,0.25)"} />
-                      ))}
-                    </Bar>
-                    <Line type="monotone" dataKey="rating" name="EO Rating" stroke="var(--gold)" strokeWidth={2} dot={{ r: 3, fill: "var(--gold)" }} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+            <ProfileRadarChartCard radarData={radarData} themeColor={theme.color} />
+            <ProfilePerformanceChartCard chartData={chartData} themeColor={theme.color} />
           </div>
           )}
         </div>

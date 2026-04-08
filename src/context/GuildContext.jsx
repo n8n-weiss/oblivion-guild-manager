@@ -124,6 +124,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const prevData = useRef({});
   const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0 });
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
+  const saveBurstRef = useRef({ lastAt: 0, count: 0 });
 
   const showToast = (message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
@@ -135,6 +136,22 @@ export const GuildProvider = ({ children, initialData }) => {
   useEffect(() => {
     liveAuctionRef.current = { auctionSessions, auctionTemplates, resourceCategories };
   }, [auctionSessions, auctionTemplates, resourceCategories]);
+  useEffect(() => {
+    // Track rapid edit bursts so we can coalesce save writes.
+    const now = Date.now();
+    const prevAt = Number(saveBurstRef.current.lastAt || 0);
+    saveBurstRef.current.count = now - prevAt < 900 ? (saveBurstRef.current.count + 1) : 1;
+    saveBurstRef.current.lastAt = now;
+  }, [
+    parties,
+    partyNames,
+    raidParties,
+    raidPartyNames,
+    auctionSessions,
+    auctionTemplates,
+    resourceCategories,
+    discordConfig
+  ]);
 
   // Derive rank from members if myMemberId is set
   const cleanMyId = (myMemberId || "").trim().toLowerCase();
@@ -805,7 +822,9 @@ export const GuildProvider = ({ children, initialData }) => {
         console.error("Firebase save error:", err);
       }
     };
-    const timeout = setTimeout(saveData, 1000);
+    const burstCount = Number(saveBurstRef.current.count || 1);
+    const debounceMs = burstCount >= 5 ? 2200 : burstCount >= 3 ? 1600 : 1000;
+    const timeout = setTimeout(saveData, debounceMs);
     return () => clearTimeout(timeout);
   }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
 

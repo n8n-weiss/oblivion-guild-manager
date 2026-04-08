@@ -207,6 +207,82 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   );
 });
 
+const TrackerMemberRow = React.memo(function TrackerMemberRow({
+  memberId,
+  ign,
+  total,
+  sessions,
+  isExpanded,
+  absoluteIdx,
+  dominance,
+  badgeColor,
+  badgeBg,
+  badgeBorder,
+  onToggle
+}) {
+  const seshArray = React.useMemo(
+    () => Object.values(sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [sessions]
+  );
+  return (
+    <div style={{
+      background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
+      borderRadius: 12,
+      border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
+      marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
+      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
+    }}>
+      <div
+        onClick={() => onToggle(memberId)}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
+        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+      >
+        <MemberAvatar ign={ign} size={isExpanded ? 36 : 28} />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)", letterSpacing: 0.5 }}>{ign}</div>
+            {absoluteIdx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
+            {absoluteIdx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
+            {absoluteIdx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+            <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
+            </div>
+            <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{total}</div>
+          <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div style={{ padding: "0 10px 10px 10px", display: "flex", flexDirection: "column", gap: 6, animation: "fade-in 0.2s" }}>
+          {seshArray.map(sesh => (
+            <div key={sesh.id} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6, color: "var(--text-secondary)" }}>
+                <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{String(sesh.name).toUpperCase()}</span>
+                <span style={{ opacity: 0.6 }}>{new Date(sesh.date).toLocaleDateString()}</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                {sesh.items.map((item, i2) => (
+                  <span key={i2} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 700 }}>{item}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 function AuctionBuilder() {
   const {
     members, auctionSessions, setAuctionSessions,
@@ -791,6 +867,9 @@ function AuctionBuilder() {
 
   const handleDeleteMapPage = React.useCallback((page) => {
     setConfirmDeleteMapPage(page);
+  }, []);
+  const toggleTrackerMember = React.useCallback((memberId) => {
+    setExpandedTrackerMembers(p => ({ ...p, [memberId]: !p[memberId] }));
   }, []);
   const onMapSidebarProfileRender = React.useCallback((id, phase, actualDuration) => {
     if (!import.meta.env.DEV) return;
@@ -1531,67 +1610,23 @@ function AuctionBuilder() {
                         {renderMembers.map((m, idx) => {
                           const absoluteIdx = startIndex + idx;
                           const isExpanded = !!expandedTrackerMembers[m.memberId];
-                          const seshArray = Object.values(m.sessions).sort((a, b) => new Date(b.date) - new Date(a.date));
                           const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
 
                           return (
-                            <div key={m.memberId} style={{
-                              background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
-                              borderRadius: 12,
-                              border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
-                              marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
-                              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                              boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
-                            }}>
-                              {/* Main Banner */}
-                              <div
-                                onClick={() => setExpandedTrackerMembers(p => ({...p, [m.memberId]: !p[m.memberId]}))}
-                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
-                                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                              >
-                                <MemberAvatar ign={m.ign} size={isExpanded ? 36 : 28} />
-
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)", letterSpacing: 0.5 }}>{m.ign}</div>
-                                    {absoluteIdx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
-                                    {absoluteIdx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
-                                    {absoluteIdx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
-                                  </div>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                                    <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
-                                      <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
-                                    </div>
-                                    <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
-                                  </div>
-                                </div>
-
-                                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                  <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{m.total}</div>
-                                  <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
-                                </div>
-                              </div>
-
-                             {/* Collapsible Session List */}
-                             {isExpanded && (
-                                <div style={{ padding: "0 10px 10px 10px", display: "flex", flexDirection: "column", gap: 6,  animation: "fade-in 0.2s" }}>
-                                   {seshArray.map(sesh => (
-                                     <div key={sesh.id} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6, color: "var(--text-secondary)" }}>
-                                           <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{String(sesh.name).toUpperCase()}</span>
-                                           <span style={{ opacity: 0.6 }}>{new Date(sesh.date).toLocaleDateString()}</span>
-                                        </div>
-                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                                          {sesh.items.map((item, i2) => (
-                                            <span key={i2} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 700 }}>{item}</span>
-                                          ))}
-                                        </div>
-                                     </div>
-                                   ))}
-                                </div>
-                             )}
-                           </div>
+                            <TrackerMemberRow
+                              key={m.memberId}
+                              memberId={m.memberId}
+                              ign={m.ign}
+                              total={m.total}
+                              sessions={m.sessions}
+                              isExpanded={isExpanded}
+                              absoluteIdx={absoluteIdx}
+                              dominance={dominance}
+                              badgeColor={badgeColor}
+                              badgeBg={badgeBg}
+                              badgeBorder={badgeBorder}
+                              onToggle={toggleTrackerMember}
+                            />
                          );
                        })}
                        {bottomPad > 0 && <div style={{ height: bottomPad }} />}
