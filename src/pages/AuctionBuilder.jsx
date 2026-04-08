@@ -26,7 +26,9 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   setDraggedOverSlot,
   dragging,
   mapSummary,
-  mapPageStats
+  mapPageStats,
+  mapFocusMode,
+  setMapFocusMode
 }) {
   if (sidebarTab !== "map") return null;
 
@@ -52,6 +54,14 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
             {(!session?.columns || session.columns.length === 0) && <option disabled>No Columns</option>}
           </select>
         </div>
+        <button
+          className={`btn btn-sm ${mapFocusMode ? "btn-primary" : "btn-ghost"}`}
+          style={{ fontSize: 10, padding: "3px 8px", whiteSpace: "nowrap" }}
+          onClick={() => setMapFocusMode(v => !v)}
+          title="Zoom selected page slots for easier assignment"
+        >
+          {mapFocusMode ? "Focus On" : "Focus Off"}
+        </button>
       </div>
       <div style={{ position: "sticky", top: 0, zIndex: 3, marginBottom: 10, background: "rgba(10,12,18,0.9)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 8 }}>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>
@@ -146,12 +156,24 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: mapFocusMode ? 10 : 8 }}>
               {[1, 2, 3, 4].map(row => {
                 const key = `P${selectedMapPage}R${row}`;
                 const hasConflict = !!selectedPageAnalysis.rowHasConflict[row];
                 const currentMemId = selectedPageAnalysis.rowCurrentMemberIds[row] || "none";
                 const isDragTarget = draggedOverSlot === key;
+                const slotOwners = currentSessionGrid[key] || [];
+                const fallbackName = currentMemId !== "none" ? (sessionMembers.find(m => m.memberId === currentMemId)?.ign || "") : "";
+                const ownerNames = slotOwners.length > 0 ? slotOwners : (fallbackName ? [fallbackName] : []);
+                const ownerInitials = ownerNames.slice(0, 3).map((name) =>
+                  String(name || "")
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map(part => part[0])
+                    .join("")
+                    .toUpperCase()
+                );
                 return (
                   <div
                     key={row}
@@ -159,7 +181,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                     onDragLeave={() => setDraggedOverSlot(null)}
                     onDrop={e => { if (dragging) { e.preventDefault(); handleDropdownAssignment(selectedMapPage, row, dragging); setDraggedOverSlot(null); } }}
                     style={{
-                      padding: "8px 10px", borderRadius: 10,
+                      padding: mapFocusMode ? "12px 12px" : "8px 10px", borderRadius: 10,
                       background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)"),
                       border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)")}`,
                       position: "relative",
@@ -167,7 +189,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                       backdropFilter: "blur(8px)",
                       transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
                       animation: hasConflict ? "pulse-red 2s infinite" : (currentMemId !== "none" && !isDragTarget ? "pulse-green 4s infinite" : "none"),
-                      minHeight: 52,
+                      minHeight: mapFocusMode ? 84 : 52,
                       display: "flex", flexDirection: "column", justifyContent: "center",
                       transform: isDragTarget ? "scale(1.03)" : "scale(1)",
                       cursor: dragging ? "copy" : "default"
@@ -192,6 +214,36 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                       </select>
                       <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", opacity: 0.4, pointerEvents: "none", fontSize: 10 }}>▼</div>
                     </div>
+                    {ownerInitials.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                        {ownerInitials.map((ini, idx) => (
+                          <span
+                            key={`${key}_chip_${idx}`}
+                            title={`Slot ${row} • ${ownerNames[idx]}`}
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 800,
+                              letterSpacing: 0.4,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: hasConflict ? "rgba(224,80,80,0.2)" : "rgba(99,130,230,0.16)",
+                              color: hasConflict ? "var(--red)" : "var(--accent)",
+                              border: `1px solid ${hasConflict ? "rgba(224,80,80,0.4)" : "rgba(99,130,230,0.35)"}`
+                            }}
+                          >
+                            {ini}
+                          </span>
+                        ))}
+                        {ownerNames.length > 3 && (
+                          <span
+                            title={ownerNames.slice(3).join(", ")}
+                            style={{ fontSize: 9, color: "var(--text-muted)", cursor: "help" }}
+                          >
+                            +{ownerNames.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {hasConflict && <div style={{ fontSize: 8, color: "#ff4d4d", marginTop: 2, fontWeight: 900, textShadow: "0 0 8px rgba(255,77,77,0.5)" }}>DUPLICATE!</div>}
                     {hasConflict && (
                       <div style={{ fontSize: 8, color: "rgba(255,77,77,0.8)", marginTop: 1 }}>
@@ -221,8 +273,10 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
     prev.dragging === next.dragging &&
     prev.mapSummary === next.mapSummary &&
     prev.mapPageStats === next.mapPageStats &&
+    prev.mapFocusMode === next.mapFocusMode &&
     prev.handleDropdownAssignment === next.handleDropdownAssignment &&
-    prev.handleDeleteMapPage === next.handleDeleteMapPage
+    prev.handleDeleteMapPage === next.handleDeleteMapPage &&
+    prev.setMapFocusMode === next.setMapFocusMode
   );
 });
 
@@ -352,6 +406,7 @@ function AuctionBuilder() {
   const trackerListRef = React.useRef(null);
   const [trackerCompactMode, setTrackerCompactMode] = useState(() => localStorage.getItem("auction_trackerCompactMode") === "1");
   const [trackerGroupCollapsed, setTrackerGroupCollapsed] = useState({});
+  const [mapFocusMode, setMapFocusMode] = useState(() => localStorage.getItem("auction_mapFocusMode") === "1");
 
   React.useEffect(() => {
     try {
@@ -382,6 +437,7 @@ function AuctionBuilder() {
   React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
   React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
   React.useEffect(() => { localStorage.setItem("auction_trackerCompactMode", trackerCompactMode ? "1" : "0"); }, [trackerCompactMode]);
+  React.useEffect(() => { localStorage.setItem("auction_mapFocusMode", mapFocusMode ? "1" : "0"); }, [mapFocusMode]);
   React.useEffect(() => {
     localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
   }, [newSessionForm, newTemplateName]);
@@ -1667,6 +1723,8 @@ function AuctionBuilder() {
                 dragging={dragging}
                 mapSummary={mapSummary}
                 mapPageStats={mapPageStats}
+                mapFocusMode={mapFocusMode}
+                setMapFocusMode={setMapFocusMode}
               />
             </React.Profiler>
  
