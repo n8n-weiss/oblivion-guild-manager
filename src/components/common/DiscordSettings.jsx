@@ -314,6 +314,8 @@ const DiscordSettings = () => {
             <div className="animate-fade-in">
               {renderCategoryHead("events", "EVENT SCHEDULING")}
               {renderTemplateEditor("event_created", "New Event Created", ["type", "date"])}
+              {renderCategoryHead("event_digest", "POST-EVENT DIGEST")}
+              {renderTemplateEditor("event_digest", "Post-Event Digest", ["type", "date"])}
             </div>
           )}
 

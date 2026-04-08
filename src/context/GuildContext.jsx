@@ -76,6 +76,7 @@ export const GuildProvider = ({ children, initialData }) => {
       welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
       vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       events: { enabled: true, webhookUrl: "", mentions: {} },
+      event_digest: { enabled: true, webhookUrl: "", mentions: {} },
       absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
       auction_results: { enabled: true, webhookUrl: "", mentions: {} }
     },
@@ -84,6 +85,7 @@ export const GuildProvider = ({ children, initialData }) => {
       welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
       vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
       event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
+      event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 5 DPS, Top 5 Support/Utility, and Top 5 Attendance snapshot for **{date}**." },
       absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
       absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." },
       auction_results: { 
@@ -482,6 +484,7 @@ export const GuildProvider = ({ children, initialData }) => {
               welcome: { enabled: true, webhookUrl: "", mentions: { member: true }, ...migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member") },
               vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.vanguard, "officer") },
               events: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.events, "none") },
+              event_digest: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.event_digest, "none") },
               absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true }, ...migrateMentions(discRaw.notifications?.absences, "member") },
               auction_results: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.auction_results, "none") }
             },
@@ -490,6 +493,7 @@ export const GuildProvider = ({ children, initialData }) => {
               welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!", ...(discRaw.templates?.welcome || {}) },
               vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request.", ...(discRaw.templates?.vanguard || {}) },
               event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance.", ...(discRaw.templates?.event_created || {}) },
+              event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 5 DPS, Top 5 Support/Utility, and Top 5 Attendance snapshot for **{date}**.", ...(discRaw.templates?.event_digest || {}) },
               absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence.", ...(discRaw.templates?.absence_filed || {}) },
               absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura.", ...(discRaw.templates?.absence_removed || {}) },
               auction_results: {

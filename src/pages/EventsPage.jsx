@@ -3,6 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
 import { computeScore } from '../utils/scoring';
+import { computeLeaderboard } from '../utils/scoring';
 import { writeAuditLog } from "../utils/audit";
 
 function EventsPage() {
@@ -15,6 +16,8 @@ function EventsPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [postingDigest, setPostingDigest] = useState(false);
+  const [finalizingDigest, setFinalizingDigest] = useState(false);
 
   const deleteEvent = (eventId) => {
     const ev = events.find(e => e.eventId === eventId);
@@ -119,6 +122,113 @@ function EventsPage() {
       perf: performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === evt.eventId)
     };
   }) : [];
+  const leaderboardSnapshot = React.useMemo(
+    () => computeLeaderboard(activeMembers, events, attendance, performance, eoRatings),
+    [activeMembers, events, attendance, performance, eoRatings]
+  );
+  const buildDigestSnapshot = React.useCallback((eventObj) => {
+    if (!eventObj) return null;
+    const eventMembers = members.filter(m => {
+      const mId = (m.memberId || "").toLowerCase();
+      const hasAtt = attendance.some(a => a.eventId === eventObj.eventId && (a.memberId || "").toLowerCase() === mId);
+      const isActive = (m.status || "active") === "active";
+      return hasAtt || isActive;
+    }).map(m => {
+      const mId = (m.memberId || "").toLowerCase();
+      return {
+        ...m,
+        att: attendance.find(a => a.eventId === eventObj.eventId && (a.memberId || "").toLowerCase() === mId),
+        perf: performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventObj.eventId)
+      };
+    });
+    const presentRows = eventMembers.filter(m => m.att?.status === "present");
+    const withEventScore = presentRows.map(m => ({
+      ...m,
+      eventScore: computeScore({ event: eventObj, att: m.att, perf: m.perf })
+    }));
+    const topDps = withEventScore
+      .filter(m => (m.role || "").toLowerCase() === "dps")
+      .sort((a, b) => b.eventScore - a.eventScore)
+      .slice(0, 5);
+    const topSupport = withEventScore
+      .filter(m => (m.role || "").toLowerCase().includes("support"))
+      .sort((a, b) => b.eventScore - a.eventScore)
+      .slice(0, 5);
+    const topAttendance = [...leaderboardSnapshot]
+      .sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore)
+      .slice(0, 5);
+    const hashPayload = {
+      eventId: eventObj.eventId,
+      eventType: eventObj.eventType,
+      eventDate: eventObj.eventDate,
+      topDps: topDps.map(m => [m.memberId, m.eventScore]),
+      topSupport: topSupport.map(m => [m.memberId, m.eventScore]),
+      topAttendance: topAttendance.map(m => [m.memberId, m.attendancePct])
+    };
+    return { topDps, topSupport, topAttendance, hash: JSON.stringify(hashPayload) };
+  }, [attendance, leaderboardSnapshot, members, performance]);
+  const currentDigest = React.useMemo(() => buildDigestSnapshot(selectedEvent), [buildDigestSnapshot, selectedEvent]);
+  const digestAlreadyPosted = !!selectedEvent?.digestMeta?.hash;
+  const digestIsUpdated = digestAlreadyPosted && selectedEvent?.digestMeta?.hash !== currentDigest?.hash;
+
+  const postEventDigest = async (mode = "manual") => {
+    if (!selectedEvent) return;
+    const digest = buildDigestSnapshot(selectedEvent);
+    if (!digest) return;
+    const isFinalize = mode === "finalize";
+    if (!isFinalize && selectedEvent?.digestMeta?.hash && selectedEvent.digestMeta.hash === digest.hash) {
+      showToast("Digest unchanged. No repost needed.", "info");
+      return;
+    }
+    if (isFinalize) setFinalizingDigest(true);
+    else setPostingDigest(true);
+    try {
+      const rowText = (list, scoreKey = "eventScore", suffix = "pts") =>
+        list.length ? list.map((m, i) => `${i + 1}. ${m.ign} — ${m[scoreKey]} ${suffix}`).join("\n") : "No data yet";
+
+      await sendDiscordEmbed(
+        "📊 Post-Event Digest",
+        isFinalize ? "Finalized event digest from officer review." : "Updated event digest after score edits.",
+        0xF0C040,
+        [
+          { name: "Event", value: `${selectedEvent.eventType} • ${selectedEvent.eventDate}`, inline: false },
+          { name: "Top 5 DPS", value: rowText(digest.topDps), inline: false },
+          { name: "Top 5 Support/Utility", value: rowText(digest.topSupport), inline: false },
+          { name: "Top 5 Attendance", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "event_digest",
+        "event_digest",
+        { type: selectedEvent.eventType, date: selectedEvent.eventDate }
+      );
+
+      const digestMeta = {
+        hash: digest.hash,
+        postedAt: new Date().toISOString(),
+        postedBy: currentUser?.email || "unknown",
+        finalized: isFinalize || !!selectedEvent?.digestMeta?.finalized
+      };
+      setEvents(prev => prev.map(ev => (
+        ev.eventId === selectedEvent.eventId
+          ? { ...ev, digestMeta }
+          : ev
+      )));
+      setSelectedEvent(prev => prev ? { ...prev, digestMeta } : prev);
+      showToast(isFinalize ? "Finalized and posted event digest" : "Reposted updated digest", "success");
+      writeAuditLog(
+        currentUser?.email,
+        currentUser?.displayName || currentUser?.email,
+        isFinalize ? "event_digest_finalize" : "event_digest_repost",
+        `${selectedEvent.eventType} ${selectedEvent.eventDate}`
+      );
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to post event digest", "error");
+    } finally {
+      setPostingDigest(false);
+      setFinalizingDigest(false);
+    }
+  };
 
   return (
     <div>
@@ -182,7 +292,22 @@ function EventsPage() {
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
                     <span className="text-xs text-muted">{evtAtt.filter(a => a.status === "present").length}/{evtAtt.length} present</span>
+                    {digestAlreadyPosted && (
+                      <span className={`badge ${digestIsUpdated ? "badge-casual" : "badge-active"}`} style={{ fontSize: 9 }}>
+                        {digestIsUpdated ? "Digest Outdated" : "Digest Posted"}
+                      </span>
+                    )}
                   </div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
+                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize & Post Top 5"}
+                  </button>
+                  {digestIsUpdated && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => postEventDigest("repost")} disabled={postingDigest || finalizingDigest}>
+                      <Icon name="refresh" size={12} /> {postingDigest ? "Posting..." : "Repost Updated"}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="table-wrap">
