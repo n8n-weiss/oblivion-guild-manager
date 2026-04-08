@@ -53,7 +53,23 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileShowHeatmap, setMobileShowHeatmap] = useState(window.innerWidth >= 768);
+  const [mobileShowCharts, setMobileShowCharts] = useState(window.innerWidth >= 768);
   const MotionDiv = motion.div;
+
+  React.useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileShowHeatmap(true);
+        setMobileShowCharts(true);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // 3D Card Tilt State
   const mouseX = useMotionValue(0);
@@ -836,6 +852,17 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       {/* Tab: Overview */}
       {activeTab === "overview" && (
         <div className="animate-fade-in">
+          {isMobile && (
+            <div className="card mb-4" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className={`btn btn-sm ${mobileShowHeatmap ? "btn-primary" : "btn-ghost"}`} onClick={() => setMobileShowHeatmap(v => !v)}>
+                {mobileShowHeatmap ? "Hide Heatmap" : "Show Heatmap"}
+              </button>
+              <button className={`btn btn-sm ${mobileShowCharts ? "btn-primary" : "btn-ghost"}`} onClick={() => setMobileShowCharts(v => !v)}>
+                {mobileShowCharts ? "Hide Charts" : "Show Charts"}
+              </button>
+            </div>
+          )}
+
           {/* Performance Summary */}
           <div className="card mb-4">
             <div
@@ -877,12 +904,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           </div>
 
           {/* Participation Heatmap */}
-          <div className="card mb-4">
-            <div className="card-title">📅 Participation Heatmap (Last 5 Months)</div>
-            {renderParticipationHeatmap()}
-          </div>
+          {(!isMobile || mobileShowHeatmap) && (
+            <div className="card mb-4">
+              <div className="card-title">📅 Participation Heatmap (Last 5 Months)</div>
+              {renderParticipationHeatmap()}
+            </div>
+          )}
 
           {/* Radar + Chart row */}
+          {(!isMobile || mobileShowCharts) && (
           <div className="grid-2 mb-4">
             <div className="card" style={{ position: "relative", overflow: "hidden" }}>
               <div className="card-title">🛡️ Benchmark Comparison</div>
@@ -945,6 +975,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 

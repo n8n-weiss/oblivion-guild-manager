@@ -35,6 +35,22 @@ function AuctionBuilder() {
   const [expandedTrackerMembers, setExpandedTrackerMembers] = useState({});
   const [lastDeletedColumn, setLastDeletedColumn] = useState(null); // { column, cellData, sessionId }
   const [draggedOverSlot, setDraggedOverSlot] = useState(null); // key of the slot being hovered
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileShowPool, setMobileShowPool] = useState(window.innerWidth >= 768);
+  const [mobileShowSidebar, setMobileShowSidebar] = useState(window.innerWidth >= 768);
+
+  React.useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileShowPool(true);
+        setMobileShowSidebar(true);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {
@@ -794,8 +810,19 @@ function AuctionBuilder() {
       </div>
 
       <div className="flex gap-4" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+        {isMobile && (
+          <div style={{ width: "100%", display: "flex", gap: 8, marginBottom: 8 }}>
+            <button className={`btn btn-sm ${mobileShowPool ? "btn-primary" : "btn-ghost"}`} onClick={() => setMobileShowPool(v => !v)}>
+              {mobileShowPool ? "Hide Pool" : "Show Pool"}
+            </button>
+            <button className={`btn btn-sm ${mobileShowSidebar ? "btn-primary" : "btn-ghost"}`} onClick={() => setMobileShowSidebar(v => !v)}>
+              {mobileShowSidebar ? "Hide Guide" : "Show Guide"}
+            </button>
+          </div>
+        )}
 
         {/* Member Pool */}
+        {(!isMobile || mobileShowPool) && (
         <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
           <div className="flex items-center justify-between">
             <div style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 700 }}>Member Pool</div>
@@ -877,6 +904,7 @@ function AuctionBuilder() {
             {dragOver === "pool" && <div className="text-xs text-secondary" style={{ textAlign: "center", padding: "8px 0" }}>Drop to remove</div>}
           </div>
         </div>
+        )}
 
         {/* Table Wrap for Image Capture */}
         <div id="auction-table-export" style={{ flex: 1, minWidth: 0, padding: 12, background: "var(--bg-dark)", borderRadius: 16 }}>
@@ -1049,7 +1077,7 @@ function AuctionBuilder() {
         </div>
 
         {/* Member History Guide Sidebar */}
-        {showHistoryGuide && (
+        {showHistoryGuide && (!isMobile || mobileShowSidebar) && (
           <div style={{ width: 330, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 10 }}>
             
             {/* Sidebar Tab Switcher */}
