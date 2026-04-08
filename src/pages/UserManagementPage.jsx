@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { db, auth, firebaseConfig } from '../firebase';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { db, firebaseConfig } from '../firebase';
+import { doc, setDoc, getDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { useGuild } from '../context/GuildContext';
 import { writeAuditLog } from '../utils/audit';
@@ -33,7 +33,6 @@ function UserManagementPage() {
       const snap = await getDoc(doc(db, "guildusers", "list"));
       let currentUsers = snap.exists() ? (snap.data().users || []) : [];
       
-      const { getDocs, collection } = await import('firebase/firestore');
       const urSnap = await getDocs(collection(db, "userroles"));
       
       let added = 0;

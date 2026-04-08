@@ -11,27 +11,28 @@ import Icon from "./components/ui/icons";
 import Toast from "./components/ui/Toast";
 import { MemberAvatar } from "./components/common/MemberAvatar";
 
-// Components
 import TreasuryModal from "./components/common/TreasuryModal";
 import { NotificationCenter } from "./components/common/NotificationCenter";
-import Dashboard from "./pages/Dashboard";
-import MembersPage from "./pages/MembersPage";
-import EventsPage from "./pages/EventsPage";
-import AbsencesPage from "./pages/AbsencesPage";
-import LeaderboardPage from "./pages/LeaderboardPage";
-import PartyBuilder from "./pages/PartyBuilder";
-import MemberProfilePage from "./pages/MemberProfilePage";
-import WeeklyReportPage from "./pages/WeeklyReportPage";
-import AuctionBuilder from "./pages/AuctionBuilder";
-import ImportPage from "./pages/ImportPage";
-import AuditLogPage from "./pages/AuditLogPage";
-import LoginPage from "./pages/LoginPage";
-import UserManagementPage from "./pages/UserManagementPage";
-import RequestsPage from "./pages/RequestsPage";
 import { CardSkeleton } from "./components/ui/Skeleton";
 
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const MembersPage = React.lazy(() => import("./pages/MembersPage"));
+const EventsPage = React.lazy(() => import("./pages/EventsPage"));
+const AbsencesPage = React.lazy(() => import("./pages/AbsencesPage"));
+const LeaderboardPage = React.lazy(() => import("./pages/LeaderboardPage"));
+const PartyBuilder = React.lazy(() => import("./pages/PartyBuilder"));
+const MemberProfilePage = React.lazy(() => import("./pages/MemberProfilePage"));
+const WeeklyReportPage = React.lazy(() => import("./pages/WeeklyReportPage"));
+const AuctionBuilder = React.lazy(() => import("./pages/AuctionBuilder"));
+const ImportPage = React.lazy(() => import("./pages/ImportPage"));
+const AuditLogPage = React.lazy(() => import("./pages/AuditLogPage"));
+const LoginPage = React.lazy(() => import("./pages/LoginPage"));
+const UserManagementPage = React.lazy(() => import("./pages/UserManagementPage"));
+const RequestsPage = React.lazy(() => import("./pages/RequestsPage"));
+const MotionDiv = motion.div;
+
 const PageWrapper = ({ children, id }) => (
-  <motion.div
+  <MotionDiv
     key={id}
     initial={{ opacity: 0, y: 10, scale: 0.98 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -40,12 +41,12 @@ const PageWrapper = ({ children, id }) => (
     style={{ width: '100%', height: '100%' }}
   >
     {children}
-  </motion.div>
+  </MotionDiv>
 );
 
 export default function App() {
   const {
-    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
+    loading, authLoading, currentUser, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
@@ -130,7 +131,13 @@ export default function App() {
   );
 
   // Show login if not authenticated
-  if (!currentUser) return <LoginPage />;
+  if (!currentUser) {
+    return (
+      <React.Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--bg-deepest)" }} />}>
+        <LoginPage />
+      </React.Suspense>
+    );
+  }
 
   if (loading) return (
     <div className="app-root">
@@ -207,7 +214,7 @@ export default function App() {
             if (isMember && item.id === "members") label = "My Profile";
 
             return (
-              <motion.div 
+  <MotionDiv
                 key={item.id} 
                 className={`nav-item ${page === item.id ? "active" : ""}`} 
                 onClick={() => { setPage(item.id); setProfileMember(null); }}
@@ -232,7 +239,7 @@ export default function App() {
                     {pendingRequestsCount}
                   </span>
                 )}
-              </motion.div>
+  </MotionDiv>
             );
           })}
         </div>
@@ -341,7 +348,17 @@ export default function App() {
             </div>
           </PageWrapper>
         ) : (
-          <AnimatePresence mode="wait">
+          <React.Suspense
+            fallback={
+              <div className="grid-2">
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+              </div>
+            }
+          >
+            <AnimatePresence mode="wait">
             {page === "dashboard" && (
               <PageWrapper id="dashboard">
                 <Dashboard />
@@ -439,7 +456,8 @@ export default function App() {
                 <RequestsPage />
               </PageWrapper>
             )}
-          </AnimatePresence>
+            </AnimatePresence>
+          </React.Suspense>
         )}
       </main>
 
