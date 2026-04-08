@@ -23,10 +23,10 @@ function AuctionBuilder() {
   const [editingColId, setEditingColId] = useState(null);
   const [dragging, setDragging] = useState(null); // memberId
   const [dragOver, setDragOver] = useState(null); // "table" | "pool"
-  const [poolSearch, setPoolSearch] = useState("");
-  const [historySearch, setHistorySearch] = useState("");
-  const [historyFilter, setHistoryFilter] = useState("all"); // "all" | "wins" | "outbids"
-  const [cardSearch, setCardSearch] = useState("");
+  const [poolSearch, setPoolSearch] = useState(() => localStorage.getItem("auction_poolSearch") || "");
+  const [historySearch, setHistorySearch] = useState(() => localStorage.getItem("auction_historySearch") || "");
+  const [historyFilter, setHistoryFilter] = useState(() => localStorage.getItem("auction_historyFilter") || "all"); // "all" | "wins" | "outbids"
+  const [cardSearch, setCardSearch] = useState(() => localStorage.getItem("auction_cardSearch") || "");
   const [maxVisiblePage, setMaxVisiblePage] = useState(1);
   const [selectedMapPage, setSelectedMapPage] = useState(1);
   const [selectedMapColId, setSelectedMapColId] = useState(null);
@@ -51,6 +51,10 @@ function AuctionBuilder() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+  React.useEffect(() => { localStorage.setItem("auction_poolSearch", poolSearch); }, [poolSearch]);
+  React.useEffect(() => { localStorage.setItem("auction_historySearch", historySearch); }, [historySearch]);
+  React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
+  React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {

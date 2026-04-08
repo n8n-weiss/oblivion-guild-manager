@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
@@ -6,8 +6,8 @@ import { computeLeaderboard } from '../utils/scoring';
 
 function LeaderboardPage({ onViewProfile }) {
   const { members, events, attendance, performance, eoRatings } = useGuild();
-  const [filter, setFilter] = useState("All");
-  const [lbMode, setLbMode] = useState("Combat"); // "Combat" | "Duty" | "Consistency" | "Support" | "eo"
+  const [filter, setFilter] = useState(() => localStorage.getItem("leaderboard_filter") || "All");
+  const [lbMode, setLbMode] = useState(() => localStorage.getItem("leaderboard_mode") || "Combat"); // "Combat" | "Duty" | "Consistency" | "Support" | "eo"
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   
   const lb = useMemo(() => {
@@ -57,6 +57,8 @@ function LeaderboardPage({ onViewProfile }) {
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
   const podiumData = lbMode === "eo" ? eoLb.slice(0, 3) : lb.slice(0, 3);
+  useEffect(() => { localStorage.setItem("leaderboard_filter", filter); }, [filter]);
+  useEffect(() => { localStorage.setItem("leaderboard_mode", lbMode); }, [lbMode]);
   
   const getPodiumValue = (m) => {
     if (!m) return "";

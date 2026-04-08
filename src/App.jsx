@@ -15,20 +15,41 @@ import TreasuryModal from "./components/common/TreasuryModal";
 import { NotificationCenter } from "./components/common/NotificationCenter";
 import { CardSkeleton } from "./components/ui/Skeleton";
 
-const Dashboard = React.lazy(() => import("./pages/Dashboard"));
-const MembersPage = React.lazy(() => import("./pages/MembersPage"));
-const EventsPage = React.lazy(() => import("./pages/EventsPage"));
-const AbsencesPage = React.lazy(() => import("./pages/AbsencesPage"));
-const LeaderboardPage = React.lazy(() => import("./pages/LeaderboardPage"));
-const PartyBuilder = React.lazy(() => import("./pages/PartyBuilder"));
-const MemberProfilePage = React.lazy(() => import("./pages/MemberProfilePage"));
-const WeeklyReportPage = React.lazy(() => import("./pages/WeeklyReportPage"));
-const AuctionBuilder = React.lazy(() => import("./pages/AuctionBuilder"));
-const ImportPage = React.lazy(() => import("./pages/ImportPage"));
-const AuditLogPage = React.lazy(() => import("./pages/AuditLogPage"));
-const LoginPage = React.lazy(() => import("./pages/LoginPage"));
-const UserManagementPage = React.lazy(() => import("./pages/UserManagementPage"));
-const RequestsPage = React.lazy(() => import("./pages/RequestsPage"));
+const lazyWithRetry = (importer, key) =>
+  React.lazy(async () => {
+    try {
+      return await importer();
+    } catch (err) {
+      const shouldReload =
+        typeof window !== "undefined" &&
+        /Failed to fetch dynamically imported module|Loading chunk/i.test(String(err?.message || err));
+      const reloadKey = `lazy-retry-${key}`;
+      if (shouldReload && sessionStorage.getItem(reloadKey) !== "1") {
+        sessionStorage.setItem(reloadKey, "1");
+        sessionStorage.setItem("lazy-retry-notice", "1");
+        window.location.reload();
+        // Keep Suspense pending while reload starts.
+        return new Promise(() => {});
+      }
+      sessionStorage.removeItem(reloadKey);
+      throw err;
+    }
+  });
+
+const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"), "dashboard");
+const MembersPage = lazyWithRetry(() => import("./pages/MembersPage"), "members");
+const EventsPage = lazyWithRetry(() => import("./pages/EventsPage"), "events");
+const AbsencesPage = lazyWithRetry(() => import("./pages/AbsencesPage"), "absences");
+const LeaderboardPage = lazyWithRetry(() => import("./pages/LeaderboardPage"), "leaderboard");
+const PartyBuilder = lazyWithRetry(() => import("./pages/PartyBuilder"), "party");
+const MemberProfilePage = lazyWithRetry(() => import("./pages/MemberProfilePage"), "member-profile");
+const WeeklyReportPage = lazyWithRetry(() => import("./pages/WeeklyReportPage"), "report");
+const AuctionBuilder = lazyWithRetry(() => import("./pages/AuctionBuilder"), "auction");
+const ImportPage = lazyWithRetry(() => import("./pages/ImportPage"), "import");
+const AuditLogPage = lazyWithRetry(() => import("./pages/AuditLogPage"), "auditlog");
+const LoginPage = lazyWithRetry(() => import("./pages/LoginPage"), "login");
+const UserManagementPage = lazyWithRetry(() => import("./pages/UserManagementPage"), "users");
+const RequestsPage = lazyWithRetry(() => import("./pages/RequestsPage"), "requests");
 const MotionDiv = motion.div;
 const pagePrefetchers = {
   dashboard: () => import("./pages/Dashboard"),
@@ -66,7 +87,7 @@ export default function App() {
     toast, setToast, showToast,
     members, events, absences,
     notifications, requests, joinRequests,
-    metadataNotice, setMetadataNotice
+    metadataNotice, setMetadataNotice, syncStatus, triggerSyncRetry
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -87,6 +108,13 @@ export default function App() {
       prefetchedPages.delete(pageId);
     });
   }, []);
+
+  React.useEffect(() => {
+    if (sessionStorage.getItem("lazy-retry-notice") === "1") {
+      sessionStorage.removeItem("lazy-retry-notice");
+      showToast("App updated to the latest version after sync. Please retry your action.", "info");
+    }
+  }, [showToast]);
 
 
   const handleSignOut = async () => {
@@ -362,6 +390,42 @@ export default function App() {
       {/* Main Content Areas */}
       <main className="main-content">
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
+        <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              border: "1px solid rgba(255,255,255,0.12)",
+              color:
+                syncStatus === "saving" ? "#f6d277"
+                  : syncStatus === "offline" ? "#ff9f66"
+                  : syncStatus === "error" ? "#ff7a7a"
+                  : "var(--text-secondary)",
+              background:
+                syncStatus === "saving" ? "rgba(246,210,119,0.12)"
+                  : syncStatus === "offline" ? "rgba(255,159,102,0.12)"
+                  : syncStatus === "error" ? "rgba(255,122,122,0.12)"
+                  : "rgba(120,255,170,0.1)"
+            }}
+          >
+            {syncStatus === "saving" ? "Saving..." : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync issue" : "Synced"}
+          </span>
+          {(syncStatus === "offline" || syncStatus === "error") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+              onClick={triggerSyncRetry}
+            >
+              Retry now
+            </button>
+          )}
+        </div>
         {metadataNotice && (
           <div
             style={{

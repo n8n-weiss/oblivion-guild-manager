@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
@@ -8,9 +8,9 @@ import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
   const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers = [] } = useGuild();
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [search, setSearch] = useState(() => localStorage.getItem("members_search") || "");
+  const [roleFilter, setRoleFilter] = useState(() => localStorage.getItem("members_roleFilter") || "All");
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem("members_statusFilter") || "active");
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
@@ -87,6 +87,10 @@ function MembersPage({ onViewProfile }) {
     themes["Diva"] = { color: "var(--color-priest)", icon: "🎤" };
     return themes;
   }, []);
+
+  useEffect(() => { localStorage.setItem("members_search", search); }, [search]);
+  useEffect(() => { localStorage.setItem("members_roleFilter", roleFilter); }, [roleFilter]);
+  useEffect(() => { localStorage.setItem("members_statusFilter", statusFilter); }, [statusFilter]);
   const { attendance = [], performance = [], events = [], eoRatings = [] } = useGuild();
   const getMemberBadges = (mId) => {
     const list = [];

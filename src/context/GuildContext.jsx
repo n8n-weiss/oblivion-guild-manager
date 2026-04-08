@@ -95,6 +95,8 @@ export const GuildProvider = ({ children, initialData }) => {
   const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
+  const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
+  const [syncRetryToken, setSyncRetryToken] = useState(0);
   const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
   const needsPresenceData = page === "dashboard" || page === "members";
 
@@ -118,9 +120,14 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
+  const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0 });
 
   const showToast = (message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
+  };
+  const triggerSyncRetry = () => {
+    setSyncRetryToken(v => v + 1);
+    if (navigator.onLine) setSyncStatus("saving");
   };
 
   // Derive rank from members if myMemberId is set
@@ -241,66 +248,95 @@ export const GuildProvider = ({ children, initialData }) => {
         });
         unsubs.push(unsubAbsences);
 
-        const unsubMetadata = onSnapshot(doc(db, "metadata", "current"), (snap) => {
-          const data = snap.exists() ? snap.data() : {};
-          
-          // Only update if there is actually a change in the metadata doc
-          const currentMetaString = JSON.stringify(data);
-          if (currentMetaString === prevData.current.lastMetaRaw) return;
-          const prevMetaVersion = Number(prevData.current.metaVersion || 0);
-          const nextMetaVersion = Number(data.version || 0);
-          const updatedByOtherOfficer =
-            prevMetaVersion > 0 &&
-            nextMetaVersion > prevMetaVersion &&
-            data.lastEditorUid &&
-            data.lastEditorUid !== currentUser?.uid;
-
-          if (updatedByOtherOfficer) {
-            const changedAreas = [];
-            const incomingParties = (data.parties || []).map(p => Array.isArray(p) ? p : (p.members || []));
-            const incomingRaidParties = (data.raidParties || []).map(p => Array.isArray(p) ? p : (p.members || []));
-            if (JSON.stringify(incomingParties) !== JSON.stringify(prevData.current.parties) ||
-                JSON.stringify(data.partyNames || []) !== JSON.stringify(prevData.current.partyNames)) {
-              changedAreas.push("Parties");
-            }
-            if (JSON.stringify(data.auctionSessions || []) !== JSON.stringify(prevData.current.auctionSessions) ||
-                JSON.stringify(data.auctionTemplates || []) !== JSON.stringify(prevData.current.auctionTemplates)) {
-              changedAreas.push("Auction");
-            }
-            if (JSON.stringify(incomingRaidParties) !== JSON.stringify(prevData.current.raidParties) ||
-                JSON.stringify(data.raidPartyNames || []) !== JSON.stringify(prevData.current.raidPartyNames)) {
-              changedAreas.push("Raid Parties");
-            }
-            if (JSON.stringify(data.discord || {}) !== JSON.stringify(prevData.current.discordConfig || {})) {
-              changedAreas.push("Discord Settings");
-            }
-            if (JSON.stringify(data.resourceCategories || []) !== JSON.stringify(prevData.current.resourceCategories || [])) {
-              changedAreas.push("Resource Categories");
-            }
-            const affectedText = changedAreas.length > 0 ? ` (${changedAreas.join(", ")})` : "";
-            setMetadataNotice({
-              kind: "external_update",
-              message: `Another officer updated shared settings/data${affectedText}. Please review latest values before continuing edits.`,
-              timestamp: Date.now()
-            });
+        const legacyMetaSnap = await getDoc(doc(db, "metadata", "current"));
+        const legacyMeta = legacyMetaSnap.exists() ? legacyMetaSnap.data() : {};
+        let metadataReadyCount = 0;
+        const markMetadataReady = () => {
+          metadataReadyCount += 1;
+          if (metadataReadyCount >= 3 && !metaLoaded) {
+            metaLoaded = true;
+            checkReady();
           }
+        };
+        const emitExternalUpdate = (versionKey, nextVersion, lastEditorUid, area) => {
+          const prevVersion = Number(metadataVersions.current[versionKey] || 0);
+          const updatedByOtherOfficer =
+            prevVersion > 0 &&
+            nextVersion > prevVersion &&
+            lastEditorUid &&
+            lastEditorUid !== currentUser?.uid;
+          if (!updatedByOtherOfficer) return;
+          setMetadataNotice({
+            kind: "external_update",
+            message: `Another officer updated shared settings/data (${area}). Please review latest values before continuing edits.`,
+            timestamp: Date.now()
+          });
+        };
 
-          prevData.current.lastMetaRaw = currentMetaString;
-          prevData.current.metaVersion = nextMetaVersion;
-
+        const unsubPartiesMeta = onSnapshot(doc(db, "metadata", "parties"), (snap) => {
+          const data = snap.exists()
+            ? snap.data()
+            : {
+                parties: legacyMeta.parties || [],
+                partyNames: legacyMeta.partyNames || [],
+                raidParties: legacyMeta.raidParties || [],
+                raidPartyNames: legacyMeta.raidPartyNames || [],
+                version: Number(legacyMeta.version || 0),
+                lastEditorUid: legacyMeta.lastEditorUid || null
+              };
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-          setParties(cloudParties);
-          prevData.current.parties = [...cloudParties];
-
           const cloudRaidRaw = data.raidParties || [];
           const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
+          const nextVersion = Number(data.version || 0);
+          emitExternalUpdate("parties", nextVersion, data.lastEditorUid, "Parties");
+          metadataVersions.current.parties = nextVersion;
+          setParties(cloudParties);
           setRaidParties(cloudRaid);
+          setPartyNames(data.partyNames || []);
+          setRaidPartyNames(data.raidPartyNames || []);
+          prevData.current.parties = [...cloudParties];
           prevData.current.raidParties = [...cloudRaid];
+          prevData.current.partyNames = [...(data.partyNames || [])];
+          prevData.current.raidPartyNames = [...(data.raidPartyNames || [])];
+          markMetadataReady();
+        });
+        unsubs.push(unsubPartiesMeta);
 
+        const unsubAuctionMeta = onSnapshot(doc(db, "metadata", "auction"), (snap) => {
+          const data = snap.exists()
+            ? snap.data()
+            : {
+                auctionSessions: legacyMeta.auctionSessions || [],
+                auctionTemplates: legacyMeta.auctionTemplates || [],
+                resourceCategories: legacyMeta.resourceCategories || ["Card Album", "Light & Dark"],
+                version: Number(legacyMeta.version || 0),
+                lastEditorUid: legacyMeta.lastEditorUid || null
+              };
+          const nextVersion = Number(data.version || 0);
+          emitExternalUpdate("auction", nextVersion, data.lastEditorUid, "Auction");
+          metadataVersions.current.auction = nextVersion;
           setAuctionSessions(data.auctionSessions || []);
           setAuctionTemplates(data.auctionTemplates || []);
-          
+          setResourceCategories(data.resourceCategories || ["Card Album", "Light & Dark"]);
+          prevData.current.auctionSessions = [...(data.auctionSessions || [])];
+          prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
+          prevData.current.resourceCategories = [...(data.resourceCategories || ["Card Album", "Light & Dark"])];
+          markMetadataReady();
+        });
+        unsubs.push(unsubAuctionMeta);
+
+        const unsubDiscordMeta = onSnapshot(doc(db, "metadata", "discord"), (snap) => {
+          const data = snap.exists()
+            ? snap.data()
+            : {
+                discord: legacyMeta.discord || {},
+                version: Number(legacyMeta.version || 0),
+                lastEditorUid: legacyMeta.lastEditorUid || null
+              };
+          const nextVersion = Number(data.version || 0);
+          emitExternalUpdate("discord", nextVersion, data.lastEditorUid, "Discord Settings");
+          metadataVersions.current.discord = nextVersion;
           const discRaw = data.discord || {};
           const disc = {
             webhookUrl: discRaw.webhookUrl || "",
@@ -322,35 +358,20 @@ export const GuildProvider = ({ children, initialData }) => {
               event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance.", ...(discRaw.templates?.event_created || {}) },
               absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence.", ...(discRaw.templates?.absence_filed || {}) },
               absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura.", ...(discRaw.templates?.absence_removed || {}) },
-              auction_results: { 
-                title: "🏛️ Auction Table Results", 
+              auction_results: {
+                title: "🏛️ Auction Table Results",
                 description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)",
                 ...(discRaw.templates?.auction_results || {})
               }
             }
           };
-
-          // Synchronize discordConfig carefully
           if (JSON.stringify(disc) !== JSON.stringify(prevData.current.discordConfig)) {
             setDiscordConfig(disc);
             prevData.current.discordConfig = { ...disc };
           }
-
-          prevData.current.auctionSessions = [...(data.auctionSessions || [])];
-          prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
-          if (data.resourceCategories) {
-            setResourceCategories(data.resourceCategories);
-            prevData.current.resourceCategories = [...data.resourceCategories];
-          }
-          if (data.partyNames) {
-            setPartyNames(data.partyNames);
-            prevData.current.partyNames = [...data.partyNames];
-          }
-          if (data.raidPartyNames) setRaidPartyNames(data.raidPartyNames);
-          metaLoaded = true;
-          checkReady();
+          markMetadataReady();
         });
-        unsubs.push(unsubMetadata);
+        unsubs.push(unsubDiscordMeta);
 
         const unsubNotifs = onSnapshot(collection(db, "notifications"), (snap) => {
           const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts));
@@ -449,13 +470,58 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [currentUser, initialData, needsPresenceData]);
 
   useEffect(() => {
+    const onOffline = () => setSyncStatus("offline");
+    const onOnline = () => {
+      if (prevData.current.pendingSync) {
+        setSyncRetryToken(v => v + 1);
+      } else {
+        setSyncStatus("synced");
+      }
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
     const saveData = async () => {
       try {
+        if (!navigator.onLine) {
+          prevData.current.pendingSync = true;
+          setSyncStatus("offline");
+          return;
+        }
         const batch = writeBatch(db);
         let changesCount = 0;
-        let metadataPayload = null;
-        let shouldSaveMetadata = false;
+        let wroteMetadata = false;
+        const hasMetadataPartiesChanges =
+          JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
+          JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
+          JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
+          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames);
+        const hasMetadataAuctionChanges =
+          JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
+          JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
+          JSON.stringify(resourceCategories) !== JSON.stringify(prevData.current.resourceCategories);
+        const hasMetadataDiscordChanges =
+          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig);
+        const hasAnyMetadataChanges = hasMetadataPartiesChanges || hasMetadataAuctionChanges || hasMetadataDiscordChanges;
+
+        if (
+          JSON.stringify(members) !== JSON.stringify(prevData.current.members) ||
+          JSON.stringify(events) !== JSON.stringify(prevData.current.events) ||
+          JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance) ||
+          JSON.stringify(performance) !== JSON.stringify(prevData.current.performance) ||
+          JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings) ||
+          JSON.stringify(absences) !== JSON.stringify(prevData.current.absences) ||
+          hasAnyMetadataChanges
+        ) {
+          setSyncStatus("saving");
+        }
         if (JSON.stringify(members) !== JSON.stringify(prevData.current.members)) {
           const uniqueMembers = Array.from(new Map(members.map(m => [m.memberId, m])).values());
           const currentMemberIds = new Set(uniqueMembers.map(m => m.memberId));
@@ -514,29 +580,6 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.eoRatings = [...eoRatings];
           changesCount++;
         }
-        if (
-          JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
-          JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
-          JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
-          JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
-          JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
-          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
-          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig) ||
-          JSON.stringify(resourceCategories) !== JSON.stringify(prevData.current.resourceCategories)
-        ) {
-          const wrappedParties = parties.map(p => ({ members: p }));
-          const wrappedRaids = raidParties.map(p => ({ members: p }));
-          metadataPayload = {
-            parties: wrappedParties, partyNames,
-            raidParties: wrappedRaids, raidPartyNames,
-            auctionSessions, auctionTemplates,
-            discord: discordConfig,
-            resourceCategories,
-            lastUpdate: new Date().toISOString(),
-            lastEditorUid: currentUser?.uid || null
-          };
-          shouldSaveMetadata = true;
-        }
         if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
           const currentIds = new Set(absences.map(a => a.id));
           const removedIds = prevData.current.absences.filter(a => !currentIds.has(a.id)).map(a => a.id);
@@ -548,51 +591,86 @@ export const GuildProvider = ({ children, initialData }) => {
         if (changesCount > 0) {
           await batch.commit();
         }
-        if (shouldSaveMetadata && metadataPayload) {
-          const metadataRef = doc(db, "metadata", "current");
-          const baseVersion = Number(prevData.current.metaVersion || 0);
-          try {
-            const nextVersion = await runTransaction(db, async (tx) => {
-              const snap = await tx.get(metadataRef);
-              const remote = snap.exists() ? snap.data() : {};
-              const remoteVersion = Number(remote.version || 0);
-              if (remoteVersion !== baseVersion) {
-                throw new Error("META_VERSION_CONFLICT");
-              }
-              const updatedVersion = remoteVersion + 1;
-              tx.set(metadataRef, { ...metadataPayload, version: updatedVersion }, { merge: true });
-              return updatedVersion;
-            });
-
-            // Only mark local as synced when transaction succeeds.
-            prevData.current.parties = [...parties];
-            prevData.current.partyNames = [...partyNames];
-            prevData.current.auctionSessions = [...auctionSessions];
-            prevData.current.auctionTemplates = [...auctionTemplates];
-            prevData.current.raidParties = [...raidParties];
-            prevData.current.raidPartyNames = [...raidPartyNames];
-            prevData.current.discordConfig = { ...discordConfig };
-            prevData.current.resourceCategories = [...resourceCategories];
-            prevData.current.metaVersion = nextVersion;
-            changesCount++;
-          } catch (metaErr) {
-            if (metaErr?.message === "META_VERSION_CONFLICT") {
-              setMetadataNotice({
-                kind: "save_conflict",
-                message: "Your save was blocked because newer shared changes exist. Latest metadata has been loaded.",
-                timestamp: Date.now()
-              });
-              showToast("Another officer saved changes first. Reloaded latest metadata to avoid overwrite.", "warning");
-            } else {
-              throw metaErr;
+        const runMetadataSave = async (docId, baseVersion, payload) => {
+          const metadataRef = doc(db, "metadata", docId);
+          return runTransaction(db, async (tx) => {
+            const snap = await tx.get(metadataRef);
+            const remote = snap.exists() ? snap.data() : {};
+            const remoteVersion = Number(remote.version || 0);
+            if (remoteVersion !== baseVersion) {
+              throw new Error("META_VERSION_CONFLICT");
             }
-          }
+            const updatedVersion = remoteVersion + 1;
+            tx.set(metadataRef, { ...payload, version: updatedVersion }, { merge: true });
+            return updatedVersion;
+          });
+        };
+
+        if (hasMetadataPartiesChanges) {
+          const wrappedParties = parties.map(p => ({ members: p }));
+          const wrappedRaids = raidParties.map(p => ({ members: p }));
+          const nextVersion = await runMetadataSave("parties", Number(metadataVersions.current.parties || 0), {
+            parties: wrappedParties,
+            partyNames,
+            raidParties: wrappedRaids,
+            raidPartyNames,
+            lastUpdate: new Date().toISOString(),
+            lastEditorUid: currentUser?.uid || null
+          });
+          metadataVersions.current.parties = nextVersion;
+          prevData.current.parties = [...parties];
+          prevData.current.partyNames = [...partyNames];
+          prevData.current.raidParties = [...raidParties];
+          prevData.current.raidPartyNames = [...raidPartyNames];
+          wroteMetadata = true;
         }
-      } catch (err) { console.error("Firebase save error:", err); }
+        if (hasMetadataAuctionChanges) {
+          const nextVersion = await runMetadataSave("auction", Number(metadataVersions.current.auction || 0), {
+            auctionSessions,
+            auctionTemplates,
+            resourceCategories,
+            lastUpdate: new Date().toISOString(),
+            lastEditorUid: currentUser?.uid || null
+          });
+          metadataVersions.current.auction = nextVersion;
+          prevData.current.auctionSessions = [...auctionSessions];
+          prevData.current.auctionTemplates = [...auctionTemplates];
+          prevData.current.resourceCategories = [...resourceCategories];
+          wroteMetadata = true;
+        }
+        if (hasMetadataDiscordChanges) {
+          const nextVersion = await runMetadataSave("discord", Number(metadataVersions.current.discord || 0), {
+            discord: discordConfig,
+            lastUpdate: new Date().toISOString(),
+            lastEditorUid: currentUser?.uid || null
+          });
+          metadataVersions.current.discord = nextVersion;
+          prevData.current.discordConfig = { ...discordConfig };
+          wroteMetadata = true;
+        }
+
+        if (changesCount > 0 || wroteMetadata) {
+          prevData.current.pendingSync = false;
+          setSyncStatus("synced");
+        }
+      } catch (err) {
+        prevData.current.pendingSync = true;
+        setSyncStatus(navigator.onLine ? "error" : "offline");
+        if (err?.message === "META_VERSION_CONFLICT") {
+          setMetadataNotice({
+            kind: "save_conflict",
+            message: "Your save was blocked because newer shared changes exist. Latest metadata has been loaded.",
+            timestamp: Date.now()
+          });
+          showToast("Another officer saved changes first. Reloaded latest metadata to avoid overwrite.", "warning");
+          return;
+        }
+        console.error("Firebase save error:", err);
+      }
     };
     const timeout = setTimeout(saveData, 1000);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, resourceCategories, currentUser?.uid, loading]);
+  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
 
   useEffect(() => {
     if (loading) return;
@@ -1025,7 +1103,7 @@ export const GuildProvider = ({ children, initialData }) => {
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
-    metadataNotice, setMetadataNotice,
+    metadataNotice, setMetadataNotice, syncStatus, triggerSyncRetry,
     resetDatabase
 
   };
