@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -144,6 +144,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const isAdmin = (userRole === "admin" || userRole === "architect" || hasAdminRank) && (isStatusActive || isArchitect);
   const isOfficer = (isAdmin || userRole === "officer" || hasOfficerRank) && (isStatusActive || isArchitect);
   const isMember = (userRole === "member") && (isStatusActive || isArchitect);
+  const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
   // Auth Listener
   useEffect(() => {
@@ -418,23 +419,42 @@ export const GuildProvider = ({ children, initialData }) => {
         unsubs.push(unsubDiscordMeta);
         }
 
-        const unsubNotifs = onSnapshot(collection(db, "notifications"), (snap) => {
-          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts));
+        const notifQuery = myMemberId
+          ? query(
+              collection(db, "notifications"),
+              where("targetId", "in", ["all", myMemberId]),
+              orderBy("ts", "desc"),
+              limit(120)
+            )
+          : query(collection(db, "notifications"), orderBy("ts", "desc"), limit(120));
+        const unsubNotifs = onSnapshot(notifQuery, (snap) => {
+          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
           setNotifications(docs);
         });
         unsubs.push(unsubNotifs);
 
-        const unsubReqs = onSnapshot(collection(db, "requests"), (snap) => {
-          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setRequests(docs);
-        });
-        unsubs.push(unsubReqs);
+        if (canSeeRequestData) {
+          const unsubReqs = onSnapshot(
+            query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(200)),
+            (snap) => {
+              const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+              setRequests(docs);
+            }
+          );
+          unsubs.push(unsubReqs);
 
-        const unsubJoinReqs = onSnapshot(collection(db, "join_requests"), (snap) => {
-          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setJoinRequests(docs);
-        });
-        unsubs.push(unsubJoinReqs);
+          const unsubJoinReqs = onSnapshot(
+            query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(200)),
+            (snap) => {
+              const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+              setJoinRequests(docs);
+            }
+          );
+          unsubs.push(unsubJoinReqs);
+        } else {
+          setRequests([]);
+          setJoinRequests([]);
+        }
 
       } catch (err) {
         console.error("Listener setup error:", err);
@@ -443,7 +463,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
-  }, [initialData, currentUser, userRole]);
+  }, [initialData, currentUser, userRole, myMemberId, canSeeRequestData]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {

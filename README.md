@@ -1,16 +1,31 @@
-# React + Vite
+# Oblivion Guild Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Guild operations web app built with React + Vite + Firestore.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `npm install`
+- `npm run dev`
+- `npm run lint`
+- `npm run build`
 
-## React Compiler
+## E2E smoke tests
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `npm run test:e2e`
 
-## Expanding the ESLint configuration
+## Firestore indexes deployment
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+This repo includes `firestore.indexes.json` for optimized notification queries.
+
+When you are ready to publish indexes in your Firebase project:
+
+1. Install Firebase CLI (if not yet installed):
+   - `npm i -g firebase-tools`
+2. Login:
+   - `firebase login`
+3. Initialize Firebase in this repo (one-time, if no `firebase.json` yet):
+   - `firebase init firestore`
+   - Choose your existing project
+   - Keep indexes file as `firestore.indexes.json`
+4. Deploy indexes:
+   - `firebase deploy --only firestore:indexes`
