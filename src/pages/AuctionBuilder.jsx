@@ -312,7 +312,7 @@ function AuctionBuilder() {
     members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
-    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId
+    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -344,23 +344,14 @@ function AuctionBuilder() {
   const AUCTION_DRAFT_KEY = "draft_auction_forms_v1";
   const DELETE_TOKEN = "DELETE";
   const [confirmDeleteMapPage, setConfirmDeleteMapPage] = useState(null);
+  const [showDiscordPreview, setShowDiscordPreview] = useState(false);
+  const [discordPreview, setDiscordPreview] = useState(null); // { blob, fileName, placeholders, previewUrl, message }
+  const [postingDiscord, setPostingDiscord] = useState(false);
+  const [lastDiscordAttempt, setLastDiscordAttempt] = useState(null);
   const mapSidebarPerfRef = React.useRef({ commits: 0, totalActualDuration: 0 });
   const trackerListRef = React.useRef(null);
   const [trackerCompactMode, setTrackerCompactMode] = useState(() => localStorage.getItem("auction_trackerCompactMode") === "1");
   const [trackerGroupCollapsed, setTrackerGroupCollapsed] = useState({});
-  const [trackerAnomalyRules, setTrackerAnomalyRules] = useState(() => {
-    try {
-      const raw = localStorage.getItem("auction_trackerAnomalyRules_v1");
-      const parsed = raw ? JSON.parse(raw) : null;
-      return {
-        dropRatio: typeof parsed?.dropRatio === "number" ? parsed.dropRatio : 0.4,
-        spikeRatio: typeof parsed?.spikeRatio === "number" ? parsed.spikeRatio : 1.8,
-        minBase: typeof parsed?.minBase === "number" ? parsed.minBase : 2
-      };
-    } catch {
-      return { dropRatio: 0.4, spikeRatio: 1.8, minBase: 2 };
-    }
-  });
 
   React.useEffect(() => {
     try {
@@ -391,13 +382,17 @@ function AuctionBuilder() {
   React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
   React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
   React.useEffect(() => { localStorage.setItem("auction_trackerCompactMode", trackerCompactMode ? "1" : "0"); }, [trackerCompactMode]);
-  React.useEffect(() => { localStorage.setItem("auction_trackerAnomalyRules_v1", JSON.stringify(trackerAnomalyRules)); }, [trackerAnomalyRules]);
   React.useEffect(() => {
     localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
   }, [newSessionForm, newTemplateName]);
   React.useEffect(() => {
     if (trackerListRef.current) trackerListRef.current.scrollTop = 0;
   }, [trackerTab, cardSearch]);
+  React.useEffect(() => {
+    return () => {
+      if (discordPreview?.previewUrl) URL.revokeObjectURL(discordPreview.previewUrl);
+    };
+  }, [discordPreview]);
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {
@@ -496,36 +491,93 @@ function AuctionBuilder() {
     }
   };
 
-  const postTableToDiscord = async () => {
+  const buildAuctionDiscordMessage = React.useCallback((placeholders = {}) => {
+    const category = "auction_results";
+    const catTemplate = discordConfig?.templates?.[category] || {};
+    const fallback = `Loot session results for **${placeholders?.name || session?.name || "Session"}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)`;
+    let msg = catTemplate.description || fallback;
+    Object.entries(placeholders).forEach(([key, val]) => {
+      msg = msg.replace(new RegExp(`{${key}}`, "g"), String(val ?? ""));
+    });
+    return msg;
+  }, [discordConfig, session?.name]);
+
+  const buildAuctionBlob = React.useCallback(async () => {
     const element = document.getElementById('auction-table-export');
-    if (!element) return;
-    
-    showToast("Capturing table for Discord...", "info");
-    
+    if (!element) return null;
+    const canvas = await html2canvas(element, {
+      backgroundColor: '#080a0f',
+      scale: 2,
+      logging: false,
+      useCORS: true,
+      onclone: (clonedDoc) => {
+        const el = clonedDoc.getElementById('auction-table-export');
+        if (el) el.style.maxHeight = 'none';
+      }
+    });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return blob;
+  }, []);
+
+  const sendPreviewToDiscord = React.useCallback(async (payload) => {
+    if (!payload?.blob) return;
+    setPostingDiscord(true);
     try {
-      const canvas = await html2canvas(element, {
-        backgroundColor: '#080a0f',
-        scale: 2,
-        logging: false,
-        useCORS: true,
-        onclone: (clonedDoc) => {
-          const el = clonedDoc.getElementById('auction-table-export');
-          if (el) el.style.maxHeight = 'none';
-        }
+      await sendDiscordImage(
+        payload.blob,
+        payload.fileName,
+        payload.message,
+        "auction_results",
+        payload.placeholders
+      );
+      setLastDiscordAttempt({
+        blob: payload.blob,
+        fileName: payload.fileName,
+        message: payload.message,
+        placeholders: payload.placeholders
       });
-      
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          showToast("Failed to generate image blob", "error");
-          return;
-        }
-        await sendDiscordImage(blob, `Loot_${session.name}.png`, `Loot session results for **${session.name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)`, "auction_results", { name: session.name });
-      }, 'image/png');
-      
+      setShowDiscordPreview(false);
+      showToast("Auction result posted to Discord", "success");
     } catch (err) {
       console.error("Discord post failed:", err);
       showToast("Failed to post to Discord", "error");
+    } finally {
+      setPostingDiscord(false);
     }
+  }, [sendDiscordImage, showToast]);
+
+  const postTableToDiscord = async () => {
+    if (!session) return;
+    showToast("Preparing Discord preview...", "info");
+    try {
+      const blob = await buildAuctionBlob();
+      if (!blob) {
+        showToast("Failed to generate image blob", "error");
+        return;
+      }
+      const placeholders = { name: session.name };
+      const message = buildAuctionDiscordMessage(placeholders);
+      const previewUrl = URL.createObjectURL(blob);
+      if (discordPreview?.previewUrl) URL.revokeObjectURL(discordPreview.previewUrl);
+      setDiscordPreview({
+        blob,
+        fileName: `Loot_${session.name}.png`,
+        placeholders,
+        previewUrl,
+        message
+      });
+      setShowDiscordPreview(true);
+    } catch (err) {
+      console.error("Discord preview failed:", err);
+      showToast("Failed to prepare Discord preview", "error");
+    }
+  };
+  const retryLastDiscordPost = async () => {
+    if (!lastDiscordAttempt?.blob) {
+      showToast("No previous Discord post to retry", "info");
+      return;
+    }
+    await sendPreviewToDiscord(lastDiscordAttempt);
   };
 
   const createSession = () => {
@@ -1282,6 +1334,9 @@ function AuctionBuilder() {
             <button className="btn btn-primary" onClick={postTableToDiscord} style={{ background: "rgba(88,101,242,0.15)", color: "#5865F2", border: "1px solid rgba(88,101,242,0.3)" }}>
               <Icon name="discord" size={14} /> 🚀 Post to Discord
             </button>
+            <button className="btn btn-ghost" onClick={retryLastDiscordPost} disabled={postingDiscord || !lastDiscordAttempt} title="Retry the last posted auction result payload">
+              <Icon name="refresh" size={14} /> {postingDiscord ? "Retrying..." : "Retry Last Post"}
+            </button>
             <button className="btn btn-primary" onClick={addColumn}><Icon name="plus" size={14} /> Add Column</button>
           </div>
         </div>
@@ -1632,36 +1687,6 @@ function AuctionBuilder() {
                   <button className={`btn btn-sm ${trackerCompactMode ? "btn-primary" : "btn-ghost"}`} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setTrackerCompactMode(v => !v)}>
                     {trackerCompactMode ? "Compact On" : "Compact Off"}
                   </button>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Drop ≤</span>
-                    <input
-                      type="number"
-                      min={10}
-                      max={90}
-                      value={Math.round(trackerAnomalyRules.dropRatio * 100)}
-                      onChange={(e) => {
-                        const pct = Number(e.target.value || 40);
-                        const next = Math.max(10, Math.min(90, pct));
-                        setTrackerAnomalyRules(prev => ({ ...prev, dropRatio: next / 100 }));
-                      }}
-                      style={{ width: 48, fontSize: 10, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--border)", background: "rgba(0,0,0,0.3)", color: "var(--text-primary)" }}
-                    />
-                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>%</span>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Spike ≥</span>
-                    <input
-                      type="number"
-                      min={110}
-                      max={300}
-                      value={Math.round(trackerAnomalyRules.spikeRatio * 100)}
-                      onChange={(e) => {
-                        const pct = Number(e.target.value || 180);
-                        const next = Math.max(110, Math.min(300, pct));
-                        setTrackerAnomalyRules(prev => ({ ...prev, spikeRatio: next / 100 }));
-                      }}
-                      style={{ width: 52, fontSize: 10, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--border)", background: "rgba(0,0,0,0.3)", color: "var(--text-primary)" }}
-                    />
-                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>%</span>
-                  </div>
                </div>
                <div style={{ position: "relative", marginBottom: 10 }}>
                   <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "rgba(0,0,0,0.3)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
@@ -1745,8 +1770,8 @@ function AuctionBuilder() {
                                 const memberSessions = Object.values(m.sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date));
                                 const latestCount = memberSessions[0]?.items?.length || 0;
                                 const prevCount = memberSessions[1]?.items?.length || 0;
-                                const drop = prevCount >= trackerAnomalyRules.minBase && latestCount <= Math.max(0, Math.floor(prevCount * trackerAnomalyRules.dropRatio));
-                                const spike = prevCount >= 1 && latestCount >= Math.ceil(prevCount * trackerAnomalyRules.spikeRatio);
+                                const drop = prevCount >= 2 && latestCount <= Math.max(0, Math.floor(prevCount * 0.4));
+                                const spike = prevCount >= 1 && latestCount >= Math.ceil(prevCount * 1.8);
                                 const latestMemberDate = memberSessions[0]?.date ? new Date(memberSessions[0].date).getTime() : 0;
                                 const missingLast = latestSessionDate > 0 && latestMemberDate > 0 && latestMemberDate < latestSessionDate;
                                 return (
@@ -1834,6 +1859,35 @@ function AuctionBuilder() {
       onCancel={() => setConfirmDeleteMapPage(null)}
       onConfirm={() => executeDeleteMapPage(confirmDeleteMapPage)}
     />
+    {showDiscordPreview && discordPreview && (
+      <Modal
+        title="Preview Discord Post"
+        onClose={() => setShowDiscordPreview(false)}
+        footer={(
+          <>
+            <button className="btn btn-ghost" onClick={() => setShowDiscordPreview(false)} disabled={postingDiscord}>Cancel</button>
+            <button className="btn btn-primary" onClick={() => sendPreviewToDiscord(discordPreview)} disabled={postingDiscord}>
+              <Icon name="discord" size={13} /> {postingDiscord ? "Posting..." : "Post Now"}
+            </button>
+          </>
+        )}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Review image and message before posting to Discord.
+          </div>
+          <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "rgba(0,0,0,0.25)" }}>
+            <img src={discordPreview.previewUrl} alt="Auction preview" style={{ width: "100%", display: "block", maxHeight: 260, objectFit: "contain" }} />
+          </div>
+          <div style={{ background: "rgba(99,130,230,0.08)", border: "1px solid rgba(99,130,230,0.25)", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "var(--accent)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Message Preview</div>
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.5, fontFamily: "inherit" }}>
+              {discordPreview.message}
+            </pre>
+          </div>
+        </div>
+      </Modal>
+    )}
     </>
   );
 }
