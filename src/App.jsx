@@ -10,6 +10,7 @@ import "./styles/index.css";
 import Icon from "./components/ui/icons";
 import Toast from "./components/ui/Toast";
 import { MemberAvatar } from "./components/common/MemberAvatar";
+import PageErrorBoundary from "./components/common/PageErrorBoundary";
 
 import TreasuryModal from "./components/common/TreasuryModal";
 import { NotificationCenter } from "./components/common/NotificationCenter";
@@ -87,12 +88,13 @@ export default function App() {
     toast, setToast, showToast,
     members, events, absences,
     notifications, requests, joinRequests,
-    metadataNotice, setMetadataNotice, syncStatus, triggerSyncRetry
+    metadataNotice, setMetadataNotice, metadataActivity, syncStatus, triggerSyncRetry
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
   const [showTreasury, setShowTreasury] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [retryBusy, setRetryBusy] = useState(false);
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
   const pendingRequestsCount = 
@@ -187,9 +189,11 @@ export default function App() {
   // Show login if not authenticated
   if (!currentUser) {
     return (
-      <React.Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--bg-deepest)" }} />}>
-        <LoginPage />
-      </React.Suspense>
+      <PageErrorBoundary>
+        <React.Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--bg-deepest)" }} />}>
+          <LoginPage />
+        </React.Suspense>
+      </PageErrorBoundary>
     );
   }
 
@@ -419,13 +423,39 @@ export default function App() {
           {(syncStatus === "offline" || syncStatus === "error") && (
             <button
               className="btn btn-ghost btn-sm"
-              style={{ border: "1px solid rgba(255,255,255,0.2)" }}
-              onClick={triggerSyncRetry}
+              style={{ border: "1px solid rgba(255,255,255,0.2)", opacity: retryBusy ? 0.6 : 1 }}
+              disabled={retryBusy}
+              onClick={() => {
+                if (retryBusy) return;
+                setRetryBusy(true);
+                triggerSyncRetry();
+                window.setTimeout(() => setRetryBusy(false), 2000);
+              }}
             >
-              Retry now
+              {retryBusy ? "Retrying..." : "Retry now"}
             </button>
           )}
         </div>
+        {metadataActivity.length > 0 && (
+          <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {metadataActivity.slice(0, 4).map(item => (
+              <span
+                key={item.id}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  borderRadius: 999,
+                  border: "1px solid rgba(99,130,230,0.25)",
+                  background: "rgba(99,130,230,0.08)",
+                  color: "var(--text-secondary)"
+                }}
+                title={`Updated by ${item.by}`}
+              >
+                {item.area} updated
+              </span>
+            ))}
+          </div>
+        )}
         {metadataNotice && (
           <div
             style={{
@@ -480,17 +510,18 @@ export default function App() {
             </div>
           </PageWrapper>
         ) : (
-          <React.Suspense
-            fallback={
-              <div className="grid-2">
-                <CardSkeleton />
-                <CardSkeleton />
-                <CardSkeleton />
-                <CardSkeleton />
-              </div>
-            }
-          >
-            <AnimatePresence mode="wait">
+          <PageErrorBoundary>
+            <React.Suspense
+              fallback={
+                <div className="grid-2">
+                  <CardSkeleton />
+                  <CardSkeleton />
+                  <CardSkeleton />
+                  <CardSkeleton />
+                </div>
+              }
+            >
+              <AnimatePresence mode="wait">
             {page === "dashboard" && (
               <PageWrapper id="dashboard">
                 <Dashboard />
@@ -588,8 +619,9 @@ export default function App() {
                 <RequestsPage />
               </PageWrapper>
             )}
-            </AnimatePresence>
-          </React.Suspense>
+              </AnimatePresence>
+            </React.Suspense>
+          </PageErrorBoundary>
         )}
       </main>
 

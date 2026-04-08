@@ -9,6 +9,26 @@ const DiscordSettings = () => {
   const [isTesting, setIsTesting] = useState(false);
 
   const lastSyncedConfig = React.useRef(JSON.stringify(discordConfig));
+  const DRAFT_KEY = "draft_discord_settings_v1";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.data) return;
+      const shouldRestore = window.confirm("Restore unsaved Discord Settings draft?");
+      if (shouldRestore) {
+        setLocalConfig(parsed.data);
+        showToast("Draft restored", "info");
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Only update local config if the user hasn't made any unsaved changes,
@@ -28,10 +48,20 @@ const DiscordSettings = () => {
     }
   }, [discordConfig, localConfig]);
 
+  useEffect(() => {
+    const localString = JSON.stringify(localConfig);
+    if (localString !== lastSyncedConfig.current) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ data: localConfig, ts: Date.now() }));
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  }, [localConfig]);
+
   if (!isArchitect) return null;
 
   const handleSave = () => {
     setDiscordConfig(localConfig);
+    localStorage.removeItem(DRAFT_KEY);
     showToast("Discord configuration saved!", "success");
   };
 

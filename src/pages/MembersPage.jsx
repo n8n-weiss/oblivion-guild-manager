@@ -8,6 +8,7 @@ import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
   const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers = [] } = useGuild();
+  const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
   const [search, setSearch] = useState(() => localStorage.getItem("members_search") || "");
   const [roleFilter, setRoleFilter] = useState(() => localStorage.getItem("members_roleFilter") || "All");
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem("members_statusFilter") || "active");
@@ -44,7 +45,20 @@ function MembersPage({ onViewProfile }) {
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
-    setForm({ memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
+    const fresh = { memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] };
+    let nextForm = fresh;
+    try {
+      const raw = localStorage.getItem(MEMBER_DRAFT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.mode === "add" && parsed?.form && window.confirm("Restore unsaved new-member draft?")) {
+          nextForm = parsed.form;
+        }
+      }
+    } catch {
+      localStorage.removeItem(MEMBER_DRAFT_KEY);
+    }
+    setForm(nextForm);
     setEditMember(null);
     setShowModal(true);
   };
@@ -57,8 +71,17 @@ function MembersPage({ onViewProfile }) {
 
   const toggleArchive = (id) => {
     const isRestoring = statusFilter === "left";
-    setMembers(prev => prev.map(m => m.memberId === id ? { ...m, status: isRestoring ? "active" : "left" } : m));
+    const beforeMembers = members;
+    const nextMembers = members.map(m => m.memberId === id ? { ...m, status: isRestoring ? "active" : "left" } : m);
+    setMembers(nextMembers);
     showToast(isRestoring ? "Member restored" : "Member archived", "success");
+    showToast(`Action applied to ${members.find(x => x.memberId === id)?.ign || id}`, "info", {
+      label: "Undo",
+      onClick: () => {
+        setMembers(beforeMembers);
+        showToast("Undo successful", "success");
+      }
+    });
     const m = members.find(x => x.memberId === id);
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isRestoring ? "member_restore" : "member_archive", `${isRestoring ? "Restored" : "Archived"} member ${m?.ign} (${id})`);
   };
@@ -67,8 +90,16 @@ function MembersPage({ onViewProfile }) {
     const m = members.find(x => x.memberId === id);
     if (!window.confirm(`PERMANENTLY DELETE ${m?.ign}? This cannot be undone and will remove them from the roster totally.`)) return;
     
+    const beforeMembers = members;
     setMembers(prev => prev.filter(x => x.memberId !== id));
     showToast(`Member ${m?.ign} deleted permanently`, "success");
+    showToast("Member removed from list", "warning", {
+      label: "Undo",
+      onClick: () => {
+        setMembers(beforeMembers);
+        showToast("Delete undone", "success");
+      }
+    });
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
   };
 
@@ -91,6 +122,10 @@ function MembersPage({ onViewProfile }) {
   useEffect(() => { localStorage.setItem("members_search", search); }, [search]);
   useEffect(() => { localStorage.setItem("members_roleFilter", roleFilter); }, [roleFilter]);
   useEffect(() => { localStorage.setItem("members_statusFilter", statusFilter); }, [statusFilter]);
+  useEffect(() => {
+    if (!showModal) return;
+    localStorage.setItem(MEMBER_DRAFT_KEY, JSON.stringify({ mode: editMember ? "edit" : "add", form, ts: Date.now() }));
+  }, [showModal, editMember, form]);
   const { attendance = [], performance = [], events = [], eoRatings = [] } = useGuild();
   const getMemberBadges = (mId) => {
     const list = [];
@@ -130,6 +165,7 @@ function MembersPage({ onViewProfile }) {
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_add", `Added new member ${form.ign} (${form.memberId}) — ${form.class}, ${form.role}`);
     }
     setShowModal(false);
+    localStorage.removeItem(MEMBER_DRAFT_KEY);
   };
 
   return (
@@ -362,8 +398,8 @@ function MembersPage({ onViewProfile }) {
     </div>
 
       {showModal && (
-        <Modal title={editMember ? "Edit Member" : "Add Member"} onClose={() => setShowModal(false)}
-          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={saveMember}><Icon name="save" size={14} /> Save</button></>}
+        <Modal title={editMember ? "Edit Member" : "Add Member"} onClose={() => { setShowModal(false); localStorage.removeItem(MEMBER_DRAFT_KEY); }}
+          footer={<><button className="btn btn-ghost" onClick={() => { setShowModal(false); localStorage.removeItem(MEMBER_DRAFT_KEY); }}>Cancel</button><button className="btn btn-primary" onClick={saveMember}><Icon name="save" size={14} /> Save</button></>}
         >
           <div className="form-grid form-grid-2">
             <div className="form-group">

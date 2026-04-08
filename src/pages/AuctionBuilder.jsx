@@ -38,6 +38,19 @@ function AuctionBuilder() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileShowPool, setMobileShowPool] = useState(window.innerWidth >= 768);
   const [mobileShowSidebar, setMobileShowSidebar] = useState(window.innerWidth >= 768);
+  const AUCTION_DRAFT_KEY = "draft_auction_forms_v1";
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUCTION_DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.newSessionForm) setNewSessionForm(parsed.newSessionForm);
+      if (typeof parsed?.newTemplateName === "string") setNewTemplateName(parsed.newTemplateName);
+    } catch {
+      localStorage.removeItem(AUCTION_DRAFT_KEY);
+    }
+  }, []);
 
   React.useEffect(() => {
     const onResize = () => {
@@ -55,6 +68,9 @@ function AuctionBuilder() {
   React.useEffect(() => { localStorage.setItem("auction_historySearch", historySearch); }, [historySearch]);
   React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
   React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
+  React.useEffect(() => {
+    localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
+  }, [newSessionForm, newTemplateName]);
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {
@@ -195,6 +211,7 @@ function AuctionBuilder() {
     setView("editor");
     setShowNewSession(false);
     setNewSessionForm({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
+    localStorage.removeItem(AUCTION_DRAFT_KEY);
     showToast("Session created!", "success");
   };
 
@@ -567,6 +584,7 @@ function AuctionBuilder() {
     setAuctionTemplates(prev => [...prev, template]);
     setNewTemplateName("");
     setShowNewTemplate(false);
+    localStorage.removeItem(AUCTION_DRAFT_KEY);
     showToast("Template saved!", "success");
   };
 

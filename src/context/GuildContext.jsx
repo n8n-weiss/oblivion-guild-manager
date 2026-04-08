@@ -95,6 +95,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
+  const [metadataActivity, setMetadataActivity] = useState([]); // recent shared metadata updates
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
   const [syncRetryToken, setSyncRetryToken] = useState(0);
   const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
@@ -250,6 +251,60 @@ export const GuildProvider = ({ children, initialData }) => {
 
         const legacyMetaSnap = await getDoc(doc(db, "metadata", "current"));
         const legacyMeta = legacyMetaSnap.exists() ? legacyMetaSnap.data() : {};
+        const partiesMetaRef = doc(db, "metadata", "parties");
+        const auctionMetaRef = doc(db, "metadata", "auction");
+        const discordMetaRef = doc(db, "metadata", "discord");
+        const readOnlyMemberSession = userRole === "member";
+
+        if (!readOnlyMemberSession && legacyMetaSnap.exists()) {
+          const [partiesSnap, auctionSnap, discordSnap] = await Promise.all([
+            getDoc(partiesMetaRef),
+            getDoc(auctionMetaRef),
+            getDoc(discordMetaRef)
+          ]);
+          const legacyVersion = Number(legacyMeta.version || 0);
+          const legacyEditor = legacyMeta.lastEditorUid || null;
+          const legacyUpdate = legacyMeta.lastUpdate || new Date().toISOString();
+
+          const seedOps = [];
+          if (!partiesSnap.exists() && (legacyMeta.parties || legacyMeta.partyNames || legacyMeta.raidParties || legacyMeta.raidPartyNames)) {
+            seedOps.push(setDoc(partiesMetaRef, {
+              parties: legacyMeta.parties || [],
+              partyNames: legacyMeta.partyNames || [],
+              raidParties: legacyMeta.raidParties || [],
+              raidPartyNames: legacyMeta.raidPartyNames || [],
+              version: legacyVersion,
+              lastEditorUid: legacyEditor,
+              lastUpdate: legacyUpdate
+            }, { merge: true }));
+          }
+          if (!auctionSnap.exists() && (legacyMeta.auctionSessions || legacyMeta.auctionTemplates || legacyMeta.resourceCategories)) {
+            seedOps.push(setDoc(auctionMetaRef, {
+              auctionSessions: legacyMeta.auctionSessions || [],
+              auctionTemplates: legacyMeta.auctionTemplates || [],
+              resourceCategories: legacyMeta.resourceCategories || ["Card Album", "Light & Dark"],
+              version: legacyVersion,
+              lastEditorUid: legacyEditor,
+              lastUpdate: legacyUpdate
+            }, { merge: true }));
+          }
+          if (!discordSnap.exists() && legacyMeta.discord) {
+            seedOps.push(setDoc(discordMetaRef, {
+              discord: legacyMeta.discord || {},
+              version: legacyVersion,
+              lastEditorUid: legacyEditor,
+              lastUpdate: legacyUpdate
+            }, { merge: true }));
+          }
+          if (seedOps.length > 0) {
+            await Promise.all(seedOps);
+          }
+        }
+
+        if (readOnlyMemberSession) {
+          metaLoaded = true;
+          checkReady();
+        }
         let metadataReadyCount = 0;
         const markMetadataReady = () => {
           metadataReadyCount += 1;
@@ -260,6 +315,17 @@ export const GuildProvider = ({ children, initialData }) => {
         };
         const emitExternalUpdate = (versionKey, nextVersion, lastEditorUid, area) => {
           const prevVersion = Number(metadataVersions.current[versionKey] || 0);
+          if (nextVersion > prevVersion) {
+            setMetadataActivity(prev => {
+              const entry = {
+                id: `${versionKey}-${nextVersion}`,
+                area,
+                by: lastEditorUid || "unknown",
+                timestamp: Date.now()
+              };
+              return [entry, ...prev].slice(0, 8);
+            });
+          }
           const updatedByOtherOfficer =
             prevVersion > 0 &&
             nextVersion > prevVersion &&
@@ -273,17 +339,9 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         };
 
-        const unsubPartiesMeta = onSnapshot(doc(db, "metadata", "parties"), (snap) => {
-          const data = snap.exists()
-            ? snap.data()
-            : {
-                parties: legacyMeta.parties || [],
-                partyNames: legacyMeta.partyNames || [],
-                raidParties: legacyMeta.raidParties || [],
-                raidPartyNames: legacyMeta.raidPartyNames || [],
-                version: Number(legacyMeta.version || 0),
-                lastEditorUid: legacyMeta.lastEditorUid || null
-              };
+        if (!readOnlyMemberSession) {
+          const unsubPartiesMeta = onSnapshot(partiesMetaRef, (snap) => {
+            const data = snap.exists() ? snap.data() : {};
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
           const cloudRaidRaw = data.raidParties || [];
@@ -303,16 +361,8 @@ export const GuildProvider = ({ children, initialData }) => {
         });
         unsubs.push(unsubPartiesMeta);
 
-        const unsubAuctionMeta = onSnapshot(doc(db, "metadata", "auction"), (snap) => {
-          const data = snap.exists()
-            ? snap.data()
-            : {
-                auctionSessions: legacyMeta.auctionSessions || [],
-                auctionTemplates: legacyMeta.auctionTemplates || [],
-                resourceCategories: legacyMeta.resourceCategories || ["Card Album", "Light & Dark"],
-                version: Number(legacyMeta.version || 0),
-                lastEditorUid: legacyMeta.lastEditorUid || null
-              };
+        const unsubAuctionMeta = onSnapshot(auctionMetaRef, (snap) => {
+          const data = snap.exists() ? snap.data() : {};
           const nextVersion = Number(data.version || 0);
           emitExternalUpdate("auction", nextVersion, data.lastEditorUid, "Auction");
           metadataVersions.current.auction = nextVersion;
@@ -326,14 +376,8 @@ export const GuildProvider = ({ children, initialData }) => {
         });
         unsubs.push(unsubAuctionMeta);
 
-        const unsubDiscordMeta = onSnapshot(doc(db, "metadata", "discord"), (snap) => {
-          const data = snap.exists()
-            ? snap.data()
-            : {
-                discord: legacyMeta.discord || {},
-                version: Number(legacyMeta.version || 0),
-                lastEditorUid: legacyMeta.lastEditorUid || null
-              };
+        const unsubDiscordMeta = onSnapshot(discordMetaRef, (snap) => {
+          const data = snap.exists() ? snap.data() : {};
           const nextVersion = Number(data.version || 0);
           emitExternalUpdate("discord", nextVersion, data.lastEditorUid, "Discord Settings");
           metadataVersions.current.discord = nextVersion;
@@ -372,6 +416,7 @@ export const GuildProvider = ({ children, initialData }) => {
           markMetadataReady();
         });
         unsubs.push(unsubDiscordMeta);
+        }
 
         const unsubNotifs = onSnapshot(collection(db, "notifications"), (snap) => {
           const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.ts) - new Date(a.ts));
@@ -398,7 +443,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
-  }, [initialData, currentUser]);
+  }, [initialData, currentUser, userRole]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {
@@ -1103,7 +1148,7 @@ export const GuildProvider = ({ children, initialData }) => {
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
-    metadataNotice, setMetadataNotice, syncStatus, triggerSyncRetry,
+    metadataNotice, setMetadataNotice, metadataActivity, syncStatus, triggerSyncRetry,
     resetDatabase
 
   };
