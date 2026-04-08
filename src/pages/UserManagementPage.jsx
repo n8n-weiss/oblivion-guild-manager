@@ -6,9 +6,11 @@ import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { useGuild } from '../context/GuildContext';
 import { writeAuditLog } from '../utils/audit';
 import Icon from '../components/ui/icons';
+import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function UserManagementPage() {
   const { currentUser, showToast, members, isAdmin, isArchitect, resetDatabase } = useGuild();
+  const RESET_TOKEN = "DELETE";
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
   const [creating, setCreating] = useState(false);
@@ -16,6 +18,7 @@ function UserManagementPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingUid, setEditingUid] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showResetTokenModal, setShowResetTokenModal] = useState(false);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -303,7 +306,12 @@ function UserManagementPage() {
               <div style={{ fontWeight: 700, color: "#ef4444", marginBottom: 8, fontSize: 14 }}>ARE YOU ABSOLUTELY SURE?</div>
               <p style={{ fontSize: 12, marginBottom: 12 }}>This will permanently delete all members, events, attendance, and analytics records. This cannot be undone.</p>
               <div className="flex gap-2">
-                <button className="btn btn-danger btn-sm" onClick={() => { resetDatabase(); setShowResetConfirm(false); }}>Yes, Delete Everything</button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => setShowResetTokenModal(true)}
+                >
+                  Yes, Delete Everything
+                </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowResetConfirm(false)}>Cancel</button>
               </div>
             </div>
@@ -314,6 +322,19 @@ function UserManagementPage() {
           )}
         </div>
       )}
+      <ConfirmDangerModal
+        open={showResetTokenModal}
+        title="Reset Entire Database?"
+        message="This will permanently delete members, events, attendance, and analytics records."
+        token={RESET_TOKEN}
+        confirmLabel="Reset Database"
+        onCancel={() => setShowResetTokenModal(false)}
+        onConfirm={() => {
+          resetDatabase();
+          setShowResetTokenModal(false);
+          setShowResetConfirm(false);
+        }}
+      />
     </div>
   );
 }

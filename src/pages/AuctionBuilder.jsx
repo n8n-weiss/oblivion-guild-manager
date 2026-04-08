@@ -4,6 +4,208 @@ import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import html2canvas from 'html2canvas';
 import Modal from '../components/ui/Modal';
+import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
+import ConfirmTwiceButton from '../components/common/ConfirmTwiceButton';
+
+const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
+  session,
+  sidebarTab,
+  selectedMapColId,
+  setSelectedMapColId,
+  currentSessionGrid,
+  maxVisiblePage,
+  selectedMapPage,
+  setSelectedMapPage,
+  setMaxVisiblePage,
+  selectedPageAnalysis,
+  handleDropdownAssignment,
+  sessionMembers,
+  handleDeleteMapPage,
+  draggedOverSlot,
+  setDraggedOverSlot,
+  dragging
+}) {
+  if (sidebarTab !== "map") return null;
+
+  const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split("R")[0], 10)));
+  const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
+
+  return (
+    <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+        <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, margin: 0, whiteSpace: "nowrap" }}>
+          <Icon name="grid" size={14} color="var(--accent)" /> Resource Map
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
+          <select
+            value={selectedMapColId || (session?.columns?.[0]?.id || "")}
+            onChange={e => setSelectedMapColId(e.target.value)}
+            style={{ fontSize: 10, background: "rgba(30,35,50,0.8)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--accent)", borderRadius: 4, padding: "2px 4px", width: "100%", outline: "none" }}
+          >
+            {session?.columns?.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+            {(!session?.columns || session.columns.length === 0) && <option disabled>No Columns</option>}
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+            const isSelected = selectedMapPage === p;
+            let status = "empty";
+            const pageSlots = [1, 2, 3, 4].map(r => `P${p}R${r}`);
+            const assignments = pageSlots.map(s => currentSessionGrid[s] || []);
+            if (assignments.some(a => a.length > 1)) status = "conflict";
+            else if (assignments.every(a => a.length === 1)) status = "full";
+            else if (assignments.some(a => a.length > 0)) status = "partial";
+
+            return (
+              <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
+                style={{
+                  position: "relative", width: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: 900,
+                  background: isSelected ? "var(--accent)" : "rgba(255,255,255,0.03)",
+                  color: isSelected ? "white" : "var(--text-muted)",
+                  border: `1px solid ${isSelected ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`,
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)", cursor: "pointer",
+                  boxShadow: isSelected ? "0 0 15px rgba(99,130,230,0.4)" : "none"
+                }}
+                onMouseEnter={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+              >
+                {p}
+                {status !== "empty" && (
+                  <div style={{
+                    position: "absolute", top: -3, right: -3, width: 10, height: 10, borderRadius: "50%",
+                    background: status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)",
+                    border: "2px solid #080a0f",
+                    boxShadow: `0 0 8px ${status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)"}`
+                  }} />
+                )}
+              </button>
+            );
+          })}
+          <button className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0, fontSize: 14 }} onMouseDown={e => e.preventDefault()} onClick={() => { const nx = totalPages + 1; setMaxVisiblePage(nx); setSelectedMapPage(nx); }}>+</button>
+        </div>
+
+        <div key={selectedMapPage} style={{ animation: "fade-in 0.2s" }}>
+          <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", textTransform: "uppercase" }}>Page {selectedMapPage}</div>
+                {selectedPageAnalysis.fullPageOwnerName && (
+                  <span style={{
+                    fontSize: 8, background: "rgba(42, 191, 107, 0.15)", color: "var(--green)",
+                    padding: "2px 6px", borderRadius: 4, fontWeight: 900, border: "1px solid rgba(42, 191, 107, 0.3)",
+                    letterSpacing: 0.5, animation: "fade-in 0.3s"
+                  }}>
+                    FULL PAGE: {selectedPageAnalysis.fullPageOwnerName}
+                  </span>
+                )}
+              </div>
+              <select
+                value={selectedPageAnalysis.fullPageValue}
+                onChange={e => handleDropdownAssignment(selectedMapPage, null, e.target.value)}
+                style={{
+                  fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white",
+                  borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer",
+                  borderColor: selectedPageAnalysis.fullPageBorderColor
+                }}
+              >
+                <option value="none" style={{ background: "#1a1e2e" }}>Clear Full Page Assignment</option>
+                {sessionMembers.map(m => (
+                  <option key={m.memberId} value={m.memberId} style={{ background: "#1a1e2e" }}>{m.ign}</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-ghost"
+                style={{ padding: "2px", color: "var(--red)", fontSize: 13, height: "auto", marginLeft: 4 }}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => handleDeleteMapPage(selectedMapPage)}
+                title="Delete this page"
+              >
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[1, 2, 3, 4].map(row => {
+                const key = `P${selectedMapPage}R${row}`;
+                const hasConflict = !!selectedPageAnalysis.rowHasConflict[row];
+                const currentMemId = selectedPageAnalysis.rowCurrentMemberIds[row] || "none";
+                const isDragTarget = draggedOverSlot === key;
+                return (
+                  <div
+                    key={row}
+                    onDragOver={e => { if (dragging) { e.preventDefault(); setDraggedOverSlot(key); } }}
+                    onDragLeave={() => setDraggedOverSlot(null)}
+                    onDrop={e => { if (dragging) { e.preventDefault(); handleDropdownAssignment(selectedMapPage, row, dragging); setDraggedOverSlot(null); } }}
+                    style={{
+                      padding: "8px 10px", borderRadius: 10,
+                      background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)"),
+                      border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)")}`,
+                      position: "relative",
+                      boxShadow: isDragTarget ? "0 0 18px rgba(99,130,230,0.35)" : (currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none"),
+                      backdropFilter: "blur(8px)",
+                      transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+                      animation: hasConflict ? "pulse-red 2s infinite" : (currentMemId !== "none" && !isDragTarget ? "pulse-green 4s infinite" : "none"),
+                      minHeight: 52,
+                      display: "flex", flexDirection: "column", justifyContent: "center",
+                      transform: isDragTarget ? "scale(1.03)" : "scale(1)",
+                      cursor: dragging ? "copy" : "default"
+                    }}
+                  >
+                    <div style={{ opacity: 0.6, fontWeight: 900, fontSize: 8, marginBottom: 4, color: isDragTarget ? "var(--accent)" : (currentMemId !== "none" ? "var(--green)" : "inherit"), letterSpacing: 1 }}>
+                      {isDragTarget ? "✦ DROP HERE" : `SLOT ${row}`}
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        value={currentMemId}
+                        onChange={e => handleDropdownAssignment(selectedMapPage, row, e.target.value)}
+                        style={{
+                          width: "100%", background: "none", border: "none", color: hasConflict ? "var(--red)" : currentMemId !== "none" ? "white" : "rgba(255,255,255,0.3)",
+                          fontSize: 12, fontWeight: 800, outline: "none", cursor: "pointer", appearance: "none", paddingRight: 12
+                        }}
+                      >
+                        <option value="none" style={{ background: "#0a0e18" }}>-- UNASSIGNED --</option>
+                        {sessionMembers.map(m => (
+                          <option key={m.memberId} value={m.memberId} style={{ background: "#0a0e18" }}>{m.ign}</option>
+                        ))}
+                      </select>
+                      <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", opacity: 0.4, pointerEvents: "none", fontSize: 10 }}>▼</div>
+                    </div>
+                    {hasConflict && <div style={{ fontSize: 8, color: "#ff4d4d", marginTop: 2, fontWeight: 900, textShadow: "0 0 8px rgba(255,77,77,0.5)" }}>DUPLICATE!</div>}
+                    {hasConflict && (
+                      <div style={{ fontSize: 8, color: "rgba(255,77,77,0.8)", marginTop: 1 }}>
+                        Choose one owner to resolve
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}, (prev, next) => {
+  return (
+    prev.sidebarTab === next.sidebarTab &&
+    prev.session === next.session &&
+    prev.selectedMapColId === next.selectedMapColId &&
+    prev.currentSessionGrid === next.currentSessionGrid &&
+    prev.maxVisiblePage === next.maxVisiblePage &&
+    prev.selectedMapPage === next.selectedMapPage &&
+    prev.selectedPageAnalysis === next.selectedPageAnalysis &&
+    prev.sessionMembers === next.sessionMembers &&
+    prev.draggedOverSlot === next.draggedOverSlot &&
+    prev.dragging === next.dragging &&
+    prev.handleDropdownAssignment === next.handleDropdownAssignment &&
+    prev.handleDeleteMapPage === next.handleDeleteMapPage
+  );
+});
 
 function AuctionBuilder() {
   const {
@@ -40,6 +242,9 @@ function AuctionBuilder() {
   const [mobileShowPool, setMobileShowPool] = useState(window.innerWidth >= 768);
   const [mobileShowSidebar, setMobileShowSidebar] = useState(window.innerWidth >= 768);
   const AUCTION_DRAFT_KEY = "draft_auction_forms_v1";
+  const DELETE_TOKEN = "DELETE";
+  const [confirmDeleteMapPage, setConfirmDeleteMapPage] = useState(null);
+  const mapSidebarPerfRef = React.useRef({ commits: 0, totalActualDuration: 0 });
 
   React.useEffect(() => {
     try {
@@ -94,10 +299,7 @@ function AuctionBuilder() {
           mIdFromKey = key.substring(0, key.length - col.name.length - 1).trim().toLowerCase();
         }
         
-        const member = members.find(m => {
-          const mId = (m.memberId || "").trim().toLowerCase();
-          return mId === mIdFromKey;
-        });
+        const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mIdFromKey);
         if (!member) return;
         
         tags.forEach(tag => {
@@ -122,13 +324,25 @@ function AuctionBuilder() {
   // Get active session data
   const session = auctionSessions.find(s => s.id === activeSession);
   const conflictSummary = pendingAuctionConflict?.summary || null;
+  const membersById = React.useMemo(() => {
+    const map = new Map();
+    members.forEach(m => map.set(m.memberId, m));
+    return map;
+  }, [members]);
+  const selectedSessionCol = React.useMemo(
+    () => session?.columns?.find(c => c.id === (selectedMapColId || session?.columns?.[0]?.id)) || null,
+    [session, selectedMapColId]
+  );
 
   // Pool = active members not in session
   const sessionMemberIds = new Set((session?.members || []).map(m => m.memberId));
   const pool = activeMembers
     .filter(m => !sessionMemberIds.has(m.memberId))
     .filter(m => !poolSearch || m.ign.toLowerCase().includes(poolSearch.toLowerCase()) || m.class.toLowerCase().includes(poolSearch.toLowerCase()));
-  const sessionMembers = (session?.members || []).map(sm => members.find(m => m.memberId === sm.memberId)).filter(Boolean);
+  const sessionMembers = React.useMemo(
+    () => (session?.members || []).map(sm => membersById.get(sm.memberId)).filter(Boolean),
+    [session, membersById]
+  );
 
   const exportTableToImage = async () => {
     const element = document.getElementById('auction-table-export');
@@ -223,9 +437,9 @@ function AuctionBuilder() {
     showToast("Session deleted", "success");
   };
 
-  const updateSession = (updater) => {
+  const updateSession = React.useCallback((updater) => {
     setAuctionSessions(prev => prev.map(s => s.id === activeSession ? updater(s) : s));
-  };
+  }, [activeSession, setAuctionSessions]);
 
   const availableCategories = resourceCategories || ["Card Album", "Light & Dark"];
   const addColumn = () => {
@@ -351,7 +565,7 @@ function AuctionBuilder() {
       tags.forEach(tag => {
         const coord = parseCoordinate(tag);
         if (coord) {
-          const m = members.find(m => m.memberId === memberId);
+          const m = membersById.get(memberId);
           if (!m) return;
 
           if (coord.row) {
@@ -371,7 +585,49 @@ function AuctionBuilder() {
       });
     });
     return grid;
-  }, [activeSession, auctionSessions, members, selectedMapColId]);
+  }, [activeSession, auctionSessions, membersById, selectedMapColId]);
+  const selectedPageAnalysis = React.useMemo(() => {
+    const result = {
+      fullPageValue: "none",
+      fullPageBorderColor: "var(--accent)",
+      fullPageOwnerName: null,
+      rowCurrentMemberIds: { 1: "none", 2: "none", 3: "none", 4: "none" },
+      rowHasConflict: { 1: false, 2: false, 3: false, 4: false }
+    };
+    if (!session || !selectedSessionCol) return result;
+
+    const pageTag = `P${selectedMapPage}`;
+    const ownersByRow = { 1: [], 2: [], 3: [], 4: [] };
+    Object.entries(session.cells || {}).forEach(([cKey, tags]) => {
+      if (!isCellForColumn(cKey, selectedSessionCol)) return;
+      let ownerId = "";
+      if (cKey.endsWith(`_${selectedSessionCol.id}`)) ownerId = cKey.substring(0, cKey.length - selectedSessionCol.id.length - 1);
+      else ownerId = cKey.substring(0, cKey.length - selectedSessionCol.name.length - 1);
+      const normalizedOwner = ownerId.trim();
+      if (!normalizedOwner) return;
+
+      [1, 2, 3, 4].forEach((row) => {
+        const slotKey = `P${selectedMapPage}R${row}`;
+        const isAssigned = (tags || []).some(t => t === slotKey || t === pageTag);
+        if (isAssigned) ownersByRow[row].push(normalizedOwner);
+      });
+    });
+
+    const flattenedOwners = [];
+    [1, 2, 3, 4].forEach((row) => {
+      const uniqueOwners = [...new Set(ownersByRow[row])];
+      result.rowHasConflict[row] = uniqueOwners.length > 1;
+      result.rowCurrentMemberIds[row] = uniqueOwners.length === 1 ? uniqueOwners[0] : "none";
+      if (uniqueOwners[0]) flattenedOwners.push(uniqueOwners[0]);
+    });
+
+    if (flattenedOwners.length === 4 && new Set(flattenedOwners).size === 1) {
+      result.fullPageValue = flattenedOwners[0];
+      result.fullPageBorderColor = "var(--green)";
+      result.fullPageOwnerName = membersById.get(flattenedOwners[0])?.ign || flattenedOwners[0];
+    }
+    return result;
+  }, [session, selectedSessionCol, selectedMapPage, membersById]);
 
   // Aggregated Resource History Grouped by Session
   const resourceHistory = React.useMemo(() => {
@@ -464,14 +720,14 @@ function AuctionBuilder() {
     return data;
   }, [activeSession, auctionSessions, lootHistory, resourceCategories]);
 
-  const handleDropdownAssignment = (page, row, memberId) => {
+  const handleDropdownAssignment = React.useCallback((page, row, memberId) => {
     const sess = auctionSessions.find(s => s.id === activeSession);
     let targetColId = selectedMapColId;
     let targetCol = sess?.columns?.find(c => c.id === targetColId);
     
     // Fallback if no col selected or selected col not in this session
     if (!targetCol) {
-      targetCol = sess?.columns?.find(c => isCardColumn(c.name)) || sess?.columns?.[0];
+      targetCol = sess?.columns?.find(c => (c.name || "").toLowerCase().includes("card album")) || sess?.columns?.[0];
       targetColId = targetCol?.id;
     }
 
@@ -513,10 +769,24 @@ function AuctionBuilder() {
       return { ...s, cells: newCells };
     });
     showToast(`Page ${page} assigned successfully!`, "success");
-  };
+  }, [auctionSessions, activeSession, selectedMapColId, updateSession, showToast]);
 
-  const handleDeleteMapPage = (page) => {
-    if (!window.confirm(`Are you sure you want to delete all assignments for Page ${page} and remove it?`)) return;
+  const handleDeleteMapPage = React.useCallback((page) => {
+    setConfirmDeleteMapPage(page);
+  }, []);
+  const onMapSidebarProfileRender = React.useCallback((id, phase, actualDuration) => {
+    if (!import.meta.env.DEV) return;
+    const perf = mapSidebarPerfRef.current;
+    perf.commits += 1;
+    perf.totalActualDuration += actualDuration;
+    if (perf.commits % 10 === 0 || actualDuration > 16) {
+      const avg = perf.totalActualDuration / perf.commits;
+      console.debug(`[perf] ${id} ${phase}: last=${actualDuration.toFixed(2)}ms avg=${avg.toFixed(2)}ms commits=${perf.commits}`);
+    }
+  }, []);
+
+  const executeDeleteMapPage = (page) => {
+    if (!page) return;
 
     const session = auctionSessions.find(s => s.id === activeSession);
     const targetColId = selectedMapColId || session?.columns?.find(c => isCardColumn(c.name))?.id;
@@ -538,6 +808,7 @@ function AuctionBuilder() {
     setMaxVisiblePage(prev => Math.max(1, prev - 1));
     if (selectedMapPage > 1) setSelectedMapPage(prev => prev - 1);
     showToast(`Page ${page} removed.`, "success");
+    setConfirmDeleteMapPage(null);
   };
 
   const toggleOutbid = (memberId, colId, tagIdx) => {
@@ -561,7 +832,7 @@ function AuctionBuilder() {
 
   const dropToTable = () => {
     if (!dragging) return;
-    const member = members.find(m => m.memberId === dragging);
+    const member = membersById.get(dragging);
     if (!member || sessionMemberIds.has(dragging)) return;
     updateSession(s => ({ ...s, members: [...s.members, { memberId: dragging }] }));
     setDragging(null); setDragOver(null);
@@ -687,7 +958,14 @@ function AuctionBuilder() {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
                   <div className="text-xs text-muted">{s.date} · {s.members.length} members · {s.columns.length} resources</div>
                 </div>
-                <button className="btn btn-danger btn-sm btn-icon" onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Icon name="trash" size={12} /></button>
+                <ConfirmTwiceButton
+                  className="btn btn-danger btn-sm btn-icon"
+                  onClick={(e) => e.stopPropagation()}
+                  onConfirm={() => deleteSession(s.id)}
+                  icon={<Icon name="trash" size={12} />}
+                  iconOnly
+                  title="Delete session"
+                />
               </div>
             ))}
           </div>
@@ -706,7 +984,13 @@ function AuctionBuilder() {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
                   <div className="text-xs text-muted">{t.columns.map(c => c.name).join(" · ")}</div>
                 </div>
-                <button className="btn btn-danger btn-sm btn-icon" onClick={() => { setAuctionTemplates(prev => prev.filter(x => x.id !== t.id)); showToast("Template deleted", "success"); }}><Icon name="trash" size={12} /></button>
+                <ConfirmTwiceButton
+                  className="btn btn-danger btn-sm btn-icon"
+                  onConfirm={() => { setAuctionTemplates(prev => prev.filter(x => x.id !== t.id)); showToast("Template deleted", "success"); }}
+                  icon={<Icon name="trash" size={12} />}
+                  iconOnly
+                  title="Delete template"
+                />
               </div>
             ))}
           </div>
@@ -1009,18 +1293,18 @@ function AuctionBuilder() {
                                 >
                                   ✎
                                 </button>
-                                <button 
-                                  style={{ 
-                                    background: "rgba(255,77,77,0.05)", border: "1px solid rgba(255,77,77,0.1)", cursor: "pointer", 
+                                <ConfirmTwiceButton
+                                  icon={<span style={{ lineHeight: 1 }}>×</span>}
+                                  iconOnly
+                                  style={{
+                                    background: "rgba(255,77,77,0.05)", border: "1px solid rgba(255,77,77,0.1)", cursor: "pointer",
                                     color: "var(--red)", fontSize: 16, padding: "4px 6px", borderRadius: 6, transition: "all 0.2s", lineHeight: 1
                                   }}
                                   onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,77,77,0.15)"; e.currentTarget.style.borderColor = "var(--red)"; }}
                                   onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,77,77,0.05)"; e.currentTarget.style.borderColor = "rgba(255,77,77,0.1)"; }}
-                                  onClick={() => deleteColumn(col.id)}
-                                  title="Delete column"
-                                >
-                                  ×
-                                </button>
+                                  onConfirm={() => deleteColumn(col.id)}
+                                  title="Delete column (click twice)"
+                                />
                               </div>
                             </div>
                           )}
@@ -1139,259 +1423,26 @@ function AuctionBuilder() {
             </div>
 
             {/* 1. Resource Map Tab */}
-            {sidebarTab === "map" && (
-              <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
-               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
-                  <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, margin: 0, whiteSpace: "nowrap" }}>
-                    <Icon name="grid" size={14} color="var(--accent)" /> Resource Map
-                  </div>
-                  
-                  {/* Target Column Selector */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
-                    <select 
-                      value={selectedMapColId || (session?.columns?.[0]?.id || "")}
-                      onChange={e => setSelectedMapColId(e.target.value)}
-                      style={{ fontSize: 10, background: "rgba(30,35,50,0.8)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--accent)", borderRadius: 4, padding: "2px 4px", width: "100%", outline: "none" }}
-                    >
-                      {session?.columns?.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                      {(!session?.columns || session.columns.length === 0) && <option disabled>No Columns</option>}
-                    </select>
-                  </div>
-               </div>
-
-               <div className="space-y-4">
-                 {(() => {
-                   const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split('R')[0])));
-                   const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
-                   
-                   return (
-                     <>
-                       {/* Horizontal Page Tabs */}
-                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                         {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
-                           const isSelected = selectedMapPage === p;
-                           
-                           // Page Status Logic
-                           let status = "empty";
-                           const pageSlots = [1, 2, 3, 4].map(r => `P${p}R${r}`);
-                           const assignments = pageSlots.map(s => currentSessionGrid[s] || []);
-                           if (assignments.some(a => a.length > 1)) status = "conflict";
-                           else if (assignments.every(a => a.length === 1)) status = "full";
-                           else if (assignments.some(a => a.length > 0)) status = "partial";
-
-                           return (
-                              <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
-                                style={{
-                                  position: "relative", width: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: 900,
-                                  background: isSelected ? "var(--accent)" : "rgba(255,255,255,0.03)",
-                                  color: isSelected ? "white" : "var(--text-muted)",
-                                  border: `1px solid ${isSelected ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`,
-                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)", cursor: "pointer",
-                                  boxShadow: isSelected ? `0 0 15px rgba(99,130,230,0.4)` : "none"
-                                }}
-                                onMouseEnter={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-                                onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                              >
-                                {p} 
-                                {status !== "empty" && (
-                                  <div style={{ 
-                                    position: "absolute", top: -3, right: -3, width: 10, height: 10, borderRadius: "50%", 
-                                    background: status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)", 
-                                    border: "2px solid #080a0f",
-                                    boxShadow: `0 0 8px ${status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)"}`
-                                  }} />
-                                )}
-                              </button>
-                            );
-                         })}
-                         <button className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0, fontSize: 14 }} onMouseDown={e => e.preventDefault()} onClick={() => { const nx = totalPages + 1; setMaxVisiblePage(nx); setSelectedMapPage(nx); }}>+</button>
-                       </div>
-
-                       {/* Selected Page Grid with Dropdowns */}
-                       <div key={selectedMapPage} style={{ animation: "fade-in 0.2s" }}>
-                         <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", textTransform: "uppercase" }}>Page {selectedMapPage}</div>
-                                {(() => {
-                                   const currentSess = auctionSessions.find(s => s.id === activeSession);
-                                   const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
-                                   const pageSlots = [1, 2, 3, 4].map(r => `P${selectedMapPage}R${r}`);
-                                   const assignments = [];
-                                   pageSlots.forEach(slot => {
-                                     Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
-                                       const isAssigned = (tags || []).some(t => t === slot || t === `P${selectedMapPage}`);
-                                       if (isCellForColumn(cKey, targetCol) && isAssigned) {
-                                         let mId = "";
-                                         if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
-                                         else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
-                                         assignments.push(mId.trim());
-                                       }
-                                     });
-                                   });
-                                  if (assignments.length === 4 && new Set(assignments).size === 1) {
-                                    const owner = members.find(m => m.memberId === assignments[0]);
-                                    return (
-                                      <span style={{ 
-                                        fontSize: 8, background: "rgba(42, 191, 107, 0.15)", color: "var(--green)", 
-                                        padding: "2px 6px", borderRadius: 4, fontWeight: 900, border: "1px solid rgba(42, 191, 107, 0.3)",
-                                        letterSpacing: 0.5, animation: "fade-in 0.3s"
-                                      }}>
-                                        FULL PAGE: {owner?.ign || assignments[0]}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                              {/* Full Page Prompt */}
-                              <select 
-                                value={(() => {
-                                   const currentSess = auctionSessions.find(s => s.id === activeSession);
-                                   const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
-                                   const pageSlots = [1, 2, 3, 4].map(r => `P${selectedMapPage}R${r}`);
-                                   const assignments = [];
-                                   pageSlots.forEach(slot => {
-                                     Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
-                                       const isAssigned = (tags || []).some(t => t === slot || t === `P${selectedMapPage}`);
-                                       if (isCellForColumn(cKey, targetCol) && isAssigned) {
-                                         let mId = "";
-                                         if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
-                                         else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
-                                         assignments.push(mId.trim());
-                                       }
-                                     });
-                                   });
-                                  return (assignments.length === 4 && new Set(assignments).size === 1) ? assignments[0] : "none";
-                                })()}
-                                onChange={e => handleDropdownAssignment(selectedMapPage, null, e.target.value)}
-                                style={{ 
-                                  fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white", 
-                                  borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer",
-                                  borderColor: (() => {
-                                    const currentSess = auctionSessions.find(s => s.id === activeSession);
-                                    const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
-                                    const owners = [1, 2, 3, 4].map(row => {
-                                      const slotKey = `P${selectedMapPage}R${row}`;
-                                      let ownerId = null;
-                                      Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
-                                        const isAssigned = (tags || []).some(t => t === slotKey || t === `P${selectedMapPage}`);
-                                        if (isCellForColumn(cKey, targetCol) && isAssigned) {
-                                          if (targetCol && cKey.endsWith(`_${targetCol.id}`)) {
-                                            ownerId = cKey.substring(0, cKey.length - targetCol.id.length - 1).trim();
-                                          } else if (targetCol) {
-                                            ownerId = cKey.substring(0, cKey.length - targetCol.name.length - 1).trim();
-                                          }
-                                        }
-                                      });
-                                      return ownerId;
-                                    }).filter(Boolean);
-                                    return owners.length === 4 && new Set(owners).size === 1 ? "var(--green)" : "var(--accent)";
-                                  })()
-                                }}
-                              >
-                                <option value="none" style={{ background: "#1a1e2e" }}>Clear Full Page Assignment</option>
-                                {sessionMembers.map(m => (
-                                  <option key={m.memberId} value={m.memberId} style={{ background: "#1a1e2e" }}>{m.ign}</option>
-                                ))}
-                              </select>
-                              {/* Delete Page Button */}
-                              <button 
-                                className="btn btn-ghost" 
-                                style={{ padding: "2px", color: "var(--red)", fontSize: 13, height: "auto", marginLeft: 4 }}
-                                onMouseDown={e => e.preventDefault()}
-                                onClick={() => handleDeleteMapPage(selectedMapPage)}
-                                title="Delete this page"
-                              >
-                                <Icon name="trash" size={14} />
-                              </button>
-                            </div>
-                            
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                              {[1, 2, 3, 4].map(row => {
-                                const key = `P${selectedMapPage}R${row}`;
-                                const assigned = currentSessionGrid[key] || [];
-                                const hasConflict = assigned.length > 1;
-                                
-                                // Find all candidate owners for this slot from session cells (robust match)
-                                const assignedMemberIds = [];
-                                const currentSess = auctionSessions.find(s => s.id === activeSession);
-                                const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
-
-                                Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
-                                  const isAssigned = (tags || []).some(t => t === key || t === `P${selectedMapPage}`);
-                                  if (isCellForColumn(cKey, targetCol) && isAssigned) {
-                                    let mId = "";
-                                    if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
-                                    else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
-                                    const normalized = mId.trim();
-                                    if (normalized) assignedMemberIds.push(normalized);
-                                  }
-                                });
-                                const uniqueAssignedIds = [...new Set(assignedMemberIds)];
-                                const currentMemId = uniqueAssignedIds.length === 1 ? uniqueAssignedIds[0] : "none";
-
-                                const isDragTarget = draggedOverSlot === key;
-                                return (
-                                  <div
-                                    key={row}
-                                    onDragOver={e => { if (dragging) { e.preventDefault(); setDraggedOverSlot(key); } }}
-                                    onDragLeave={() => setDraggedOverSlot(null)}
-                                    onDrop={e => { if (dragging) { e.preventDefault(); handleDropdownAssignment(selectedMapPage, row, dragging); setDraggedOverSlot(null); } }}
-                                    style={{ 
-                                      padding: "8px 10px", borderRadius: 10, 
-                                      background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)"),
-                                      border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)")}`,
-                                      position: "relative",
-                                      boxShadow: isDragTarget ? "0 0 18px rgba(99,130,230,0.35)" : (currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none"),
-                                      backdropFilter: "blur(8px)",
-                                      transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
-                                      animation: hasConflict ? "pulse-red 2s infinite" : (currentMemId !== "none" && !isDragTarget ? "pulse-green 4s infinite" : "none"),
-                                      minHeight: 52,
-                                      display: "flex", flexDirection: "column", justifyContent: "center",
-                                      transform: isDragTarget ? "scale(1.03)" : "scale(1)",
-                                      cursor: dragging ? "copy" : "default"
-                                    }}
-                                  >
-                                    <div style={{ opacity: 0.6, fontWeight: 900, fontSize: 8, marginBottom: 4, color: isDragTarget ? "var(--accent)" : (currentMemId !== "none" ? "var(--green)" : "inherit"), letterSpacing: 1 }}>
-                                      {isDragTarget ? "✦ DROP HERE" : `SLOT ${row}`}
-                                    </div>
-                                    <div style={{ position: "relative" }}>
-                                      <select 
-                                        value={currentMemId}
-                                        onChange={e => handleDropdownAssignment(selectedMapPage, row, e.target.value)}
-                                        style={{ 
-                                          width: "100%", background: "none", border: "none", color: hasConflict ? "var(--red)" : currentMemId !== "none" ? "white" : "rgba(255,255,255,0.3)", 
-                                          fontSize: 12, fontWeight: 800, outline: "none", cursor: "pointer", appearance: "none", paddingRight: 12
-                                        }}
-                                      >
-                                        <option value="none" style={{ background: "#0a0e18" }}>-- UNASSIGNED --</option>
-                                        {sessionMembers.map(m => (
-                                          <option key={m.memberId} value={m.memberId} style={{ background: "#0a0e18" }}>{m.ign}</option>
-                                        ))}
-                                      </select>
-                                      <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", opacity: 0.4, pointerEvents: "none", fontSize: 10 }}>▼</div>
-                                    </div>
-                                    {hasConflict && <div style={{ fontSize: 8, color: "#ff4d4d", marginTop: 2, fontWeight: 900, textShadow: "0 0 8px rgba(255,77,77,0.5)" }}>DUPLICATE!</div>}
-                                    {hasConflict && (
-                                      <div style={{ fontSize: 8, color: "rgba(255,77,77,0.8)", marginTop: 1 }}>
-                                        Choose one owner to resolve
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                         </div>
-                       </div>
-                     </>
-                   );
-                 })()}
-               </div>
-             </div>
-            )}
+            <React.Profiler id="AuctionMapSidebar" onRender={onMapSidebarProfileRender}>
+              <AuctionMapSidebar
+                session={session}
+                sidebarTab={sidebarTab}
+                selectedMapColId={selectedMapColId}
+                setSelectedMapColId={setSelectedMapColId}
+                currentSessionGrid={currentSessionGrid}
+                maxVisiblePage={maxVisiblePage}
+                selectedMapPage={selectedMapPage}
+                setSelectedMapPage={setSelectedMapPage}
+                setMaxVisiblePage={setMaxVisiblePage}
+                selectedPageAnalysis={selectedPageAnalysis}
+                handleDropdownAssignment={handleDropdownAssignment}
+                sessionMembers={sessionMembers}
+                handleDeleteMapPage={handleDeleteMapPage}
+                draggedOverSlot={draggedOverSlot}
+                setDraggedOverSlot={setDraggedOverSlot}
+                dragging={dragging}
+              />
+            </React.Profiler>
  
             {/* 2. Global World Master Tracker Tab */}
             {sidebarTab === "tracker" && (
@@ -1556,6 +1607,15 @@ function AuctionBuilder() {
         </div>
       </Modal>
     )}
+    <ConfirmDangerModal
+      open={!!confirmDeleteMapPage}
+      title={`Delete Auction Page ${confirmDeleteMapPage || ""}?`}
+      message={`This will remove all assignments under Page ${confirmDeleteMapPage || ""} for the selected map resource.`}
+      token={DELETE_TOKEN}
+      confirmLabel="Delete Page"
+      onCancel={() => setConfirmDeleteMapPage(null)}
+      onConfirm={() => executeDeleteMapPage(confirmDeleteMapPage)}
+    />
     </>
   );
 }

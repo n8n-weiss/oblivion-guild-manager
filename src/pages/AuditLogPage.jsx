@@ -4,15 +4,18 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { useGuild } from '../context/GuildContext';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
+import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 
 function AuditLogPage() {
   const { isArchitect, showToast } = useGuild();
+  const CLEAR_TOKEN = "DELETE";
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterAction, setFilterAction] = useState("All");
   const [filterUser, setFilterUser] = useState("All");
   const [isClearing, setIsClearing] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   useEffect(() => {
     const loadLogs = async () => {
@@ -30,7 +33,10 @@ function AuditLogPage() {
   }, []);
 
   const clearLogs = async () => {
-    if (!window.confirm("Are you sure you want to PERMANENTLY delete all audit logs? This cannot be undone.")) return;
+    setShowConfirmClear(true);
+  };
+
+  const confirmClearLogs = async () => {
     setIsClearing(true);
     try {
       const snap = await getDocs(collection(db, "auditlogs"));
@@ -39,6 +45,7 @@ function AuditLogPage() {
       await batch.commit();
       setLogs([]);
       showToast("Audit logs cleared successfully", "success");
+      setShowConfirmClear(false);
     } catch (err) {
       console.error("Clear logs error:", err);
       showToast("Failed to clear logs", "error");
@@ -173,6 +180,15 @@ function AuditLogPage() {
           </div>
         ))}
       </div>
+      <ConfirmDangerModal
+        open={showConfirmClear}
+        title="Clear All Audit Logs?"
+        message="This will permanently delete all audit logs. This action cannot be undone."
+        token={CLEAR_TOKEN}
+        confirmLabel={isClearing ? "Clearing..." : "Clear Logs"}
+        onCancel={() => setShowConfirmClear(false)}
+        onConfirm={confirmClearLogs}
+      />
     </div>
   );
 }

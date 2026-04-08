@@ -11,6 +11,7 @@ import Icon from "./components/ui/icons";
 import Toast from "./components/ui/Toast";
 import { MemberAvatar } from "./components/common/MemberAvatar";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
+import Modal from "./components/ui/Modal";
 
 import TreasuryModal from "./components/common/TreasuryModal";
 import { NotificationCenter } from "./components/common/NotificationCenter";
@@ -97,6 +98,7 @@ export default function App() {
   const [retryBusy, setRetryBusy] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [diagCopied, setDiagCopied] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
   const pendingRequestsCount = 
@@ -119,6 +121,64 @@ export default function App() {
       showToast("App updated to the latest version after sync. Please retry your action.", "info");
     }
   }, [showToast]);
+
+  React.useEffect(() => {
+    let awaitingGo = false;
+    let goTimeout = null;
+    const resetGo = () => {
+      awaitingGo = false;
+      if (goTimeout) {
+        window.clearTimeout(goTimeout);
+        goTimeout = null;
+      }
+    };
+    const handleKeyDown = (e) => {
+      const targetTag = (e.target?.tagName || "").toLowerCase();
+      const typing = e.target?.isContentEditable || targetTag === "input" || targetTag === "textarea" || targetTag === "select";
+      if (e.key === "Escape") {
+        setShowNotifications(false);
+        setShowDiag(false);
+        setShowShortcutsHelp(false);
+        resetGo();
+        return;
+      }
+      if (typing) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcutsHelp(true);
+        resetGo();
+        return;
+      }
+      if (e.key === "/") {
+        e.preventDefault();
+        const search = document.querySelector('input[placeholder*="Search"], input[placeholder*="search"]');
+        if (search) search.focus();
+        resetGo();
+        return;
+      }
+      if (awaitingGo) {
+        const key = e.key.toLowerCase();
+        const map = { m: "members", e: "events", a: "auction", l: "leaderboard", d: "dashboard", p: "party", r: "report", i: "import" };
+        if (map[key]) {
+          e.preventDefault();
+          setPage(map[key]);
+          setProfileMember(null);
+          window.scrollTo(0, 0);
+        }
+        resetGo();
+        return;
+      }
+      if (e.key.toLowerCase() === "g") {
+        awaitingGo = true;
+        goTimeout = window.setTimeout(resetGo, 1400);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      resetGo();
+    };
+  }, [setPage]);
 
 
   const handleSignOut = async () => {
@@ -687,6 +747,20 @@ export default function App() {
       </main>
 
       {showTreasury && <TreasuryModal onClose={() => setShowTreasury(false)} />}
+      {showShortcutsHelp && (
+        <Modal
+          title="Keyboard Shortcuts"
+          onClose={() => setShowShortcutsHelp(false)}
+          footer={<button className="btn btn-primary" onClick={() => setShowShortcutsHelp(false)}>Close</button>}
+        >
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8 }}>
+            <div><strong>/</strong> Focus first search input</div>
+            <div><strong>g then m/e/a/l/d/p/r/i</strong> Quick go to page</div>
+            <div><strong>?</strong> Open this help</div>
+            <div><strong>Esc</strong> Close overlays/panels</div>
+          </div>
+        </Modal>
+      )}
       {toast && <Toast key={toast.key} message={toast.message} type={toast.type} action={toast.action} onDone={() => setToast(null)} />}
     </div>
   );

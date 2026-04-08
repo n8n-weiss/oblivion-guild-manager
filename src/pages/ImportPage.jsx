@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import DiscordSettings from '../components/common/DiscordSettings';
+import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function ImportPage() {
   const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot } = useGuild();
+  const CONFIRM_TOKEN = "RESTORE";
   const [preview, setPreview] = useState([]);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -14,6 +16,8 @@ function ImportPage() {
   const [activeTab, setActiveTab] = useState("import");
   const [backupMode, setBackupMode] = useState("replace");
   const [restorePreview, setRestorePreview] = useState(null);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -115,9 +119,7 @@ function ImportPage() {
   const confirmImport = (mode) => {
     if (preview.length === 0) return;
     if (mode === "replace") {
-      if (!window.confirm("ARE YOU SURE? This will DELETE all current members and replace them with the CSV data. This action cannot be undone.")) return;
-      setMembers(preview);
-      showToast(`${preview.length} members imported (replaced all)`, "success");
+      setShowReplaceConfirm(true);
     } else {
       const merged = [...members];
       let added = 0, updated = 0;
@@ -145,8 +147,8 @@ function ImportPage() {
       });
       setMembers(merged);
       showToast(`Import done: ${added} added, ${updated} updated`, "success");
+      setImported(true); setPreview([]); setFileName("");
     }
-    setImported(true); setPreview([]); setFileName("");
   };
 
   const exportToCSV = () => {
@@ -242,12 +244,19 @@ function ImportPage() {
 
   const confirmRestorePreview = async () => {
     if (!restorePreview?.payload) return;
-    const sure = window.confirm(
-      backupMode === "replace"
-        ? "RESTORE (REPLACE) will overwrite current roster/events/absences. Continue?"
-        : "RESTORE (MERGE) will upsert backup records into current data. Continue?"
-    );
-    if (!sure) return;
+    setShowRestoreConfirm(true);
+  };
+
+  const doReplaceImport = () => {
+    setMembers(preview);
+    showToast(`${preview.length} members imported (replaced all)`, "success");
+    setImported(true);
+    setPreview([]);
+    setFileName("");
+    setShowReplaceConfirm(false);
+  };
+
+  const doRestore = async () => {
     try {
       // Safety net: auto-export current live state before applying incoming restore file.
       const safetySnapshot = await exportBackupSnapshot();
@@ -255,6 +264,7 @@ function ImportPage() {
       await restoreBackupSnapshot(restorePreview.payload, backupMode);
       showToast("Backup restore completed (safety backup exported first)", "success");
       setRestorePreview(null);
+      setShowRestoreConfirm(false);
     } catch (err) {
       console.error(err);
       showToast("Backup restore failed", "error");
@@ -436,6 +446,28 @@ function ImportPage() {
           </div>
         </div>
       )}
+      <ConfirmDangerModal
+        open={showReplaceConfirm}
+        title="Replace All Members?"
+        message="This will delete all current member entries and replace them with CSV preview data."
+        token={CONFIRM_TOKEN}
+        confirmLabel="Replace All"
+        onCancel={() => setShowReplaceConfirm(false)}
+        onConfirm={doReplaceImport}
+      />
+      <ConfirmDangerModal
+        open={showRestoreConfirm}
+        title={`Confirm Restore (${backupMode === "replace" ? "Replace" : "Merge"})`}
+        message={
+          backupMode === "replace"
+            ? "Restore replace mode will overwrite current roster/events/absences."
+            : "Restore merge mode will upsert backup records into current data."
+        }
+        token={CONFIRM_TOKEN}
+        confirmLabel="Run Restore"
+        onCancel={() => setShowRestoreConfirm(false)}
+        onConfirm={doRestore}
+      />
     </div>
   );
 }
