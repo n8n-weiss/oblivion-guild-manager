@@ -59,7 +59,10 @@ function AuctionBuilder() {
           mIdFromKey = key.substring(0, key.length - col.name.length - 1).trim().toLowerCase();
         }
         
-        const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mIdFromKey);
+        const member = members.find(m => {
+          const mId = (m.memberId || "").trim().toLowerCase();
+          return mId === mIdFromKey;
+        });
         if (!member) return;
         
         tags.forEach(tag => {
@@ -68,7 +71,7 @@ function AuctionBuilder() {
             sessionId: s.id,
             sessionName: s.name,
             date: s.date,
-            memberId: member.memberId,
+            memberId: member.memberId, // Official casing
             ign: member.ign,
             colId: col.id,
             colName: col.name,
@@ -379,25 +382,26 @@ function AuctionBuilder() {
     lootHistory.filter(h => !h.isOutbid && h.sessionId !== activeSession).forEach(h => {
       const lowerCat = h.colName.toLowerCase().trim();
       const cat = normMap[lowerCat] || h.colName;
+      const normMemberId = (h.memberId || "").trim().toLowerCase();
       
       if (!data[cat]) data[cat] = {};
-      if (!data[cat][h.memberId]) data[cat][h.memberId] = { total: 0, allTags: [], sessions: {} };
+      if (!data[cat][normMemberId]) data[cat][normMemberId] = { total: 0, allTags: [], sessions: {} };
       
       const expanded = expandTags([h.tag]);
-      data[cat][h.memberId].allTags.push(...expanded);
-      data[cat][h.memberId].total += expanded.length;
+      data[cat][normMemberId].allTags.push(...expanded);
+      data[cat][normMemberId].total += expanded.length;
 
       const sId = h.sessionId;
-      if (!data[cat][h.memberId].sessions[sId]) {
+      if (!data[cat][normMemberId].sessions[sId]) {
          const pastSesh = auctionSessions.find(s => s.id === sId) || {};
-         data[cat][h.memberId].sessions[sId] = {
+         data[cat][normMemberId].sessions[sId] = {
            id: sId,
            name: pastSesh.name || "Past Session",
            date: pastSesh.date || h.date,
            items: []
          };
       }
-      data[cat][h.memberId].sessions[sId].items.push(...expanded);
+      data[cat][normMemberId].sessions[sId].items.push(...expanded);
     });
 
     // 2. Process Current Active Session
@@ -406,33 +410,33 @@ function AuctionBuilder() {
         const col = session.columns?.find(c => isCellForColumn(key, c));
         if (!col) return;
         
-        let mId = "";
-        if (key.endsWith(`_${col.id}`)) mId = key.substring(0, key.length - col.id.length - 1);
-        else mId = key.substring(0, key.length - col.name.length - 1);
+        let mIdExtraction = "";
+        if (key.endsWith(`_${col.id}`)) mIdExtraction = key.substring(0, key.length - col.id.length - 1);
+        else mIdExtraction = key.substring(0, key.length - col.name.length - 1);
         
-        const memberId = mId.trim().toLowerCase();
+        const normMemberId = mIdExtraction.trim().toLowerCase();
         
         const lowerCat = col.name.toLowerCase().trim();
         const cat = normMap[lowerCat] || col.name;
         const validTags = (tags || []).filter(t => !t.startsWith("!"));
         
         if (!data[cat]) data[cat] = {};
-        if (!data[cat][memberId]) data[cat][memberId] = { total: 0, allTags: [], sessions: {} };
+        if (!data[cat][normMemberId]) data[cat][normMemberId] = { total: 0, allTags: [], sessions: {} };
         
         const expanded = expandTags(validTags);
-        data[cat][memberId].allTags.push(...expanded);
-        data[cat][memberId].total += expanded.length;
+        data[cat][normMemberId].allTags.push(...expanded);
+        data[cat][normMemberId].total += expanded.length;
 
         const sId = activeSession;
-        if (!data[cat][memberId].sessions[sId]) {
-           data[cat][memberId].sessions[sId] = {
-               id: activeSession,
-               name: session.name || "Current Session",
-               date: session.date || new Date().toISOString(),
-               items: []
-           };
+        if (!data[cat][normMemberId].sessions[sId]) {
+            data[cat][normMemberId].sessions[sId] = {
+                id: activeSession,
+                name: session.name || "Current Session",
+                date: session.date || new Date().toISOString(),
+                items: []
+            };
         }
-        data[cat][memberId].sessions[sId].items.push(...expanded);
+        data[cat][normMemberId].sessions[sId].items.push(...expanded);
       });
     }
     return data;
@@ -1340,7 +1344,7 @@ function AuctionBuilder() {
                    }
                    const activeMembersWithResources = members
                      .map(m => {
-                       const historyData = historyMap[m.memberId] || { total: 0, allTags: [], sessions: {} };
+                       const historyData = historyMap[(m.memberId || '').trim().toLowerCase()] || { total: 0, allTags: [], sessions: {} };
                        return { ...m, ...historyData };
                      })
                      .filter(m => {
