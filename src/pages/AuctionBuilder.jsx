@@ -26,23 +26,13 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   setDraggedOverSlot,
   dragging,
   mapSummary,
-  mapPageStats,
-  mapStatusFilter,
-  setMapStatusFilter
+  mapPageStats
 }) {
   if (sidebarTab !== "map") return null;
 
   const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split("R")[0], 10)));
   const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
-  const pageList = Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => {
-    if (mapStatusFilter === "all") return true;
-    const stats = mapPageStats[p] || { conflictSlots: 0, unassignedSlots: 4, hasMine: false, score: 0 };
-    if (mapStatusFilter === "conflict") return stats.conflictSlots > 0;
-    if (mapStatusFilter === "unassigned") return stats.unassignedSlots > 0;
-    if (mapStatusFilter === "mine") return stats.hasMine;
-    if (mapStatusFilter === "hot") return stats.score >= 5;
-    return true;
-  });
+  const pageList = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
     <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
@@ -64,18 +54,8 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
         </div>
       </div>
       <div style={{ position: "sticky", top: 0, zIndex: 3, marginBottom: 10, background: "rgba(10,12,18,0.9)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 8 }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          {[
-            { id: "all", label: "All" },
-            { id: "conflict", label: "Conflicts" },
-            { id: "unassigned", label: "Unassigned" },
-            { id: "mine", label: "Mine" },
-            { id: "hot", label: "High Heat" }
-          ].map((f) => (
-            <button key={f.id} className={`btn btn-sm ${mapStatusFilter === f.id ? "btn-primary" : "btn-ghost"}`} style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => setMapStatusFilter(f.id)}>
-              {f.label}
-            </button>
-          ))}
+        <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>
+          Map Overview
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6 }}>
           <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(255,255,255,0.03)", textAlign: "center" }}>Pages<br /><strong>{mapSummary.pages}</strong></div>
@@ -241,10 +221,8 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
     prev.dragging === next.dragging &&
     prev.mapSummary === next.mapSummary &&
     prev.mapPageStats === next.mapPageStats &&
-    prev.mapStatusFilter === next.mapStatusFilter &&
     prev.handleDropdownAssignment === next.handleDropdownAssignment &&
-    prev.handleDeleteMapPage === next.handleDeleteMapPage &&
-    prev.setMapStatusFilter === next.setMapStatusFilter
+    prev.handleDeleteMapPage === next.handleDeleteMapPage
   );
 });
 
@@ -368,9 +346,21 @@ function AuctionBuilder() {
   const [confirmDeleteMapPage, setConfirmDeleteMapPage] = useState(null);
   const mapSidebarPerfRef = React.useRef({ commits: 0, totalActualDuration: 0 });
   const trackerListRef = React.useRef(null);
-  const [mapStatusFilter, setMapStatusFilter] = useState(() => localStorage.getItem("auction_mapStatusFilter") || "all");
   const [trackerCompactMode, setTrackerCompactMode] = useState(() => localStorage.getItem("auction_trackerCompactMode") === "1");
   const [trackerGroupCollapsed, setTrackerGroupCollapsed] = useState({});
+  const [trackerAnomalyRules, setTrackerAnomalyRules] = useState(() => {
+    try {
+      const raw = localStorage.getItem("auction_trackerAnomalyRules_v1");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        dropRatio: typeof parsed?.dropRatio === "number" ? parsed.dropRatio : 0.4,
+        spikeRatio: typeof parsed?.spikeRatio === "number" ? parsed.spikeRatio : 1.8,
+        minBase: typeof parsed?.minBase === "number" ? parsed.minBase : 2
+      };
+    } catch {
+      return { dropRatio: 0.4, spikeRatio: 1.8, minBase: 2 };
+    }
+  });
 
   React.useEffect(() => {
     try {
@@ -400,8 +390,8 @@ function AuctionBuilder() {
   React.useEffect(() => { localStorage.setItem("auction_historySearch", historySearch); }, [historySearch]);
   React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
   React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
-  React.useEffect(() => { localStorage.setItem("auction_mapStatusFilter", mapStatusFilter); }, [mapStatusFilter]);
   React.useEffect(() => { localStorage.setItem("auction_trackerCompactMode", trackerCompactMode ? "1" : "0"); }, [trackerCompactMode]);
+  React.useEffect(() => { localStorage.setItem("auction_trackerAnomalyRules_v1", JSON.stringify(trackerAnomalyRules)); }, [trackerAnomalyRules]);
   React.useEffect(() => {
     localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
   }, [newSessionForm, newTemplateName]);
@@ -1622,8 +1612,6 @@ function AuctionBuilder() {
                 dragging={dragging}
                 mapSummary={mapSummary}
                 mapPageStats={mapPageStats}
-                mapStatusFilter={mapStatusFilter}
-                setMapStatusFilter={setMapStatusFilter}
               />
             </React.Profiler>
  
@@ -1644,6 +1632,36 @@ function AuctionBuilder() {
                   <button className={`btn btn-sm ${trackerCompactMode ? "btn-primary" : "btn-ghost"}`} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setTrackerCompactMode(v => !v)}>
                     {trackerCompactMode ? "Compact On" : "Compact Off"}
                   </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Drop ≤</span>
+                    <input
+                      type="number"
+                      min={10}
+                      max={90}
+                      value={Math.round(trackerAnomalyRules.dropRatio * 100)}
+                      onChange={(e) => {
+                        const pct = Number(e.target.value || 40);
+                        const next = Math.max(10, Math.min(90, pct));
+                        setTrackerAnomalyRules(prev => ({ ...prev, dropRatio: next / 100 }));
+                      }}
+                      style={{ width: 48, fontSize: 10, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--border)", background: "rgba(0,0,0,0.3)", color: "var(--text-primary)" }}
+                    />
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>%</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Spike ≥</span>
+                    <input
+                      type="number"
+                      min={110}
+                      max={300}
+                      value={Math.round(trackerAnomalyRules.spikeRatio * 100)}
+                      onChange={(e) => {
+                        const pct = Number(e.target.value || 180);
+                        const next = Math.max(110, Math.min(300, pct));
+                        setTrackerAnomalyRules(prev => ({ ...prev, spikeRatio: next / 100 }));
+                      }}
+                      style={{ width: 52, fontSize: 10, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--border)", background: "rgba(0,0,0,0.3)", color: "var(--text-primary)" }}
+                    />
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>%</span>
+                  </div>
                </div>
                <div style={{ position: "relative", marginBottom: 10 }}>
                   <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "rgba(0,0,0,0.3)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
@@ -1727,8 +1745,8 @@ function AuctionBuilder() {
                                 const memberSessions = Object.values(m.sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date));
                                 const latestCount = memberSessions[0]?.items?.length || 0;
                                 const prevCount = memberSessions[1]?.items?.length || 0;
-                                const drop = prevCount >= 2 && latestCount <= Math.max(0, Math.floor(prevCount * 0.4));
-                                const spike = prevCount > 0 && latestCount >= Math.ceil(prevCount * 1.8);
+                                const drop = prevCount >= trackerAnomalyRules.minBase && latestCount <= Math.max(0, Math.floor(prevCount * trackerAnomalyRules.dropRatio));
+                                const spike = prevCount >= 1 && latestCount >= Math.ceil(prevCount * trackerAnomalyRules.spikeRatio);
                                 const latestMemberDate = memberSessions[0]?.date ? new Date(memberSessions[0].date).getTime() : 0;
                                 const missingLast = latestSessionDate > 0 && latestMemberDate > 0 && latestMemberDate < latestSessionDate;
                                 return (
