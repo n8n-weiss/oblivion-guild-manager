@@ -631,10 +631,19 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     try {
+      // Build dynamic content string (mentions)
+      let content = "";
+      const catMentions = catConfig?.mentions || {};
+      const mentionParts = [];
+      if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
+      if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
+      if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
+      content = mentionParts.join(" ");
+
       const formData = new FormData();
       formData.append('file', blob, fileName);
       formData.append('payload_json', JSON.stringify({
-        content: "",
+        content,
         embeds: [{
           title: discordConfig.templates?.[category]?.title || "Results Attachment",
           description: finalDesc,
