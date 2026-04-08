@@ -931,6 +931,80 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const exportBackupSnapshot = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    const [rosterSnap, eventsSnap, absencesSnap] = await Promise.all([
+      getDocs(collection(db, "roster")),
+      getDocs(collection(db, "events")),
+      getDocs(collection(db, "absences"))
+    ]);
+    const [metaParties, metaAuction, metaDiscord] = await Promise.all([
+      getDoc(doc(db, "metadata", "parties")),
+      getDoc(doc(db, "metadata", "auction")),
+      getDoc(doc(db, "metadata", "discord"))
+    ]);
+    return {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      roster: rosterSnap.docs.map(d => d.data()),
+      events: eventsSnap.docs.map(d => d.data()),
+      absences: absencesSnap.docs.map(d => d.data()),
+      metadata: {
+        parties: metaParties.exists() ? metaParties.data() : {},
+        auction: metaAuction.exists() ? metaAuction.data() : {},
+        discord: metaDiscord.exists() ? metaDiscord.data() : {}
+      }
+    };
+  };
+
+  const restoreBackupSnapshot = async (payload, mode = "replace") => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    if (!payload || typeof payload !== "object") throw new Error("INVALID_PAYLOAD");
+    const roster = Array.isArray(payload.roster) ? payload.roster : [];
+    const eventsData = Array.isArray(payload.events) ? payload.events : [];
+    const absencesData = Array.isArray(payload.absences) ? payload.absences : [];
+    const metadata = payload.metadata || {};
+
+    if (mode === "replace") {
+      const [oldRoster, oldEvents, oldAbsences] = await Promise.all([
+        getDocs(collection(db, "roster")),
+        getDocs(collection(db, "events")),
+        getDocs(collection(db, "absences"))
+      ]);
+      const clearBatch = writeBatch(db);
+      oldRoster.docs.forEach(d => clearBatch.delete(doc(db, "roster", d.id)));
+      oldEvents.docs.forEach(d => clearBatch.delete(doc(db, "events", d.id)));
+      oldAbsences.docs.forEach(d => clearBatch.delete(doc(db, "absences", d.id)));
+      await clearBatch.commit();
+    }
+
+    const writeInChunks = async (ops) => {
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = writeBatch(db);
+        ops.slice(i, i + 400).forEach(fn => fn(b));
+        await b.commit();
+      }
+    };
+
+    const ops = [];
+    roster.forEach(m => {
+      if (m?.memberId) ops.push((b) => b.set(doc(db, "roster", m.memberId), m));
+    });
+    eventsData.forEach(e => {
+      if (e?.eventId) ops.push((b) => b.set(doc(db, "events", e.eventId), e));
+    });
+    absencesData.forEach(a => {
+      if (a?.id) ops.push((b) => b.set(doc(db, "absences", a.id), a));
+    });
+    await writeInChunks(ops);
+
+    await Promise.all([
+      setDoc(doc(db, "metadata", "parties"), metadata.parties || {}, { merge: true }),
+      setDoc(doc(db, "metadata", "auction"), metadata.auction || {}, { merge: true }),
+      setDoc(doc(db, "metadata", "discord"), metadata.discord || {}, { merge: true })
+    ]);
+  };
+
   const submitJoinRequest = async (data) => {
     try {
       const exists = members.some(m => m.memberId?.toLowerCase() === data.uid.toLowerCase());
@@ -1169,7 +1243,7 @@ export const GuildProvider = ({ children, initialData }) => {
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, syncStatus, triggerSyncRetry,
-    resetDatabase
+    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot
 
   };
 

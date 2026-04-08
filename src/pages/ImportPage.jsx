@@ -4,7 +4,7 @@ import Icon from '../components/ui/icons';
 import DiscordSettings from '../components/common/DiscordSettings';
 
 function ImportPage() {
-  const { members, setMembers, showToast, isArchitect } = useGuild();
+  const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot } = useGuild();
   const [preview, setPreview] = useState([]);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -12,6 +12,8 @@ function ImportPage() {
   const [defaultJoinDate, setDefaultJoinDate] = useState("");
   const [protectExistingData, setProtectExistingData] = useState(true);
   const [activeTab, setActiveTab] = useState("import");
+  const [backupMode, setBackupMode] = useState("replace");
+  const [restorePreview, setRestorePreview] = useState(null);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -183,6 +185,82 @@ function ImportPage() {
     }
   };
 
+  const downloadBackup = async () => {
+    try {
+      const snapshot = await exportBackupSnapshot();
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json;charset=utf-8" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `oblivion_backup_${new Date().toISOString().split("T")[0]}.json`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Backup exported", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Backup export failed", "error");
+    }
+  };
+
+  const downloadJsonFile = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleRestoreFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      setRestorePreview({
+        fileName: file.name,
+        payload,
+        counts: {
+          roster: Array.isArray(payload?.roster) ? payload.roster.length : 0,
+          events: Array.isArray(payload?.events) ? payload.events.length : 0,
+          absences: Array.isArray(payload?.absences) ? payload.absences.length : 0,
+          metadataDocs: ["parties", "auction", "discord"].filter(k => payload?.metadata?.[k]).length
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("Backup restore failed (invalid file or data)", "error");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const confirmRestorePreview = async () => {
+    if (!restorePreview?.payload) return;
+    const sure = window.confirm(
+      backupMode === "replace"
+        ? "RESTORE (REPLACE) will overwrite current roster/events/absences. Continue?"
+        : "RESTORE (MERGE) will upsert backup records into current data. Continue?"
+    );
+    if (!sure) return;
+    try {
+      // Safety net: auto-export current live state before applying incoming restore file.
+      const safetySnapshot = await exportBackupSnapshot();
+      downloadJsonFile(safetySnapshot, `oblivion_pre_restore_backup_${new Date().toISOString().split("T")[0]}.json`);
+      await restoreBackupSnapshot(restorePreview.payload, backupMode);
+      showToast("Backup restore completed (safety backup exported first)", "success");
+      setRestorePreview(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Backup restore failed", "error");
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -194,6 +272,9 @@ function ImportPage() {
         <button className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`} onClick={() => setActiveTab('import')}>📥 Import</button>
         <button className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>📤 Export</button>
         <button className={`tab-btn ${activeTab === 'discord' ? 'active' : ''}`} onClick={() => setActiveTab('discord')}>🤖 Discord</button>
+        {isArchitect && (
+          <button className={`tab-btn ${activeTab === 'backup' ? 'active' : ''}`} onClick={() => setActiveTab('backup')}>🧰 Backup</button>
+        )}
       </div>
 
       {activeTab === 'import' && (
@@ -255,6 +336,56 @@ function ImportPage() {
       <div className={activeTab === 'discord' ? 'animate-fade-in' : 'hidden'}>
         <DiscordSettings />
       </div>
+
+      {activeTab === 'backup' && isArchitect && (
+        <div className="animate-fade-in">
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">🧰 Backup / Restore (Architect)</div>
+            <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
+              Includes: roster, events, absences, and metadata split docs (parties/auction/discord).
+            </div>
+            <div className="flex gap-2" style={{ marginBottom: 14 }}>
+              <button className="btn btn-primary" onClick={downloadBackup}>
+                <Icon name="save" size={12} /> Export Full Backup
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <label className="text-xs font-bold">Restore Mode</label>
+              <select className="form-select" style={{ width: 180 }} value={backupMode} onChange={e => setBackupMode(e.target.value)}>
+                <option value="replace">Replace (overwrite)</option>
+                <option value="merge">Merge (upsert)</option>
+              </select>
+            </div>
+            <label className="btn btn-danger" style={{ width: "fit-content", cursor: "pointer" }}>
+              <Icon name="upload" size={12} /> Restore From Backup JSON
+              <input type="file" accept=".json,application/json" style={{ display: "none" }} onChange={handleRestoreFile} />
+            </label>
+            {restorePreview && (
+              <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(240,192,64,0.08)", border: "1px solid rgba(240,192,64,0.25)" }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "var(--gold)", marginBottom: 8 }}>
+                  Restore Dry-Run Preview
+                </div>
+                <div className="text-xs text-muted" style={{ marginBottom: 8 }}>
+                  File: {restorePreview.fileName}
+                </div>
+                <div className="text-xs" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+                  <span>Roster: <strong>{restorePreview.counts.roster}</strong></span>
+                  <span>Events: <strong>{restorePreview.counts.events}</strong></span>
+                  <span>Absences: <strong>{restorePreview.counts.absences}</strong></span>
+                  <span>Metadata Docs: <strong>{restorePreview.counts.metadataDocs}</strong></span>
+                </div>
+                <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
+                  Mode impact: {backupMode === "replace" ? "Current roster/events/absences will be overwritten." : "Backup data will be merged into current data."}
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn btn-danger btn-sm" onClick={confirmRestorePreview}>Confirm Restore</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setRestorePreview(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'import' && preview.length > 0 && (
         <div className="card">
