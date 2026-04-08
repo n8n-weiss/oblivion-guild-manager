@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -23,7 +23,7 @@ const migrateMentions = (cat, defaultType = "none") => {
 };
 
 const GuildContext = createContext();
-
+// eslint-disable-next-line react-refresh/only-export-components
 export const useGuild = () => useContext(GuildContext);
 
 export const GuildProvider = ({ children, initialData }) => {
@@ -151,7 +151,7 @@ export const GuildProvider = ({ children, initialData }) => {
             setMyMemberId(null);
             await setDoc(doc(db, "userroles", user.uid), { role: "member", email: user.email, displayName: user.email, memberId: null });
           }
-        } catch (err) { setUserRole("member"); setMyMemberId(null); }
+        } catch { setUserRole("member"); setMyMemberId(null); }
       } else {
         setCurrentUser(null);
         setUserRole(null);
@@ -245,6 +245,7 @@ export const GuildProvider = ({ children, initialData }) => {
           const currentMetaString = JSON.stringify(data);
           if (currentMetaString === prevData.current.lastMetaRaw) return;
           prevData.current.lastMetaRaw = currentMetaString;
+          prevData.current.metaVersion = Number(data.version || 0);
 
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
@@ -401,6 +402,8 @@ export const GuildProvider = ({ children, initialData }) => {
       try {
         const batch = writeBatch(db);
         let changesCount = 0;
+        let metadataPayload = null;
+        let shouldSaveMetadata = false;
         if (JSON.stringify(members) !== JSON.stringify(prevData.current.members)) {
           const uniqueMembers = Array.from(new Map(members.map(m => [m.memberId, m])).values());
           const currentMemberIds = new Set(uniqueMembers.map(m => m.memberId));
@@ -471,23 +474,16 @@ export const GuildProvider = ({ children, initialData }) => {
         ) {
           const wrappedParties = parties.map(p => ({ members: p }));
           const wrappedRaids = raidParties.map(p => ({ members: p }));
-          batch.set(doc(db, "metadata", "current"), {
+          metadataPayload = {
             parties: wrappedParties, partyNames,
             raidParties: wrappedRaids, raidPartyNames,
             auctionSessions, auctionTemplates,
             discord: discordConfig,
             resourceCategories,
-            lastUpdate: new Date().toISOString()
-          });
-          prevData.current.parties = [...parties];
-          prevData.current.partyNames = [...partyNames];
-          prevData.current.auctionSessions = [...auctionSessions];
-          prevData.current.auctionTemplates = [...auctionTemplates];
-          prevData.current.raidParties = [...raidParties];
-          prevData.current.raidPartyNames = [...raidPartyNames];
-          prevData.current.discordConfig = { ...discordConfig };
-          prevData.current.resourceCategories = [...resourceCategories];
-          changesCount++;
+            lastUpdate: new Date().toISOString(),
+            lastEditorUid: currentUser?.uid || null
+          };
+          shouldSaveMetadata = true;
         }
         if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
           const currentIds = new Set(absences.map(a => a.id));
@@ -500,11 +496,46 @@ export const GuildProvider = ({ children, initialData }) => {
         if (changesCount > 0) {
           await batch.commit();
         }
+        if (shouldSaveMetadata && metadataPayload) {
+          const metadataRef = doc(db, "metadata", "current");
+          const baseVersion = Number(prevData.current.metaVersion || 0);
+          try {
+            const nextVersion = await runTransaction(db, async (tx) => {
+              const snap = await tx.get(metadataRef);
+              const remote = snap.exists() ? snap.data() : {};
+              const remoteVersion = Number(remote.version || 0);
+              if (remoteVersion !== baseVersion) {
+                throw new Error("META_VERSION_CONFLICT");
+              }
+              const updatedVersion = remoteVersion + 1;
+              tx.set(metadataRef, { ...metadataPayload, version: updatedVersion }, { merge: true });
+              return updatedVersion;
+            });
+
+            // Only mark local as synced when transaction succeeds.
+            prevData.current.parties = [...parties];
+            prevData.current.partyNames = [...partyNames];
+            prevData.current.auctionSessions = [...auctionSessions];
+            prevData.current.auctionTemplates = [...auctionTemplates];
+            prevData.current.raidParties = [...raidParties];
+            prevData.current.raidPartyNames = [...raidPartyNames];
+            prevData.current.discordConfig = { ...discordConfig };
+            prevData.current.resourceCategories = [...resourceCategories];
+            prevData.current.metaVersion = nextVersion;
+            changesCount++;
+          } catch (metaErr) {
+            if (metaErr?.message === "META_VERSION_CONFLICT") {
+              showToast("Another officer saved changes first. Reloaded latest metadata to avoid overwrite.", "warning");
+            } else {
+              throw metaErr;
+            }
+          }
+        }
       } catch (err) { console.error("Firebase save error:", err); }
     };
     const timeout = setTimeout(saveData, 1000);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, loading]);
+  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, resourceCategories, currentUser?.uid, loading]);
 
   useEffect(() => {
     if (loading) return;
@@ -539,7 +570,7 @@ export const GuildProvider = ({ children, initialData }) => {
     showToast("Notification sent", "success");
   };
 
-   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, mentionType = "none", category = null, templateKey = null, placeholders = {}, memberMentionId = null) => {
+   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null) => {
      const catConfig = category ? discordConfig.notifications?.[category] : null;
 
      if (catConfig && !catConfig.enabled) {
@@ -730,7 +761,6 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Discord", value: data.discord, inline: true }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "both",
         "join_requests",
         "new_join",
         { ign: data.ign, class: data.jobClass, role: data.role, uid: data.uid, discord: data.discord }
@@ -769,7 +799,6 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Role", value: r.role, inline: true }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "none",
         "welcome",
         "welcome",
         { ign: r.ign, class: r.jobClass, role: r.role },
@@ -832,7 +861,6 @@ export const GuildProvider = ({ children, initialData }) => {
           { name: "Updates", value: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
         ],
         null,
-        "officer",
         "vanguard",
         "vanguard",
         { ign: m.ign, updates: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
@@ -851,10 +879,6 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       const r = requests.find(x => x.id === requestId);
       if (!r) return;
-
-      const updatedMembers = members.map(m => 
-        m.memberId === r.memberId ? { ...m, ...r.newData } : m
-      );
 
       // Update Roster in Firestore
       await setDoc(doc(db, "roster", r.memberId), { 

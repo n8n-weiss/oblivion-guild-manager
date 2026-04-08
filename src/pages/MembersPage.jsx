@@ -4,10 +4,10 @@ import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
 import { MemberAvatar } from '../components/common/MemberAvatar';
-import { writeAuditLog } from "./AuditLogPage";
+import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, isOfficer, isMember, isArchitect, currentUser, onlineUsers = [] } = useGuild();
+  const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers = [] } = useGuild();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("active");
@@ -87,14 +87,6 @@ function MembersPage({ onViewProfile }) {
     themes["Diva"] = { color: "var(--color-priest)", icon: "🎤" };
     return themes;
   }, []);
-  const getRankInfo = (score) => {
-    if (score >= 200) return { rank: "LEGEND", color: "#ff4d4d" };
-    if (score >= 150) return { rank: "ELITE", color: "#ffcc00" };
-    if (score >= 100) return { rank: "VETERAN", color: "#33cc33" };
-    if (score >= 50) return { rank: "SOLDIER", color: "#4db8ff" };
-    return { rank: "NOVICE", color: "#999999" };
-  };
-
   const { attendance = [], performance = [], events = [], eoRatings = [] } = useGuild();
   const getMemberBadges = (mId) => {
     const list = [];
@@ -304,7 +296,7 @@ function MembersPage({ onViewProfile }) {
 
           {/* Mobile Card List */}
           <div className="show-on-mobile">
-            {filtered.map((m, i) => {
+            {filtered.map((m) => {
               const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
               const idx = members.indexOf(m);
               const isOnline = onlineUsers.some(ou => (ou.memberId && ou.memberId === m.memberId) || (ou.displayName && ou.displayName.toLowerCase() === m.ign.toLowerCase()));

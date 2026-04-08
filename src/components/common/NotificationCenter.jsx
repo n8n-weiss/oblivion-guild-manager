@@ -5,8 +5,6 @@ export function NotificationCenter({ isOpen, onClose }) {
   const { notifications, myMemberId, markNotifRead } = useGuild();
   
   const myNotifs = notifications.filter(n => n.targetId === "all" || n.targetId === myMemberId);
-  const unreadCount = myNotifs.filter(n => !n.isRead && n.targetId !== "all").length;
-
   if (!isOpen) return null;
 
   return (

@@ -8,14 +8,12 @@ import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
 
 function LoginPage() {
+  const MotionDiv = motion.div;
   const { submitJoinRequest } = useGuild();
   const [tab, setTab] = useState("login"); // login, register
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [discordUsername, setDiscordUsername] = useState("");
-  const [uidInput, setUidInput] = useState("");
-
   // Registration States
   const [regDiscord, setRegDiscord] = useState("");
   const [regIgn, setRegIgn] = useState("");
@@ -33,7 +31,7 @@ function LoginPage() {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
+    } catch {
       // Fallback: Check if there's an approved join request that hasn't been "claimed" (created) yet
       try {
         const cleanPass = password.toUpperCase().startsWith("OBL") ? password.toUpperCase() : "OBL" + password;
@@ -100,8 +98,8 @@ function LoginPage() {
       if (success) {
         setSubmitted(true);
       }
-    } catch (err) {
-      setError(err.message || "Failed to submit registration.");
+    } catch (registerErr) {
+      setError(registerErr.message || "Failed to submit registration.");
     } finally {
       setLoading(false);
     }
@@ -122,7 +120,7 @@ function LoginPage() {
       <div style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center", gap: 28, zIndex: 1, position: "relative" }}>
 
         {/* Logo */}
-        <motion.div 
+        <MotionDiv 
           initial={{ y: -30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
@@ -144,10 +142,10 @@ function LoginPage() {
             </div>
           </div>
           <div style={{ fontSize: 11, letterSpacing: 4, color: "var(--text-muted)", textTransform: "uppercase", marginTop: 16, textShadow: "0 2px 4px rgba(158, 158, 158, 0.72)" }}>Guild Portal</div>
-        </motion.div>
+        </MotionDiv>
 
         {/* Card */}
-        <motion.div 
+        <MotionDiv 
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
@@ -293,16 +291,16 @@ function LoginPage() {
               ⚠️ {error}
             </div>
           )}
-        </motion.div>
+        </MotionDiv>
 
-        <motion.div 
+        <MotionDiv 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 1 }}
           style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: 1, zIndex: 1, backgroundColor: "rgba(8,10,15,0.5)", padding: "4px 12px", borderRadius: 12, backdropFilter: "blur(4px)", border: "1px solid var(--border)" }}
         >
           Need help? DM Masters and Officers in Discord.
-        </motion.div>
+        </MotionDiv>
       </div>
     </div>
   );

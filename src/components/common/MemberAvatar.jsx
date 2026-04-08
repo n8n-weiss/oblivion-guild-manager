@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 export const AVATAR_COLORS = [
   {bg:"rgba(99,130,230,0.18)",color:"var(--accent)"},
   {bg:"rgba(224,92,138,0.18)",color:"var(--accent2)"},

@@ -8,7 +8,7 @@ function AuctionBuilder() {
   const {
     members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
-    attendance, events, resourceCategories, setResourceCategories,
+    resourceCategories, setResourceCategories,
     sendDiscordImage
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
@@ -20,9 +20,7 @@ function AuctionBuilder() {
   const [newSessionForm, setNewSessionForm] = useState({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
   const [newTemplateName, setNewTemplateName] = useState("");
   const [editingCell, setEditingCell] = useState(null); // { memberId, colId }
-  const [cellInput, setCellInput] = useState("");
   const [editingColId, setEditingColId] = useState(null);
-  const [colNameInput, setColNameInput] = useState("");
   const [dragging, setDragging] = useState(null); // memberId
   const [dragOver, setDragOver] = useState(null); // "table" | "pool"
   const [poolSearch, setPoolSearch] = useState("");
@@ -31,7 +29,6 @@ function AuctionBuilder() {
   const [cardSearch, setCardSearch] = useState("");
   const [maxVisiblePage, setMaxVisiblePage] = useState(1);
   const [selectedMapPage, setSelectedMapPage] = useState(1);
-  const [mapResourceFilter, setMapResourceFilter] = useState("cards"); // "cards" | "other"
   const [selectedMapColId, setSelectedMapColId] = useState(null);
   const [trackerTab, setTrackerTab] = useState("Card Album"); // Default initial tab
   const [sidebarTab, setSidebarTab] = useState("map"); // "map" | "tracker"
@@ -196,12 +193,6 @@ function AuctionBuilder() {
     updateSession(s => ({ ...s, columns: [...s.columns, { id: `col_${Date.now()}`, name: availableCategories[0] }] }));
   };
 
-  const renameColumn = (colId) => {
-    if (!colNameInput.trim()) return;
-    updateSession(s => ({ ...s, columns: s.columns.map(c => c.id === colId ? { ...c, name: colNameInput } : c) }));
-    setEditingColId(null);
-  };
-
   const handleColumnRename = (colId, value) => {
     if (value === "__new__") {
       const custom = window.prompt("Enter new resource name:");
@@ -229,7 +220,7 @@ function AuctionBuilder() {
         }
       }
     }
-  }, [activeSession, auctionSessions]);
+  }, [activeSession, auctionSessions, selectedMapColId]);
 
   const deleteColumn = (colId) => {
     const session = auctionSessions.find(s => s.id === activeSession);
@@ -285,15 +276,6 @@ function AuctionBuilder() {
   const getCellTags = (memberId, colId) => session?.cells?.[getCellKey(memberId, colId)] || [];
 
   const isCellForColumn = (ck, col) => col && (ck.endsWith(`_${col.id}`) || ck.endsWith(`_${col.name}`));
-
-  const addTag = (memberId, colId, tag) => {
-    if (!tag.trim()) return;
-    const key = getCellKey(memberId, colId);
-    updateSession(s => ({
-      ...s,
-      cells: { ...s.cells, [key]: [...(s.cells[key] || []), tag.trim()] }
-    }));
-  };
 
   const removeTag = (memberId, colId, tagIdx) => {
     const key = getCellKey(memberId, colId);
@@ -443,17 +425,6 @@ function AuctionBuilder() {
     return data;
   }, [activeSession, auctionSessions, lootHistory, resourceCategories]);
 
-  const handleSidebarSlotClick = (page, row = null) => {
-    // Legacy support for click-to-assign if editor is active
-    if (!editingCell) return;
-    const session = auctionSessions.find(s => s.id === activeSession);
-    const col = session?.columns?.find(c => c.id === editingCell.colId);
-    if (!col) return;
-
-    const tag = row ? `P${page}R${row}` : `P${page}`;
-    addTag(editingCell.memberId, editingCell.colId, tag);
-  };
-
   const handleDropdownAssignment = (page, row, memberId) => {
     const sess = auctionSessions.find(s => s.id === activeSession);
     let targetColId = selectedMapColId;
@@ -571,7 +542,8 @@ function AuctionBuilder() {
   const saveAsTemplate = () => {
     if (!session) return;
     if (!newTemplateName.trim()) { showToast("Enter template name", "error"); return; }
-    const template = { id: `TPL_${Date.now()}`, name: newTemplateName, columns: session.columns };
+    const safeName = newTemplateName.trim().toLowerCase().replace(/\s+/g, "_");
+    const template = { id: `TPL_${session.id}_${safeName}`, name: newTemplateName, columns: session.columns };
     setAuctionTemplates(prev => [...prev, template]);
     setNewTemplateName("");
     setShowNewTemplate(false);
@@ -882,7 +854,7 @@ function AuctionBuilder() {
                 {poolSearch ? "No matches" : "All members added"}
               </div>
             )}
-            {pool.map((m, i) => (
+            {pool.map((m) => (
               <div key={m.memberId}
                 draggable
                 onDragStart={() => onDragStart(m.memberId)}
@@ -979,7 +951,7 @@ function AuctionBuilder() {
                                   }}
                                   onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "white"; }}
                                   onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-                                  onClick={() => { setEditingColId(col.id); setColNameInput(col.name); }}
+                                  onClick={() => { setEditingColId(col.id); }}
                                   title="Edit column name"
                                 >
                                   ✎
@@ -1138,7 +1110,6 @@ function AuctionBuilder() {
 
                <div className="space-y-4">
                  {(() => {
-                   const targetColId = selectedMapColId || session?.columns?.[0]?.id;
                    const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split('R')[0])));
                    const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
                    

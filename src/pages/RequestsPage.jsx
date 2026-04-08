@@ -9,7 +9,7 @@ function RequestsPage() {
   const { 
     requests, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
-    isAdmin, isOfficer, isArchitect, members, currentUser 
+    isOfficer, isArchitect, members, currentUser 
   } = useGuild();
   
   const [subTab, setSubTab] = useState("profile"); // profile, join

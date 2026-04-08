@@ -1,5 +1,5 @@
-import React from 'react';
 import { motion } from 'framer-motion';
+const MotionDiv = motion.div;
 
 const Skeleton = ({ width, height, borderRadius = '12px', className = '' }) => {
   return (
@@ -15,7 +15,7 @@ const Skeleton = ({ width, height, borderRadius = '12px', className = '' }) => {
         border: '1px solid rgba(255, 255, 255, 0.05)'
       }}
     >
-      <motion.div
+      <MotionDiv
         initial={{ x: '-100%' }}
         animate={{ x: '100%' }}
         transition={{ 

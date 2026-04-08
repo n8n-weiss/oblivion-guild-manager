@@ -56,8 +56,6 @@ function LeaderboardPage({ onViewProfile }) {
   const maxEoScore = Math.max(...eoLb.map(m => m.totalEoScore), 1);
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
-  const classColors = { Core: "badge-core", Active: "badge-active", Casual: "badge-casual", "At Risk": "badge-atrisk" };
-
   const podiumData = lbMode === "eo" ? eoLb.slice(0, 3) : lb.slice(0, 3);
   
   const getPodiumValue = (m) => {

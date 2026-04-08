@@ -4,7 +4,7 @@ import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 
 function WeeklyReportPage() {
-  const { members, events, attendance, performance, eoRatings } = useGuild();
+  const { members, events, attendance, performance } = useGuild();
   const [copied, setCopied] = useState(false);
   const [weekFilter, setWeekFilter] = useState("all"); // "all" | "thisweek" | "lastweek"
 

@@ -4,7 +4,6 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { useGuild } from '../context/GuildContext';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
-import { writeAuditLog } from '../utils/audit';
 
 
 function AuditLogPage() {
@@ -179,4 +178,3 @@ function AuditLogPage() {
 }
 
 export default AuditLogPage;
-export { writeAuditLog };

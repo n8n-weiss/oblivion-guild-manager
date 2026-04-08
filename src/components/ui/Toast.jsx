@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+const MotionDiv = motion.div;
 
 const TOAST_CONFIG = {
   success: { icon: "✅", label: "Success",  borderColor: "#40c97a", glowColor: "rgba(64,201,122,0.25)", bg: "rgba(64,201,122,0.08)" },
@@ -26,7 +27,7 @@ function Toast({ message, type = "success", onDone, action }) {
 
   return (
     <AnimatePresence>
-      <motion.div
+      <MotionDiv
         key="toast"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -101,7 +102,7 @@ function Toast({ message, type = "success", onDone, action }) {
 
         {/* Progress bar */}
         <div style={{ height: 3, background: "rgba(255,255,255,0.05)", position: "relative" }}>
-          <motion.div
+          <MotionDiv
             style={{
               height: "100%",
               background: `linear-gradient(90deg, ${config.borderColor}, ${config.borderColor}80)`,
@@ -111,7 +112,7 @@ function Toast({ message, type = "success", onDone, action }) {
             }}
           />
         </div>
-      </motion.div>
+      </MotionDiv>
     </AnimatePresence>
   );
 }

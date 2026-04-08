@@ -3,7 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
 import { computeScore } from '../utils/scoring';
-import { writeAuditLog } from "./AuditLogPage";
+import { writeAuditLog } from "../utils/audit";
 
 function EventsPage() {
   const {

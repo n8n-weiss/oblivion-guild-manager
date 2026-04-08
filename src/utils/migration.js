@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, setDoc, getDoc, collection, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 
 /**
  * Migration Script: Monolith to Collection-based Schema

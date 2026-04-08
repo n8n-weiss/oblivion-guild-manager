@@ -26,7 +26,7 @@ const DiscordSettings = () => {
       // We just update our reference of what the server HAS.
       lastSyncedConfig.current = JSON.stringify(discordConfig);
     }
-  }, [discordConfig]);
+  }, [discordConfig, localConfig]);
 
   if (!isArchitect) return null;
 
@@ -80,7 +80,7 @@ const DiscordSettings = () => {
       });
       if (response.ok) showToast("Test notification sent!", "success");
       else throw new Error("Failed");
-    } catch (err) {
+    } catch {
       showToast("Error connecting to Discord Webhook", "error");
     } finally {
       setIsTesting(false);

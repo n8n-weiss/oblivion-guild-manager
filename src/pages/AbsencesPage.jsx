@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
-import { writeAuditLog } from "./AuditLogPage";
+import { writeAuditLog } from "../utils/audit";
 
 function AbsencesPage() {
   const { members, absences, setAbsences, showToast, currentUser, sendDiscordEmbed } = useGuild();
