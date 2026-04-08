@@ -97,65 +97,86 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     mouseY.set(0);
   };
 
-  if (!member) return null;
-
-  // Security: Members can only see their own profile
-  if (isMember && member.memberId !== myMemberId) {
-    return (
-      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🛡️</div>
-        <h2 className="page-title">Access Denied</h2>
-        <p className="text-muted">You are only permitted to view your own performance profile.</p>
-        <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Return to My Profile</button>
-      </div>
-    );
-  }
+  const isAccessDenied = isMember && member.memberId !== myMemberId;
 
   const memberIdx = members.findIndex(m => m.memberId === member.memberId);
   const mId = (member.memberId || "").toLowerCase();
-  const memberEvents = events.map(ev => {
-    const att = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId);
-    const perf = performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === ev.eventId);
-    const eoRating = eoRatings.find(r => (r.memberId || "").toLowerCase() === mId && r.eventId === ev.eventId);
-    const score = ev.eventType === "Guild League" && att?.status === "present"
-      ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0;
-    return { ...ev, att, perf, eoRating, score };
-  }).sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
-    .filter(e => {
-      if (!member.joinDate) return true;
-      if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
-      return e.att || e.perf || e.eoRating;
-    });
+  const activeMembers = React.useMemo(
+    () => members.filter(m => (m.status || "active") === "active"),
+    [members]
+  );
+  const glBaseEvents = React.useMemo(
+    () => events.filter(e => e.eventType === "Guild League"),
+    [events]
+  );
+  const attendanceIndex = React.useMemo(() => {
+    const map = new Map();
+    attendance.forEach(a => map.set(`${(a.memberId || "").toLowerCase()}__${a.eventId}`, a));
+    return map;
+  }, [attendance]);
+  const performanceIndex = React.useMemo(() => {
+    const map = new Map();
+    performance.forEach(p => map.set(`${(p.memberId || "").toLowerCase()}__${p.eventId}`, p));
+    return map;
+  }, [performance]);
+  const eoRatingsIndex = React.useMemo(() => {
+    const map = new Map();
+    eoRatings.forEach(r => map.set(`${(r.memberId || "").toLowerCase()}__${r.eventId}`, r));
+    return map;
+  }, [eoRatings]);
+  const memberEvents = React.useMemo(() => {
+    return events
+      .map(ev => {
+        const k = `${mId}__${ev.eventId}`;
+        const att = attendanceIndex.get(k);
+        const perf = performanceIndex.get(k);
+        const eoRating = eoRatingsIndex.get(k);
+        const score = ev.eventType === "Guild League" && att?.status === "present"
+          ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0;
+        return { ...ev, att, perf, eoRating, score };
+      })
+      .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
+      .filter(e => {
+        if (!member.joinDate) return true;
+        if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
+        return e.att || e.perf || e.eoRating;
+      });
+  }, [events, mId, attendanceIndex, performanceIndex, eoRatingsIndex, member.joinDate]);
 
-  const glEvents = memberEvents.filter(e => e.eventType === "Guild League");
-  const eoEvents = memberEvents.filter(e => e.eventType === "Emperium Overrun");
-  const memberAbsences = absences.filter(a => a.memberId === member.memberId);
-  const myNotifs = notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId);
-  const unreadCount = myNotifs.filter(n => !n.isRead && n.targetId !== "all").length;
+  const glEvents = React.useMemo(() => memberEvents.filter(e => e.eventType === "Guild League"), [memberEvents]);
+  const eoEvents = React.useMemo(() => memberEvents.filter(e => e.eventType === "Emperium Overrun"), [memberEvents]);
+  const memberAbsences = React.useMemo(() => absences.filter(a => a.memberId === member.memberId), [absences, member.memberId]);
+  const myNotifs = React.useMemo(
+    () => notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId),
+    [notifications, member.memberId]
+  );
+  const unreadCount = React.useMemo(
+    () => myNotifs.filter(n => !n.isRead && n.targetId !== "all").length,
+    [myNotifs]
+  );
   
   const myPendingRequest = requests.find(r => r.memberId === member.memberId && r.status === "pending");
   
-  const totalGLScore = glEvents.reduce((sum, e) => sum + e.score, 0);
-  const presentCount = memberEvents.filter(e => e.att?.status === "present").length;
+  const totalGLScore = React.useMemo(() => glEvents.reduce((sum, e) => sum + e.score, 0), [glEvents]);
+  const presentCount = React.useMemo(() => memberEvents.filter(e => e.att?.status === "present").length, [memberEvents]);
   const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
-  const avgGL = glEvents.filter(e => e.att?.status === "present").length > 0
-    ? Math.round((totalGLScore / glEvents.filter(e => e.att?.status === "present").length) * 10) / 10 : 0;
-  const eoRatingsList = eoRatings.filter(r => r.memberId === member.memberId);
+  const presentGLCount = React.useMemo(() => glEvents.filter(e => e.att?.status === "present").length, [glEvents]);
+  const avgGL = presentGLCount > 0 ? Math.round((totalGLScore / presentGLCount) * 10) / 10 : 0;
+  const eoRatingsList = React.useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
   const avgEoRating = eoRatingsList.length > 0
     ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
 
   // --- NEW CALCULATIONS ---
   // 1. Guild Average GL
-  const activeMembers = members.filter(m => (m.status || "active") === "active");
-  const guildTotalGL = activeMembers.reduce((sum, m) => {
-    const mEvents = events.filter(e => e.eventType === "Guild League");
-    const mScore = mEvents.reduce((s, e) => {
-      const att = attendance.find(a => a.memberId === m.memberId && a.eventId === e.eventId);
-      const perf = performance.find(p => p.memberId === m.memberId && p.eventId === e.eventId);
+  const guildTotalGL = React.useMemo(() => activeMembers.reduce((sum, m) => {
+    const memberIdLower = (m.memberId || "").toLowerCase();
+    const mScore = glBaseEvents.reduce((s, e) => {
+      const att = attendanceIndex.get(`${memberIdLower}__${e.eventId}`);
+      const perf = performanceIndex.get(`${memberIdLower}__${e.eventId}`);
       return s + (att?.status === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0);
     }, 0);
     return sum + mScore;
-  }, 0);
+  }, 0), [activeMembers, glBaseEvents, attendanceIndex, performanceIndex]);
   const guildAvgGL = activeMembers.length > 0 ? Math.round(guildTotalGL / activeMembers.length) : 0;
 
   // 2. Trend Logic (Last 3 vs Previous)
@@ -185,7 +206,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     }
 
     // Vanguard: Top scorer in the most recent GL event
-    const lastGL = events.slice().sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate)).find(e => e.eventType === "Guild League");
+    const lastGL = glBaseEvents.slice().sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate))[0];
     if (lastGL) {
       const glAtt = attendance.filter(a => a.eventId === lastGL.eventId);
       const glPerf = performance.filter(p => p.eventId === lastGL.eventId);
@@ -296,14 +317,20 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   };
 
   // 7. Next Event Logic
-  const upcomingEvent = events
-    .filter(ev => new Date(ev.eventDate) >= new Date().setHours(0, 0, 0, 0))
-    .sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate))[0];
-  const pastEvent = events
-    .filter(ev => new Date(ev.eventDate) < new Date().setHours(0, 0, 0, 0))
-    .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))[0];
-  const nextEvent = upcomingEvent || pastEvent;
-  const isUpcoming = !!upcomingEvent;
+  const { nextEvent, isUpcoming } = React.useMemo(() => {
+    const todayTs = new Date().setHours(0, 0, 0, 0);
+    let nearestUpcoming = null;
+    let latestPast = null;
+    events.forEach((ev) => {
+      const ts = new Date(ev.eventDate).getTime();
+      if (ts >= todayTs) {
+        if (!nearestUpcoming || ts < new Date(nearestUpcoming.eventDate).getTime()) nearestUpcoming = ev;
+      } else if (!latestPast || ts > new Date(latestPast.eventDate).getTime()) {
+        latestPast = ev;
+      }
+    });
+    return { nextEvent: nearestUpcoming || latestPast, isUpcoming: !!nearestUpcoming };
+  }, [events]);
 
   const quickAbsence = () => {
     if (!nextEvent) return;
@@ -334,7 +361,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const toggleCollapse = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
 
   // 9. My Loot History from Auction Builder
-  const myLootHistory = (() => {
+  const myLootHistory = React.useMemo(() => {
     const entries = [];
     (auctionSessions || []).forEach(session => {
       const memberEntry = (session.members || []).find(sm => sm.memberId === member.memberId);
@@ -348,10 +375,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       });
     });
     return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
-  })();
+  }, [auctionSessions, member.memberId]);
 
   // --- Participation Heatmap Logic ---
-  const heatmapData = (() => {
+  const eventsByDate = React.useMemo(() => {
+    const map = new Map();
+    memberEvents.forEach(e => map.set(e.eventDate, e));
+    return map;
+  }, [memberEvents]);
+  const heatmapData = React.useMemo(() => {
     const data = [];
     const today = new Date();
     // 21 weeks (approx 5 months)
@@ -359,7 +391,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       const d = new Date();
       d.setDate(today.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      const ev = memberEvents.find(e => e.eventDate === dateStr);
+      const ev = eventsByDate.get(dateStr);
       let status = "no-event";
       if (ev) {
         if (ev.att?.status === "present") {
@@ -371,7 +403,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       data.push({ date: dateStr, status, ev });
     }
     return data;
-  })();
+  }, [eventsByDate]);
 
   const renderParticipationHeatmap = () => (
     <div className="heatmap-container animate-fade-in">
@@ -395,7 +427,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     </div>
   );
 
-  const chartData = (() => {
+  const chartData = React.useMemo(() => {
     return [...memberEvents].reverse().map(ev => ({
       date: ev.eventDate.split('-').slice(1).join('/'), // Concise date
       fullDate: ev.eventDate,
@@ -404,7 +436,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       present: ev.att?.status === "present",
       type: ev.eventType
     }));
-  })();
+  }, [memberEvents]);
 
   const renderCustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
@@ -491,6 +523,17 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     if (success) setShowRequestModal(false);
   };
 
+  if (isAccessDenied) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🛡️</div>
+        <h2 className="page-title">Access Denied</h2>
+        <p className="text-muted">You are only permitted to view your own performance profile.</p>
+        <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Return to My Profile</button>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Sticky mini-bar header */}
@@ -499,7 +542,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         background: "rgba(10,14,22,0.85)", backdropFilter: "blur(12px)",
         borderBottom: `2px solid ${theme.color}44`,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 20px", gap: 16
+        padding: isMobile ? "8px 10px" : "10px 20px", gap: isMobile ? 10 : 16
       }}>
         <div className="flex items-center gap-3">
           {onBack && !isOwnProfile && (
@@ -829,7 +872,16 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       </div>
 
       {/* Tab Navigation */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "var(--bg-card2)", borderRadius: 12, padding: 6 }}>
+      <div style={{
+        display: "flex",
+        gap: 4,
+        marginBottom: 20,
+        background: "var(--bg-card2)",
+        borderRadius: 12,
+        padding: 6,
+        overflowX: isMobile ? "auto" : "visible",
+        scrollbarWidth: "thin"
+      }}>
         {[
           { id: "overview", label: "📊 Overview" },
           { id: "history", label: "📅 History" },
@@ -840,7 +892,10 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             style={{
-              flex: 1, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
+              flex: isMobile ? "0 0 auto" : 1,
+              minWidth: isMobile ? 120 : "auto",
+              padding: isMobile ? "7px 10px" : "8px 12px",
+              borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
               background: activeTab === tab.id ? theme.color : "transparent",
               color: activeTab === tab.id ? "#fff" : "var(--text-muted)",
               boxShadow: activeTab === tab.id ? `0 0 12px ${theme.color}66` : "none"
@@ -853,7 +908,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       {activeTab === "overview" && (
         <div className="animate-fade-in">
           {isMobile && (
-            <div className="card mb-4" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className="card mb-4" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "10px 12px" }}>
               <button className={`btn btn-sm ${mobileShowHeatmap ? "btn-primary" : "btn-ghost"}`} onClick={() => setMobileShowHeatmap(v => !v)}>
                 {mobileShowHeatmap ? "Hide Heatmap" : "Show Heatmap"}
               </button>

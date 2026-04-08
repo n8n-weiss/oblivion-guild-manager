@@ -245,6 +245,9 @@ function AuctionBuilder() {
   const DELETE_TOKEN = "DELETE";
   const [confirmDeleteMapPage, setConfirmDeleteMapPage] = useState(null);
   const mapSidebarPerfRef = React.useRef({ commits: 0, totalActualDuration: 0 });
+  const trackerListRef = React.useRef(null);
+  const [trackerScrollTop, setTrackerScrollTop] = useState(0);
+  const [trackerViewportHeight, setTrackerViewportHeight] = useState(0);
 
   React.useEffect(() => {
     try {
@@ -277,6 +280,21 @@ function AuctionBuilder() {
   React.useEffect(() => {
     localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
   }, [newSessionForm, newTemplateName]);
+  React.useEffect(() => {
+    const el = trackerListRef.current;
+    if (!el) return;
+    setTrackerViewportHeight(el.clientHeight || 0);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      setTrackerViewportHeight(el.clientHeight || 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sidebarTab]);
+  React.useEffect(() => {
+    setTrackerScrollTop(0);
+    if (trackerListRef.current) trackerListRef.current.scrollTop = 0;
+  }, [trackerTab, cardSearch]);
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {
@@ -1461,7 +1479,12 @@ function AuctionBuilder() {
                   <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "rgba(0,0,0,0.3)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
                   <div style={{ position: "absolute", left: 8, top: 7, opacity: 0.5 }}><Icon name="search" size={12} /></div>
                </div>
-               <div className="space-y-1" style={{ flex: 1, overflowY: "auto" }}>
+              <div
+                ref={trackerListRef}
+                className="space-y-1"
+                style={{ flex: 1, overflowY: "auto" }}
+                onScroll={(e) => setTrackerScrollTop(e.currentTarget.scrollTop)}
+              >
                  {(() => {
                    const historyMap = resourceHistory[trackerTab] || {};
                    const isLD = isLDColumn(trackerTab);
@@ -1490,71 +1513,90 @@ function AuctionBuilder() {
                       return <div className="text-xs text-muted py-8 text-center">{`No ${trackerTab} records found.`}</div>;
                     }
                     
-                    return sortedMembers.map((m, idx) => {
-                      const isExpanded = !!expandedTrackerMembers[m.memberId];
-                      const seshArray = Object.values(m.sessions).sort((a, b) => new Date(b.date) - new Date(a.date));
-                      const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
+                    const hasExpandedRows = sortedMembers.some(m => !!expandedTrackerMembers[m.memberId]);
+                    const ROW_ESTIMATE = 68;
+                    const OVERSCAN = 6;
+                    const canVirtualize = !hasExpandedRows;
+                    const totalRows = sortedMembers.length;
+                    const visibleRows = Math.max(1, Math.ceil((trackerViewportHeight || 420) / ROW_ESTIMATE));
+                    const startIndex = canVirtualize ? Math.max(0, Math.floor(trackerScrollTop / ROW_ESTIMATE) - OVERSCAN) : 0;
+                    const endIndex = canVirtualize ? Math.min(totalRows, startIndex + visibleRows + OVERSCAN * 2) : totalRows;
+                    const renderMembers = sortedMembers.slice(startIndex, endIndex);
+                    const topPad = canVirtualize ? startIndex * ROW_ESTIMATE : 0;
+                    const bottomPad = canVirtualize ? Math.max(0, (totalRows - endIndex) * ROW_ESTIMATE) : 0;
 
-                      return (
-                        <div key={m.memberId} style={{ 
-                          background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)", 
-                          borderRadius: 12, 
-                          border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)", 
-                          marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
-                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                          boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
-                        }}>
-                          {/* Main Banner */}
-                          <div 
-                            onClick={() => setExpandedTrackerMembers(p => ({...p, [m.memberId]: !p[m.memberId]}))}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
-                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                          >
-                            <MemberAvatar ign={m.ign} size={isExpanded ? 36 : 28} />
-                            
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)", letterSpacing: 0.5 }}>{m.ign}</div>
-                                {idx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
-                                {idx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
-                                {idx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                                <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
-                                  <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
+                    return (
+                      <>
+                        {topPad > 0 && <div style={{ height: topPad }} />}
+                        {renderMembers.map((m, idx) => {
+                          const absoluteIdx = startIndex + idx;
+                          const isExpanded = !!expandedTrackerMembers[m.memberId];
+                          const seshArray = Object.values(m.sessions).sort((a, b) => new Date(b.date) - new Date(a.date));
+                          const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
+
+                          return (
+                            <div key={m.memberId} style={{
+                              background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
+                              borderRadius: 12,
+                              border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
+                              marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
+                              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                              boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
+                            }}>
+                              {/* Main Banner */}
+                              <div
+                                onClick={() => setExpandedTrackerMembers(p => ({...p, [m.memberId]: !p[m.memberId]}))}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
+                                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                              >
+                                <MemberAvatar ign={m.ign} size={isExpanded ? 36 : 28} />
+
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text-primary)", letterSpacing: 0.5 }}>{m.ign}</div>
+                                    {absoluteIdx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
+                                    {absoluteIdx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
+                                    {absoluteIdx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                                    <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                                      <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
+                                    </div>
+                                    <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
+                                  </div>
                                 </div>
-                                <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
-                              </div>
-                            </div>
-                            
-                            <div style={{ textAlign: "right", flexShrink: 0 }}>
-                              <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{m.total}</div>
-                              <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
-                            </div>
-                          </div>
 
-                         {/* Collapsible Session List */}
-                         {isExpanded && (
-                            <div style={{ padding: "0 10px 10px 10px", display: "flex", flexDirection: "column", gap: 6,  animation: "fade-in 0.2s" }}>
-                               {seshArray.map(sesh => (
-                                 <div key={sesh.id} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6, color: "var(--text-secondary)" }}>
-                                       <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{String(sesh.name).toUpperCase()}</span>
-                                       <span style={{ opacity: 0.6 }}>{new Date(sesh.date).toLocaleDateString()}</span>
-                                    </div>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                                      {sesh.items.map((item, idx) => (
-                                        <span key={idx} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 700 }}>{item}</span>
-                                      ))}
-                                    </div>
-                                 </div>
-                               ))}
-                            </div>
-                         )}
-                       </div>
-                     );
-                   });
+                                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                  <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{m.total}</div>
+                                  <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
+                                </div>
+                              </div>
+
+                             {/* Collapsible Session List */}
+                             {isExpanded && (
+                                <div style={{ padding: "0 10px 10px 10px", display: "flex", flexDirection: "column", gap: 6,  animation: "fade-in 0.2s" }}>
+                                   {seshArray.map(sesh => (
+                                     <div key={sesh.id} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6, color: "var(--text-secondary)" }}>
+                                           <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{String(sesh.name).toUpperCase()}</span>
+                                           <span style={{ opacity: 0.6 }}>{new Date(sesh.date).toLocaleDateString()}</span>
+                                        </div>
+                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                          {sesh.items.map((item, i2) => (
+                                            <span key={i2} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 700 }}>{item}</span>
+                                          ))}
+                                        </div>
+                                     </div>
+                                   ))}
+                                </div>
+                             )}
+                           </div>
+                         );
+                       })}
+                       {bottomPad > 0 && <div style={{ height: bottomPad }} />}
+                     </>
+                   );
                  })()}
                 </div>
               </div>
