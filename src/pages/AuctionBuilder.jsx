@@ -24,12 +24,25 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   handleDeleteMapPage,
   draggedOverSlot,
   setDraggedOverSlot,
-  dragging
+  dragging,
+  mapSummary,
+  mapPageStats,
+  mapStatusFilter,
+  setMapStatusFilter
 }) {
   if (sidebarTab !== "map") return null;
 
   const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split("R")[0], 10)));
   const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
+  const pageList = Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => {
+    if (mapStatusFilter === "all") return true;
+    const stats = mapPageStats[p] || { conflictSlots: 0, unassignedSlots: 4, hasMine: false, score: 0 };
+    if (mapStatusFilter === "conflict") return stats.conflictSlots > 0;
+    if (mapStatusFilter === "unassigned") return stats.unassignedSlots > 0;
+    if (mapStatusFilter === "mine") return stats.hasMine;
+    if (mapStatusFilter === "hot") return stats.score >= 5;
+    return true;
+  });
 
   return (
     <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
@@ -50,10 +63,31 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
           </select>
         </div>
       </div>
+      <div style={{ position: "sticky", top: 0, zIndex: 3, marginBottom: 10, background: "rgba(10,12,18,0.9)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 8 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+          {[
+            { id: "all", label: "All" },
+            { id: "conflict", label: "Conflicts" },
+            { id: "unassigned", label: "Unassigned" },
+            { id: "mine", label: "Mine" },
+            { id: "hot", label: "High Heat" }
+          ].map((f) => (
+            <button key={f.id} className={`btn btn-sm ${mapStatusFilter === f.id ? "btn-primary" : "btn-ghost"}`} style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => setMapStatusFilter(f.id)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6 }}>
+          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(255,255,255,0.03)", textAlign: "center" }}>Pages<br /><strong>{mapSummary.pages}</strong></div>
+          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(42,191,107,0.08)", textAlign: "center", color: "var(--green)" }}>Assigned<br /><strong>{mapSummary.assignedSlots}</strong></div>
+          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(240,192,64,0.08)", textAlign: "center", color: "var(--gold)" }}>Unassigned<br /><strong>{mapSummary.unassignedSlots}</strong></div>
+          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(224,80,80,0.08)", textAlign: "center", color: "var(--red)" }}>Conflicts<br /><strong>{mapSummary.conflictSlots}</strong></div>
+        </div>
+      </div>
 
       <div className="space-y-4">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+          {pageList.map(p => {
             const isSelected = selectedMapPage === p;
             let status = "empty";
             const pageSlots = [1, 2, 3, 4].map(r => `P${p}R${r}`);
@@ -61,6 +95,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
             if (assignments.some(a => a.length > 1)) status = "conflict";
             else if (assignments.every(a => a.length === 1)) status = "full";
             else if (assignments.some(a => a.length > 0)) status = "partial";
+            const heat = mapPageStats[p]?.score || 0;
 
             return (
               <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
@@ -76,6 +111,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                 onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
               >
                 {p}
+                {heat >= 5 && <span style={{ position: "absolute", left: -2, bottom: -2, fontSize: 9 }}>🔥</span>}
                 {status !== "empty" && (
                   <div style={{
                     position: "absolute", top: -3, right: -3, width: 10, height: 10, borderRadius: "50%",
@@ -203,8 +239,12 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
     prev.sessionMembers === next.sessionMembers &&
     prev.draggedOverSlot === next.draggedOverSlot &&
     prev.dragging === next.dragging &&
+    prev.mapSummary === next.mapSummary &&
+    prev.mapPageStats === next.mapPageStats &&
+    prev.mapStatusFilter === next.mapStatusFilter &&
     prev.handleDropdownAssignment === next.handleDropdownAssignment &&
-    prev.handleDeleteMapPage === next.handleDeleteMapPage
+    prev.handleDeleteMapPage === next.handleDeleteMapPage &&
+    prev.setMapStatusFilter === next.setMapStatusFilter
   );
 });
 
@@ -219,7 +259,9 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
   badgeColor,
   badgeBg,
   badgeBorder,
-  onToggle
+  onToggle,
+  compact = false,
+  anomalies = {}
 }) {
   const seshArray = React.useMemo(
     () => Object.values(sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date)),
@@ -236,11 +278,11 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
     }}>
       <div
         onClick={() => onToggle(memberId)}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px", cursor: "pointer", position: "relative" }}
+        style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 10, padding: compact ? "8px 10px" : "12px", cursor: "pointer", position: "relative" }}
         onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
         onMouseLeave={e => e.currentTarget.style.background = "transparent"}
       >
-        <MemberAvatar ign={ign} size={isExpanded ? 36 : 28} />
+        <MemberAvatar ign={ign} size={compact ? 24 : (isExpanded ? 36 : 28)} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -248,6 +290,9 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
             {absoluteIdx === 0 && <span title="Imperial Sovereign" style={{ fontSize: 14 }}>👑</span>}
             {absoluteIdx === 1 && <span title="Apex Vanguard" style={{ fontSize: 13 }}>🥈</span>}
             {absoluteIdx === 2 && <span title="Elite Guardian" style={{ fontSize: 12 }}>🥉</span>}
+            {anomalies.drop && <span title="Sudden drop vs previous session" style={{ fontSize: 11, color: "var(--red)" }}>▼</span>}
+            {anomalies.spike && <span title="Sudden spike vs previous session" style={{ fontSize: 11, color: "var(--green)" }}>▲</span>}
+            {anomalies.missingLast && <span title="Missing latest session" style={{ fontSize: 11, color: "var(--gold)" }}>⏱</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
             <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
@@ -258,7 +303,7 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
         </div>
 
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{total}</div>
+          <div style={{ fontSize: compact ? 13 : 16, fontWeight: 900, color: badgeColor, textShadow: `0 0 10px ${badgeColor}40` }}>{total}</div>
           <div style={{ fontSize: 8, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>Units</div>
         </div>
       </div>
@@ -289,7 +334,7 @@ function AuctionBuilder() {
     members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
-    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict
+    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -323,8 +368,9 @@ function AuctionBuilder() {
   const [confirmDeleteMapPage, setConfirmDeleteMapPage] = useState(null);
   const mapSidebarPerfRef = React.useRef({ commits: 0, totalActualDuration: 0 });
   const trackerListRef = React.useRef(null);
-  const [trackerScrollTop, setTrackerScrollTop] = useState(0);
-  const [trackerViewportHeight, setTrackerViewportHeight] = useState(0);
+  const [mapStatusFilter, setMapStatusFilter] = useState(() => localStorage.getItem("auction_mapStatusFilter") || "all");
+  const [trackerCompactMode, setTrackerCompactMode] = useState(() => localStorage.getItem("auction_trackerCompactMode") === "1");
+  const [trackerGroupCollapsed, setTrackerGroupCollapsed] = useState({});
 
   React.useEffect(() => {
     try {
@@ -354,22 +400,12 @@ function AuctionBuilder() {
   React.useEffect(() => { localStorage.setItem("auction_historySearch", historySearch); }, [historySearch]);
   React.useEffect(() => { localStorage.setItem("auction_historyFilter", historyFilter); }, [historyFilter]);
   React.useEffect(() => { localStorage.setItem("auction_cardSearch", cardSearch); }, [cardSearch]);
+  React.useEffect(() => { localStorage.setItem("auction_mapStatusFilter", mapStatusFilter); }, [mapStatusFilter]);
+  React.useEffect(() => { localStorage.setItem("auction_trackerCompactMode", trackerCompactMode ? "1" : "0"); }, [trackerCompactMode]);
   React.useEffect(() => {
     localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({ newSessionForm, newTemplateName, ts: Date.now() }));
   }, [newSessionForm, newTemplateName]);
   React.useEffect(() => {
-    const el = trackerListRef.current;
-    if (!el) return;
-    setTrackerViewportHeight(el.clientHeight || 0);
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      setTrackerViewportHeight(el.clientHeight || 0);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [sidebarTab]);
-  React.useEffect(() => {
-    setTrackerScrollTop(0);
     if (trackerListRef.current) trackerListRef.current.scrollTop = 0;
   }, [trackerTab, cardSearch]);
 
@@ -723,6 +759,39 @@ function AuctionBuilder() {
     }
     return result;
   }, [session, selectedSessionCol, selectedMapPage, membersById]);
+  const mapPageStats = React.useMemo(() => {
+    const stats = {};
+    const highestTaggedPage = Math.max(0, ...Object.keys(currentSessionGrid).map(k => parseInt(k.substring(1).split("R")[0], 10)));
+    const totalPages = Math.max(maxVisiblePage, highestTaggedPage);
+    for (let p = 1; p <= totalPages; p += 1) {
+      let assignedSlots = 0;
+      let conflictSlots = 0;
+      let unassignedSlots = 0;
+      let hasMine = false;
+      for (let r = 1; r <= 4; r += 1) {
+        const slot = `P${p}R${r}`;
+        const owners = currentSessionGrid[slot] || [];
+        if (owners.length === 0) unassignedSlots += 1;
+        else if (owners.length === 1) assignedSlots += 1;
+        else conflictSlots += 1;
+        if (!hasMine && myMemberId) {
+          const mineIgn = membersById.get(myMemberId)?.ign;
+          if (mineIgn && owners.includes(mineIgn)) hasMine = true;
+        }
+      }
+      stats[p] = { assignedSlots, conflictSlots, unassignedSlots, hasMine, score: assignedSlots + conflictSlots * 2 };
+    }
+    return stats;
+  }, [currentSessionGrid, maxVisiblePage, myMemberId, membersById]);
+  const mapSummary = React.useMemo(() => {
+    const values = Object.values(mapPageStats);
+    return {
+      pages: values.length,
+      assignedSlots: values.reduce((s, v) => s + v.assignedSlots, 0),
+      unassignedSlots: values.reduce((s, v) => s + v.unassignedSlots, 0),
+      conflictSlots: values.reduce((s, v) => s + v.conflictSlots, 0)
+    };
+  }, [mapPageStats]);
 
   // Aggregated Resource History Grouped by Session
   const resourceHistory = React.useMemo(() => {
@@ -1551,6 +1620,10 @@ function AuctionBuilder() {
                 draggedOverSlot={draggedOverSlot}
                 setDraggedOverSlot={setDraggedOverSlot}
                 dragging={dragging}
+                mapSummary={mapSummary}
+                mapPageStats={mapPageStats}
+                mapStatusFilter={mapStatusFilter}
+                setMapStatusFilter={setMapStatusFilter}
               />
             </React.Profiler>
  
@@ -1567,6 +1640,11 @@ function AuctionBuilder() {
                    </button>
                  ))}
                </div>
+               <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                  <button className={`btn btn-sm ${trackerCompactMode ? "btn-primary" : "btn-ghost"}`} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setTrackerCompactMode(v => !v)}>
+                    {trackerCompactMode ? "Compact On" : "Compact Off"}
+                  </button>
+               </div>
                <div style={{ position: "relative", marginBottom: 10 }}>
                   <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "rgba(0,0,0,0.3)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
                   <div style={{ position: "absolute", left: 8, top: 7, opacity: 0.5 }}><Icon name="search" size={12} /></div>
@@ -1575,7 +1653,6 @@ function AuctionBuilder() {
                 ref={trackerListRef}
                 className="space-y-1"
                 style={{ flex: 1, overflowY: "auto" }}
-                onScroll={(e) => setTrackerScrollTop(e.currentTarget.scrollTop)}
               >
                  {(() => {
                    const historyMap = resourceHistory[trackerTab] || {};
@@ -1596,7 +1673,7 @@ function AuctionBuilder() {
                        return m.ign.toLowerCase().includes(cardSearch.toLowerCase()) || m.allTags.some(c => c.toLowerCase().includes(cardSearch.toLowerCase()));
                      });
                     
-                    const sortedMembers = activeMembersWithResources
+                   const sortedMembers = activeMembersWithResources
                       .sort((a, b) => b.total - a.total);
                     
                     const grandTotal = activeMembersWithResources.reduce((sum, m) => sum + m.total, 0);
@@ -1605,44 +1682,77 @@ function AuctionBuilder() {
                       return <div className="text-xs text-muted py-8 text-center">{`No ${trackerTab} records found.`}</div>;
                     }
                     
-                    const hasExpandedRows = sortedMembers.some(m => !!expandedTrackerMembers[m.memberId]);
-                    const ROW_ESTIMATE = 68;
-                    const OVERSCAN = 6;
-                    const canVirtualize = !hasExpandedRows;
-                    const totalRows = sortedMembers.length;
-                    const visibleRows = Math.max(1, Math.ceil((trackerViewportHeight || 420) / ROW_ESTIMATE));
-                    const startIndex = canVirtualize ? Math.max(0, Math.floor(trackerScrollTop / ROW_ESTIMATE) - OVERSCAN) : 0;
-                    const endIndex = canVirtualize ? Math.min(totalRows, startIndex + visibleRows + OVERSCAN * 2) : totalRows;
-                    const renderMembers = sortedMembers.slice(startIndex, endIndex);
-                    const topPad = canVirtualize ? startIndex * ROW_ESTIMATE : 0;
-                    const bottomPad = canVirtualize ? Math.max(0, (totalRows - endIndex) * ROW_ESTIMATE) : 0;
+                    const latestSessionDate = sortedMembers.reduce((max, m) => {
+                      const latest = Object.values(m.sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                      const d = latest?.date ? new Date(latest.date).getTime() : 0;
+                      return Math.max(max, d || 0);
+                    }, 0);
+                    const grouped = sortedMembers.reduce((acc, m) => {
+                      const role = m.role || "Unknown";
+                      if (!acc[role]) acc[role] = [];
+                      acc[role].push(m);
+                      return acc;
+                    }, {});
+                    const roleOrder = ["DPS", "Support", "Unknown"];
+                    const groupNames = Object.keys(grouped).sort((a, b) => {
+                      const ai = roleOrder.indexOf(a);
+                      const bi = roleOrder.indexOf(b);
+                      if (ai === -1 && bi === -1) return a.localeCompare(b);
+                      if (ai === -1) return 1;
+                      if (bi === -1) return -1;
+                      return ai - bi;
+                    });
+                    let runningRank = 0;
 
                     return (
                       <>
-                        {topPad > 0 && <div style={{ height: topPad }} />}
-                        {renderMembers.map((m, idx) => {
-                          const absoluteIdx = startIndex + idx;
-                          const isExpanded = !!expandedTrackerMembers[m.memberId];
-                          const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
-
+                        {groupNames.map((groupName) => {
+                          const groupRows = grouped[groupName] || [];
+                          const collapsed = !!trackerGroupCollapsed[groupName];
                           return (
-                            <TrackerMemberRow
-                              key={m.memberId}
-                              memberId={m.memberId}
-                              ign={m.ign}
-                              total={m.total}
-                              sessions={m.sessions}
-                              isExpanded={isExpanded}
-                              absoluteIdx={absoluteIdx}
-                              dominance={dominance}
-                              badgeColor={badgeColor}
-                              badgeBg={badgeBg}
-                              badgeBorder={badgeBorder}
-                              onToggle={toggleTrackerMember}
-                            />
-                         );
-                       })}
-                       {bottomPad > 0 && <div style={{ height: bottomPad }} />}
+                            <div key={groupName} style={{ marginBottom: 10 }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ width: "100%", justifyContent: "space-between", fontSize: 10, padding: "6px 8px", marginBottom: 6 }}
+                                onClick={() => setTrackerGroupCollapsed(prev => ({ ...prev, [groupName]: !prev[groupName] }))}
+                              >
+                                <span>{collapsed ? "▶" : "▼"} {groupName.toUpperCase()}</span>
+                                <span>{groupRows.length}</span>
+                              </button>
+                              {!collapsed && groupRows.map((m) => {
+                                const absoluteIdx = runningRank;
+                                runningRank += 1;
+                                const isExpanded = !!expandedTrackerMembers[m.memberId];
+                                const dominance = grandTotal > 0 ? (m.total / grandTotal * 100) : 0;
+                                const memberSessions = Object.values(m.sessions || {}).sort((a, b) => new Date(b.date) - new Date(a.date));
+                                const latestCount = memberSessions[0]?.items?.length || 0;
+                                const prevCount = memberSessions[1]?.items?.length || 0;
+                                const drop = prevCount >= 2 && latestCount <= Math.max(0, Math.floor(prevCount * 0.4));
+                                const spike = prevCount > 0 && latestCount >= Math.ceil(prevCount * 1.8);
+                                const latestMemberDate = memberSessions[0]?.date ? new Date(memberSessions[0].date).getTime() : 0;
+                                const missingLast = latestSessionDate > 0 && latestMemberDate > 0 && latestMemberDate < latestSessionDate;
+                                return (
+                                  <TrackerMemberRow
+                                    key={m.memberId}
+                                    memberId={m.memberId}
+                                    ign={m.ign}
+                                    total={m.total}
+                                    sessions={m.sessions}
+                                    isExpanded={isExpanded}
+                                    absoluteIdx={absoluteIdx}
+                                    dominance={dominance}
+                                    badgeColor={badgeColor}
+                                    badgeBg={badgeBg}
+                                    badgeBorder={badgeBorder}
+                                    onToggle={toggleTrackerMember}
+                                    compact={trackerCompactMode}
+                                    anomalies={{ drop, spike, missingLast }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
                      </>
                    );
                  })()}

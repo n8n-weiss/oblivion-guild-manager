@@ -10,9 +10,40 @@ import { writeAuditLog } from "../utils/audit";
 function MembersPage({ onViewProfile }) {
   const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers = [] } = useGuild();
   const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
+  const MEMBERS_PRESETS_KEY = "members_view_presets_v1";
+  const MEMBERS_TABLE_UI_KEY = "members_table_ui_v1";
   const [search, setSearch] = useState(() => localStorage.getItem("members_search") || "");
   const [roleFilter, setRoleFilter] = useState(() => localStorage.getItem("members_roleFilter") || "All");
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem("members_statusFilter") || "active");
+  const [viewPresets, setViewPresets] = useState(() => {
+    try {
+      const raw = localStorage.getItem(MEMBERS_PRESETS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 8) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [tableCompact, setTableCompact] = useState(() => {
+    try {
+      return localStorage.getItem(MEMBERS_TABLE_UI_KEY + "_compact") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try {
+      const raw = localStorage.getItem(MEMBERS_TABLE_UI_KEY + "_cols");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        class: parsed?.class !== false,
+        rank: parsed?.rank !== false,
+        joined: parsed?.joined !== false
+      };
+    } catch {
+      return { class: true, rank: true, joined: true };
+    }
+  });
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
@@ -124,6 +155,15 @@ function MembersPage({ onViewProfile }) {
   useEffect(() => { localStorage.setItem("members_roleFilter", roleFilter); }, [roleFilter]);
   useEffect(() => { localStorage.setItem("members_statusFilter", statusFilter); }, [statusFilter]);
   useEffect(() => {
+    localStorage.setItem(MEMBERS_PRESETS_KEY, JSON.stringify(viewPresets.slice(0, 8)));
+  }, [viewPresets]);
+  useEffect(() => {
+    localStorage.setItem(MEMBERS_TABLE_UI_KEY + "_compact", tableCompact ? "1" : "0");
+  }, [tableCompact]);
+  useEffect(() => {
+    localStorage.setItem(MEMBERS_TABLE_UI_KEY + "_cols", JSON.stringify(visibleCols));
+  }, [visibleCols]);
+  useEffect(() => {
     if (!showModal) return;
     localStorage.setItem(MEMBER_DRAFT_KEY, JSON.stringify({ mode: editMember ? "edit" : "add", form, ts: Date.now() }));
   }, [showModal, editMember, form]);
@@ -167,6 +207,54 @@ function MembersPage({ onViewProfile }) {
     }
     setShowModal(false);
     localStorage.removeItem(MEMBER_DRAFT_KEY);
+  };
+  const saveCurrentPreset = () => {
+    const name = window.prompt("Preset name?", `Members ${viewPresets.length + 1}`);
+    if (!name || !name.trim()) return;
+    const normalized = name.trim().slice(0, 32);
+    const payload = { search, roleFilter, statusFilter };
+    const existing = viewPresets.find(p => p.name.toLowerCase() === normalized.toLowerCase());
+    if (existing) {
+      setViewPresets(prev => prev.map(p => (p.id === existing.id ? { ...p, ...payload } : p)));
+      showToast("Members view preset updated", "success");
+      return;
+    }
+    const next = {
+      id: `mvp_${Date.now()}`,
+      name: normalized,
+      ...payload
+    };
+    setViewPresets(prev => [next, ...prev].slice(0, 8));
+    showToast("Members view preset saved", "success");
+  };
+  const applyPreset = (preset) => {
+    setSearch(preset.search || "");
+    setRoleFilter(preset.roleFilter || "All");
+    setStatusFilter(preset.statusFilter || "active");
+    showToast(`Applied preset: ${preset.name}`, "info");
+  };
+  const deletePreset = (id) => {
+    setViewPresets(prev => prev.filter(p => p.id !== id));
+    showToast("Preset removed", "info");
+  };
+  const updatePreset = (id) => {
+    setViewPresets(prev => prev.map(p => (
+      p.id === id
+        ? { ...p, search, roleFilter, statusFilter }
+        : p
+    )));
+    showToast("Preset updated with current view", "success");
+  };
+  const pinPresetToTop = (id) => {
+    setViewPresets(prev => {
+      const found = prev.find(p => p.id === id);
+      if (!found) return prev;
+      return [found, ...prev.filter(p => p.id !== id)];
+    });
+    showToast("Preset pinned to top", "info");
+  };
+  const toggleCol = (key) => {
+    setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -217,6 +305,55 @@ function MembersPage({ onViewProfile }) {
             <button className="btn btn-primary" onClick={openAdd} style={{ width: "100%", maxWidth: "none" }}><Icon name="plus" size={14} /> Add Member</button>
           )}
         </div>
+        <div className="flex gap-2 mb-3" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-ghost btn-sm" onClick={saveCurrentPreset} title="Save current filters and search">
+            <Icon name="save" size={12} /> Save View
+          </button>
+          {viewPresets.map(p => (
+            <div key={p.id} className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px" }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ padding: "2px 6px", fontSize: 11 }}
+                onClick={() => applyPreset(p)}
+                title={`Apply ${p.name}`}
+              >
+                {p.name}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm btn-icon"
+                style={{ padding: 0, width: 18, height: 18 }}
+                onClick={() => pinPresetToTop(p.id)}
+                title={`Pin ${p.name} to top`}
+              >
+                <span style={{ fontSize: 11, lineHeight: 1 }}>📌</span>
+              </button>
+              <button
+                className="btn btn-ghost btn-sm btn-icon"
+                style={{ padding: 0, width: 18, height: 18 }}
+                onClick={() => updatePreset(p.id)}
+                title={`Update ${p.name} from current view`}
+              >
+                <Icon name="save" size={11} />
+              </button>
+              <button
+                className="btn btn-ghost btn-sm btn-icon"
+                style={{ padding: 0, width: 18, height: 18 }}
+                onClick={() => deletePreset(p.id)}
+                title={`Delete ${p.name}`}
+              >
+                <Icon name="x" size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 mb-3" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <button className={`btn btn-sm ${tableCompact ? "btn-primary" : "btn-ghost"}`} onClick={() => setTableCompact(v => !v)}>
+            <Icon name="grid" size={12} /> {tableCompact ? "Compact Rows: On" : "Compact Rows: Off"}
+          </button>
+          <button className={`btn btn-sm ${visibleCols.class ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("class")}>Class</button>
+          <button className={`btn btn-sm ${visibleCols.rank ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("rank")}>Rank</button>
+          <button className={`btn btn-sm ${visibleCols.joined ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("joined")}>Joined</button>
+        </div>
 
         {/* Member Table */}
         {filtered.length === 0 ? (
@@ -229,16 +366,16 @@ function MembersPage({ onViewProfile }) {
           />
         ) : (
           <>
-            <div className="table-wrap hide-on-mobile">
+            <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hide-on-mobile`}>
             <table>
               <thead>
                 <tr>
                   <th style={{ width: 48 }}>#</th>
                   <th>Member</th>
-                  <th>Class</th>
+                  {visibleCols.class && <th>Class</th>}
                   <th>Role</th>
-                  <th>Guild Rank</th>
-                  <th>Joined</th>
+                  {visibleCols.rank && <th>Guild Rank</th>}
+                  {visibleCols.joined && <th>Joined</th>}
                   <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
@@ -281,7 +418,7 @@ function MembersPage({ onViewProfile }) {
                       </td>
 
                       {/* Class */}
-                      <td>
+                      {visibleCols.class && <td>
                         <span style={{
                           display: "inline-flex", alignItems: "center", gap: 5,
                           fontSize: 12, fontWeight: 700, padding: "3px 10px",
@@ -291,7 +428,7 @@ function MembersPage({ onViewProfile }) {
                         }}>
                           {theme.icon} {m.class || "—"}
                         </span>
-                      </td>
+                      </td>}
 
                       {/* Role */}
                       <td>
@@ -301,14 +438,14 @@ function MembersPage({ onViewProfile }) {
                       </td>
 
                       {/* Guild rank */}
-                      <td style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>
+                      {visibleCols.rank && <td style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>
                         {m.guildRank || "Member"}
-                      </td>
+                      </td>}
 
                       {/* Join date */}
-                      <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      {visibleCols.joined && <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                         {m.joinDate || "—"}
-                      </td>
+                      </td>}
 
                       {/* Actions */}
                       <td>

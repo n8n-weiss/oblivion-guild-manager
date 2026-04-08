@@ -6,8 +6,38 @@ import { computeLeaderboard } from '../utils/scoring';
 
 function LeaderboardPage({ onViewProfile }) {
   const { members, events, attendance, performance, eoRatings } = useGuild();
+  const LEADERBOARD_PRESETS_KEY = "leaderboard_view_presets_v1";
+  const LEADERBOARD_TABLE_UI_KEY = "leaderboard_table_ui_v1";
   const [filter, setFilter] = useState(() => localStorage.getItem("leaderboard_filter") || "All");
   const [lbMode, setLbMode] = useState(() => localStorage.getItem("leaderboard_mode") || "Combat"); // "Combat" | "Duty" | "Consistency" | "Support" | "eo"
+  const [viewPresets, setViewPresets] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_PRESETS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 8) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [tableCompact, setTableCompact] = useState(() => {
+    try {
+      return localStorage.getItem(LEADERBOARD_TABLE_UI_KEY + "_compact") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_TABLE_UI_KEY + "_cols");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        metrics: parsed?.metrics !== false,
+        classification: parsed?.classification !== false
+      };
+    } catch {
+      return { metrics: true, classification: true };
+    }
+  });
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   
   const lb = useMemo(() => {
@@ -59,6 +89,52 @@ function LeaderboardPage({ onViewProfile }) {
   const podiumData = lbMode === "eo" ? eoLb.slice(0, 3) : lb.slice(0, 3);
   useEffect(() => { localStorage.setItem("leaderboard_filter", filter); }, [filter]);
   useEffect(() => { localStorage.setItem("leaderboard_mode", lbMode); }, [lbMode]);
+  useEffect(() => {
+    localStorage.setItem(LEADERBOARD_PRESETS_KEY, JSON.stringify(viewPresets.slice(0, 8)));
+  }, [viewPresets]);
+  useEffect(() => {
+    localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_compact", tableCompact ? "1" : "0");
+  }, [tableCompact]);
+  useEffect(() => {
+    localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_cols", JSON.stringify(visibleCols));
+  }, [visibleCols]);
+  const saveCurrentPreset = () => {
+    const name = window.prompt("Preset name?", `Leaderboard ${viewPresets.length + 1}`);
+    if (!name || !name.trim()) return;
+    const normalized = name.trim().slice(0, 32);
+    const payload = { filter, lbMode };
+    const existing = viewPresets.find(p => p.name.toLowerCase() === normalized.toLowerCase());
+    if (existing) {
+      setViewPresets(prev => prev.map(p => (p.id === existing.id ? { ...p, ...payload } : p)));
+      return;
+    }
+    const next = { id: `lbp_${Date.now()}`, name: normalized, ...payload };
+    setViewPresets(prev => [next, ...prev].slice(0, 8));
+  };
+  const applyPreset = (preset) => {
+    setFilter(preset.filter || "All");
+    setLbMode(preset.lbMode || "Combat");
+  };
+  const deletePreset = (id) => {
+    setViewPresets(prev => prev.filter(p => p.id !== id));
+  };
+  const updatePreset = (id) => {
+    setViewPresets(prev => prev.map(p => (
+      p.id === id
+        ? { ...p, filter, lbMode }
+        : p
+    )));
+  };
+  const pinPresetToTop = (id) => {
+    setViewPresets(prev => {
+      const found = prev.find(p => p.id === id);
+      if (!found) return prev;
+      return [found, ...prev.filter(p => p.id !== id)];
+    });
+  };
+  const toggleCol = (key) => {
+    setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
+  };
   
   const getPodiumValue = (m) => {
     if (!m) return "";
@@ -127,6 +203,54 @@ function LeaderboardPage({ onViewProfile }) {
             </div>
           </div>
         </div>
+      </div>
+      <div className="flex gap-2 mb-4" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-ghost btn-sm" onClick={saveCurrentPreset} title="Save current leaderboard mode and filter">
+          <Icon name="save" size={12} /> Save View
+        </button>
+        {viewPresets.map(p => (
+          <div key={p.id} className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px" }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ padding: "2px 6px", fontSize: 11 }}
+              onClick={() => applyPreset(p)}
+              title={`Apply ${p.name}`}
+            >
+              {p.name}
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              style={{ padding: 0, width: 18, height: 18 }}
+              onClick={() => pinPresetToTop(p.id)}
+              title={`Pin ${p.name} to top`}
+            >
+              <span style={{ fontSize: 11, lineHeight: 1 }}>📌</span>
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              style={{ padding: 0, width: 18, height: 18 }}
+              onClick={() => updatePreset(p.id)}
+              title={`Update ${p.name} from current view`}
+            >
+              <Icon name="save" size={11} />
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              style={{ padding: 0, width: 18, height: 18 }}
+              onClick={() => deletePreset(p.id)}
+              title={`Delete ${p.name}`}
+            >
+              <Icon name="x" size={11} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mb-4" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        <button className={`btn btn-sm ${tableCompact ? "btn-primary" : "btn-ghost"}`} onClick={() => setTableCompact(v => !v)}>
+          <Icon name="grid" size={12} /> {tableCompact ? "Compact Rows: On" : "Compact Rows: Off"}
+        </button>
+        <button className={`btn btn-sm ${visibleCols.metrics ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("metrics")}>Metrics</button>
+        <button className={`btn btn-sm ${visibleCols.classification ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("classification")}>Classification</button>
       </div>
 
       {/* Top 3 podium - DYNAMIC for all modes */}
@@ -232,14 +356,14 @@ function LeaderboardPage({ onViewProfile }) {
               ))}
             </div>
           </div>
-          <div className="table-wrap hide-on-mobile">
+          <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hide-on-mobile`}>
             <table>
               <thead><tr>
                 <th>#</th><th>Player</th><th>Role</th>
                 <th>{lbMode === "Combat" ? "Total Score" : lbMode === "Duty" ? "Attendance" : lbMode === "Support" ? "SPI Score" : "Stability"}</th>
                 <th>Intensity</th>
-                <th>Metrics</th>
-                <th>Classification</th>
+                {visibleCols.metrics && <th>Metrics</th>}
+                {visibleCols.classification && <th>Classification</th>}
               </tr></thead>
               <tbody>
                 {filtered.map((m, i) => (
@@ -286,13 +410,13 @@ function LeaderboardPage({ onViewProfile }) {
                         </div>
                       </div>
                     </td>
-                    <td>
+                    {visibleCols.metrics && <td>
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         <div>Score: {m.totalScore}</div>
                         <div>Att: {m.attendancePct}%</div>
                       </div>
-                    </td>
-                    <td>
+                    </td>}
+                    {visibleCols.classification && <td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 10 }}>
                           🎯 {m.attStatus?.label || "Average"}
@@ -304,7 +428,7 @@ function LeaderboardPage({ onViewProfile }) {
                           ⚔ {m.classification}
                         </span>
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
