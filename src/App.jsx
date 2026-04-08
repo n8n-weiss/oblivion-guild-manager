@@ -582,6 +582,7 @@ export default function App() {
           <button
             className="btn btn-primary"
             style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)" }}
+            data-shiny="true"
             onClick={() => setShowTreasury(true)}
           >
             <Icon name="star" size={14} /> Buy Me A Beer
