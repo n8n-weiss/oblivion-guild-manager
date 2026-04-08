@@ -96,6 +96,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity, setMetadataActivity] = useState([]); // recent shared metadata updates
+  const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
   const [syncRetryToken, setSyncRetryToken] = useState(0);
   const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
@@ -122,6 +123,7 @@ export const GuildProvider = ({ children, initialData }) => {
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
   const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0 });
+  const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
 
   const showToast = (message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
@@ -130,6 +132,9 @@ export const GuildProvider = ({ children, initialData }) => {
     setSyncRetryToken(v => v + 1);
     if (navigator.onLine) setSyncStatus("saving");
   };
+  useEffect(() => {
+    liveAuctionRef.current = { auctionSessions, auctionTemplates, resourceCategories };
+  }, [auctionSessions, auctionTemplates, resourceCategories]);
 
   // Derive rank from members if myMemberId is set
   const cleanMyId = (myMemberId || "").trim().toLowerCase();
@@ -365,14 +370,77 @@ export const GuildProvider = ({ children, initialData }) => {
         const unsubAuctionMeta = onSnapshot(auctionMetaRef, (snap) => {
           const data = snap.exists() ? snap.data() : {};
           const nextVersion = Number(data.version || 0);
+          const incomingSessions = data.auctionSessions || [];
+          const incomingTemplates = data.auctionTemplates || [];
+          const incomingResources = data.resourceCategories || ["Card Album", "Light & Dark"];
+          const prevAuctionVersion = Number(metadataVersions.current.auction || 0);
+          const updatedByOtherOfficer =
+            prevAuctionVersion > 0 &&
+            nextVersion > prevAuctionVersion &&
+            data.lastEditorUid &&
+            data.lastEditorUid !== currentUser?.uid;
+          const localUnsyncedAuctionChanges =
+            JSON.stringify(liveAuctionRef.current.auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
+            JSON.stringify(liveAuctionRef.current.auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
+            JSON.stringify(liveAuctionRef.current.resourceCategories) !== JSON.stringify(prevData.current.resourceCategories);
           emitExternalUpdate("auction", nextVersion, data.lastEditorUid, "Auction");
           metadataVersions.current.auction = nextVersion;
-          setAuctionSessions(data.auctionSessions || []);
-          setAuctionTemplates(data.auctionTemplates || []);
-          setResourceCategories(data.resourceCategories || ["Card Album", "Light & Dark"]);
-          prevData.current.auctionSessions = [...(data.auctionSessions || [])];
-          prevData.current.auctionTemplates = [...(data.auctionTemplates || [])];
-          prevData.current.resourceCategories = [...(data.resourceCategories || ["Card Album", "Light & Dark"])];
+          if (updatedByOtherOfficer && localUnsyncedAuctionChanges) {
+            const localSessionsCount = (liveAuctionRef.current.auctionSessions || []).length;
+            const localTemplatesCount = (liveAuctionRef.current.auctionTemplates || []).length;
+            const localResourcesCount = (liveAuctionRef.current.resourceCategories || []).length;
+            const localSessionNames = new Set((liveAuctionRef.current.auctionSessions || []).map(s => s?.name).filter(Boolean));
+            const remoteSessionNames = new Set((incomingSessions || []).map(s => s?.name).filter(Boolean));
+            const sessionNameChanges = Array.from(new Set([
+              ...Array.from(localSessionNames).filter(n => !remoteSessionNames.has(n)),
+              ...Array.from(remoteSessionNames).filter(n => !localSessionNames.has(n))
+            ])).slice(0, 3);
+            const localTemplateNames = new Set((liveAuctionRef.current.auctionTemplates || []).map(t => t?.name).filter(Boolean));
+            const remoteTemplateNames = new Set((incomingTemplates || []).map(t => t?.name).filter(Boolean));
+            const templateNameChanges = Array.from(new Set([
+              ...Array.from(localTemplateNames).filter(n => !remoteTemplateNames.has(n)),
+              ...Array.from(remoteTemplateNames).filter(n => !localTemplateNames.has(n))
+            ])).slice(0, 3);
+            setPendingAuctionConflict({
+              remote: {
+                auctionSessions: incomingSessions,
+                auctionTemplates: incomingTemplates,
+                resourceCategories: incomingResources
+              },
+              local: {
+                auctionSessions: liveAuctionRef.current.auctionSessions || [],
+                auctionTemplates: liveAuctionRef.current.auctionTemplates || [],
+                resourceCategories: liveAuctionRef.current.resourceCategories || []
+              },
+              summary: {
+                localSessionsCount,
+                remoteSessionsCount: incomingSessions.length,
+                localTemplatesCount,
+                remoteTemplatesCount: incomingTemplates.length,
+                localResourcesCount,
+                remoteResourcesCount: incomingResources.length,
+                sessionNameChanges,
+                templateNameChanges
+              },
+              version: nextVersion,
+              lastEditorUid: data.lastEditorUid,
+              timestamp: Date.now()
+            });
+            setMetadataNotice({
+              kind: "auction_conflict",
+              message: "Auction changed remotely while you have unsaved local edits. Resolve conflict to continue.",
+              timestamp: Date.now()
+            });
+            markMetadataReady();
+            return;
+          }
+          setPendingAuctionConflict(null);
+          setAuctionSessions(incomingSessions);
+          setAuctionTemplates(incomingTemplates);
+          setResourceCategories(incomingResources);
+          prevData.current.auctionSessions = [...incomingSessions];
+          prevData.current.auctionTemplates = [...incomingTemplates];
+          prevData.current.resourceCategories = [...incomingResources];
           markMetadataReady();
         });
         unsubs.push(unsubAuctionMeta);
@@ -1004,6 +1072,26 @@ export const GuildProvider = ({ children, initialData }) => {
       setDoc(doc(db, "metadata", "discord"), metadata.discord || {}, { merge: true })
     ]);
   };
+  const resolveAuctionConflict = (action) => {
+    if (!pendingAuctionConflict) return;
+    if (action === "apply_remote") {
+      const remote = pendingAuctionConflict.remote || {};
+      const remoteSessions = remote.auctionSessions || [];
+      const remoteTemplates = remote.auctionTemplates || [];
+      const remoteResources = remote.resourceCategories || ["Card Album", "Light & Dark"];
+      setAuctionSessions(remoteSessions);
+      setAuctionTemplates(remoteTemplates);
+      setResourceCategories(remoteResources);
+      prevData.current.auctionSessions = [...remoteSessions];
+      prevData.current.auctionTemplates = [...remoteTemplates];
+      prevData.current.resourceCategories = [...remoteResources];
+      showToast("Applied latest remote auction changes.", "info");
+    } else {
+      showToast("Keeping local auction edits. Save to overwrite remote values.", "warning");
+    }
+    setPendingAuctionConflict(null);
+    setMetadataNotice(null);
+  };
 
   const submitJoinRequest = async (data) => {
     try {
@@ -1242,7 +1330,7 @@ export const GuildProvider = ({ children, initialData }) => {
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
-    metadataNotice, setMetadataNotice, metadataActivity, syncStatus, triggerSyncRetry,
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
     resetDatabase, exportBackupSnapshot, restoreBackupSnapshot
 
   };

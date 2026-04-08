@@ -3,13 +3,14 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import html2canvas from 'html2canvas';
+import Modal from '../components/ui/Modal';
 
 function AuctionBuilder() {
   const {
     members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
-    sendDiscordImage
+    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -120,6 +121,7 @@ function AuctionBuilder() {
 
   // Get active session data
   const session = auctionSessions.find(s => s.id === activeSession);
+  const conflictSummary = pendingAuctionConflict?.summary || null;
 
   // Pool = active members not in session
   const sessionMemberIds = new Set((session?.members || []).map(m => m.memberId));
@@ -796,6 +798,7 @@ function AuctionBuilder() {
   if (!session) return null;
 
   return (
+    <>
     <div>
       <div className="page-header">
         <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 12 }}>
@@ -1509,6 +1512,51 @@ function AuctionBuilder() {
         )}
       </div>
     </div>
+    {pendingAuctionConflict && (
+      <Modal
+        title="Resolve Auction Conflict"
+        onClose={() => resolveAuctionConflict("keep_local")}
+        footer={(
+          <>
+            <button className="btn btn-ghost" onClick={() => resolveAuctionConflict("keep_local")}>Keep Mine</button>
+            <button className="btn btn-primary" onClick={() => resolveAuctionConflict("apply_remote")}>Apply Remote</button>
+          </>
+        )}
+      >
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+          Another officer saved Auction changes while you have local unsaved edits.
+          <br /><br />
+          {conflictSummary && (
+            <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "var(--accent)", marginBottom: 6 }}>DIFF SUMMARY</div>
+              <div style={{ fontSize: 12 }}>
+                Sessions: <strong>{conflictSummary.localSessionsCount}</strong> local vs <strong>{conflictSummary.remoteSessionsCount}</strong> remote
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Templates: <strong>{conflictSummary.localTemplatesCount}</strong> local vs <strong>{conflictSummary.remoteTemplatesCount}</strong> remote
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Resource Categories: <strong>{conflictSummary.localResourcesCount}</strong> local vs <strong>{conflictSummary.remoteResourcesCount}</strong> remote
+              </div>
+              {Array.isArray(conflictSummary.sessionNameChanges) && conflictSummary.sessionNameChanges.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>
+                  Session name diffs: {conflictSummary.sessionNameChanges.join(", ")}
+                </div>
+              )}
+              {Array.isArray(conflictSummary.templateNameChanges) && conflictSummary.templateNameChanges.length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>
+                  Template name diffs: {conflictSummary.templateNameChanges.join(", ")}
+                </div>
+              )}
+            </div>
+          )}
+          <strong>Keep Mine</strong> keeps your local state (save when ready to overwrite remote).
+          <br />
+          <strong>Apply Remote</strong> discards local unsaved changes and loads latest shared Auction data.
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }
 

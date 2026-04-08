@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useGuild } from '../../context/GuildContext';
 import Icon from '../ui/icons';
+import Modal from '../ui/Modal';
 
 const DiscordSettings = () => {
   const { discordConfig, setDiscordConfig, showToast, isArchitect } = useGuild();
   const [localConfig, setLocalConfig] = useState(discordConfig);
   const [activeSection, setActiveSection] = useState("general");
   const [isTesting, setIsTesting] = useState(false);
+  const [pendingRemoteConfig, setPendingRemoteConfig] = useState(null);
 
   const lastSyncedConfig = React.useRef(JSON.stringify(discordConfig));
   const DRAFT_KEY = "draft_discord_settings_v1";
@@ -35,18 +37,21 @@ const DiscordSettings = () => {
     // or if we just performed a save (in which case they will be equal again).
     const isLocalSameAsLastSync = JSON.stringify(localConfig) === lastSyncedConfig.current;
     
+    const remoteString = JSON.stringify(discordConfig);
     // If the server data has changed since our last sync
-    if (lastSyncedConfig.current !== JSON.stringify(discordConfig)) {
+    if (lastSyncedConfig.current !== remoteString) {
       if (isLocalSameAsLastSync) {
         // User hasn't touched anything, safe to update to the latest server data
         setLocalConfig(discordConfig);
-        lastSyncedConfig.current = JSON.stringify(discordConfig);
+        lastSyncedConfig.current = remoteString;
+        setPendingRemoteConfig(null);
+        return;
       }
-      // If user HAS unsaved changes, we do NOT overwrite them.
-      // We just update our reference of what the server HAS.
-      lastSyncedConfig.current = JSON.stringify(discordConfig);
+      // User has unsaved changes and remote changed: keep local, ask explicit resolution.
+      setPendingRemoteConfig(discordConfig);
+      showToast("Remote Discord config updated by another officer. Resolve conflict.", "warning");
     }
-  }, [discordConfig, localConfig]);
+  }, [discordConfig, localConfig, showToast]);
 
   useEffect(() => {
     const localString = JSON.stringify(localConfig);
@@ -63,6 +68,23 @@ const DiscordSettings = () => {
     setDiscordConfig(localConfig);
     localStorage.removeItem(DRAFT_KEY);
     showToast("Discord configuration saved!", "success");
+  };
+
+  const applyRemoteConfig = () => {
+    if (!pendingRemoteConfig) return;
+    setLocalConfig(pendingRemoteConfig);
+    lastSyncedConfig.current = JSON.stringify(pendingRemoteConfig);
+    setPendingRemoteConfig(null);
+    localStorage.removeItem(DRAFT_KEY);
+    showToast("Applied latest remote config", "info");
+  };
+
+  const keepLocalConfig = () => {
+    if (!pendingRemoteConfig) return;
+    // Advance sync reference to avoid repeated conflict prompt on same remote snapshot.
+    lastSyncedConfig.current = JSON.stringify(pendingRemoteConfig);
+    setPendingRemoteConfig(null);
+    showToast("Keeping local edits. Save when ready to overwrite remote values.", "warning");
   };
 
   const updateNotif = (cat, field, val) => {
@@ -202,16 +224,17 @@ const DiscordSettings = () => {
   );
 
   return (
-    <div className="card animate-fade-in" style={{ marginTop: 20 }}>
-      <div className="card-title flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon name="discord" size={20} color="#5865F2" />
-          🤖 Discord Alert Center
+    <>
+      <div className="card animate-fade-in" style={{ marginTop: 20 }}>
+        <div className="card-title flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon name="discord" size={20} color="#5865F2" />
+            🤖 Discord Alert Center
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save All Config</button>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save All Config</button>
-      </div>
 
-      <div className="flex gap-4 mt-4" style={{ minHeight: 450 }}>
+        <div className="flex gap-4 mt-4" style={{ minHeight: 450 }}>
         {/* Sidebar */}
         <div style={{ width: 160, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
           {sections.map(s => (
@@ -320,8 +343,29 @@ const DiscordSettings = () => {
             </div>
           )}
         </div>
+        </div>
       </div>
-    </div>
+      {pendingRemoteConfig && (
+        <Modal
+          title="Resolve Discord Config Conflict"
+          onClose={keepLocalConfig}
+          footer={(
+            <>
+              <button className="btn btn-ghost" onClick={keepLocalConfig}>Keep Mine</button>
+              <button className="btn btn-primary" onClick={applyRemoteConfig}>Apply Remote</button>
+            </>
+          )}
+        >
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            Another officer saved Discord settings while you have unsaved local edits.
+            <br /><br />
+            <strong>Keep Mine</strong> keeps your local draft and you can save it later (may overwrite remote values).
+            <br />
+            <strong>Apply Remote</strong> discards local draft and loads latest shared settings.
+          </div>
+        </Modal>
+      )}
+    </>
   );
 };
 

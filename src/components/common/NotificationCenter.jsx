@@ -3,8 +3,33 @@ import { useGuild } from '../../context/GuildContext';
 
 export function NotificationCenter({ isOpen, onClose }) {
   const { notifications, myMemberId, markNotifRead } = useGuild();
-  
-  const myNotifs = notifications.filter(n => n.targetId === "all" || n.targetId === myMemberId);
+  const [tab, setTab] = React.useState(() => localStorage.getItem("notifications_tab") || "all"); // all | mine | system
+  const [visibleCount, setVisibleCount] = React.useState(50);
+
+  const myNotifs = React.useMemo(
+    () => notifications.filter(n => n.targetId === "all" || n.targetId === myMemberId),
+    [notifications, myMemberId]
+  );
+  const filteredNotifs = React.useMemo(() => {
+    if (tab === "mine") return myNotifs.filter(n => n.targetId === myMemberId);
+    if (tab === "system") return myNotifs.filter(n => n.targetId === "all");
+    return myNotifs;
+  }, [myNotifs, myMemberId, tab]);
+  const visibleNotifs = filteredNotifs.slice(0, visibleCount);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setVisibleCount(50);
+  }, [isOpen, tab]);
+  React.useEffect(() => {
+    localStorage.setItem("notifications_tab", tab);
+  }, [tab]);
+
+  const markVisibleAsRead = async () => {
+    const unreadTargeted = visibleNotifs.filter(n => !n.isRead && n.targetId !== "all");
+    await Promise.all(unreadTargeted.map(n => markNotifRead(n.id)));
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -15,17 +40,24 @@ export function NotificationCenter({ isOpen, onClose }) {
         style={{ maxHeight: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}
       >
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-card2">
-          <h3 className="font-cinzel text-sm font-bold tracking-wider">NOTIFICATIONS</h3>
+          <div>
+            <h3 className="font-cinzel text-sm font-bold tracking-wider">NOTIFICATIONS</h3>
+            <div className="flex gap-1 mt-2">
+              <button className={`btn btn-xs ${tab === "all" ? "" : "btn-ghost"}`} onClick={() => setTab("all")}>All</button>
+              <button className={`btn btn-xs ${tab === "mine" ? "" : "btn-ghost"}`} onClick={() => setTab("mine")}>Mine</button>
+              <button className={`btn btn-xs ${tab === "system" ? "" : "btn-ghost"}`} onClick={() => setTab("system")}>System</button>
+            </div>
+          </div>
           <button className="text-muted hover:text-white transition-colors" onClick={onClose}>✕</button>
         </div>
         
         <div className="overflow-y-auto p-2 flex flex-col gap-2 custom-scrollbar">
-          {myNotifs.length === 0 && (
+          {filteredNotifs.length === 0 && (
             <div className="text-center p-12 text-muted text-xs italic">
               No messages in your inbox.
             </div>
           )}
-          {myNotifs.map(n => (
+          {visibleNotifs.map(n => (
             <div 
               key={n.id} 
               className={`p-3 rounded-xl border transition-all cursor-pointer hover:bg-white/5 ${
@@ -53,12 +85,19 @@ export function NotificationCenter({ isOpen, onClose }) {
               )}
             </div>
           ))}
+          {filteredNotifs.length > visibleNotifs.length && (
+            <div className="text-center py-2">
+              <button className="btn btn-ghost btn-sm" onClick={() => setVisibleCount(v => v + 50)}>
+                Load more
+              </button>
+            </div>
+          )}
         </div>
         
-        {myNotifs.length > 0 && (
+        {visibleNotifs.length > 0 && (
           <div className="p-3 text-center border-t border-white/5 bg-black/20">
-            <button className="text-[10px] text-muted hover:text-accent transition-colors uppercase tracking-widest font-bold">
-              Mark all as read
+            <button className="text-[10px] text-muted hover:text-accent transition-colors uppercase tracking-widest font-bold" onClick={markVisibleAsRead}>
+              Mark visible as read
             </button>
           </div>
         )}
