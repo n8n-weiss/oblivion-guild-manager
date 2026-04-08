@@ -37,6 +37,7 @@ function AuctionBuilder() {
   const [sidebarTab, setSidebarTab] = useState("map"); // "map" | "tracker"
   const [expandedTrackerMembers, setExpandedTrackerMembers] = useState({});
   const [lastDeletedColumn, setLastDeletedColumn] = useState(null); // { column, cellData, sessionId }
+  const [draggedOverSlot, setDraggedOverSlot] = useState(null); // key of the slot being hovered
 
   // Aggregate ALL loot history
   const lootHistory = React.useMemo(() => {
@@ -471,17 +472,32 @@ function AuctionBuilder() {
 
     updateSession(s => {
       const newCells = { ...s.cells };
+      const pageTag = `P${page}`;
+      const pageRowTags = [1, 2, 3, 4].map(r => `P${page}R${r}`);
       
-      // 1. Remove this tag from ALL members in this specific column (robust match)
+      // 1. Remove conflicting tags from this specific column.
+      // - Row assignment: remove that row tag and broad page tag from everyone.
+      // - Full-page assignment: clear all page rows and broad page tag from everyone.
       Object.keys(newCells).forEach(ck => {
         if (isCellForColumn(ck, targetCol)) {
-          newCells[ck] = (newCells[ck] || []).filter(t => t !== tag);
+          const existing = newCells[ck] || [];
+          newCells[ck] = existing.filter(t => {
+            if (!row) return t !== pageTag && !pageRowTags.includes(t);
+            return t !== tag && t !== pageTag;
+          });
         }
       });
 
-      // 2. Add tag to new member if not 'none'
+      // 2. Add tag(s) to selected member, if any.
       if (memberId !== "none") {
-        newCells[key] = [...(newCells[key] || []), tag];
+        const existing = newCells[key] || [];
+        if (!row) {
+          // Full-page owner gets a single canonical page tag.
+          newCells[key] = [...existing.filter(t => !pageRowTags.includes(t) && t !== pageTag), pageTag];
+        } else {
+          // Row owner gets only the row tag; avoid duplicates.
+          newCells[key] = existing.includes(tag) ? existing : [...existing, tag];
+        }
       }
 
       return { ...s, cells: newCells };
@@ -1230,10 +1246,29 @@ function AuctionBuilder() {
                                 style={{ 
                                   fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white", 
                                   borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer",
-                                  borderColor: (new Set([1,2,3,4].map(r => `P${selectedMapPage}R${r}`)).size === 4) ? "var(--green)" : "var(--accent)"
+                                  borderColor: (() => {
+                                    const currentSess = auctionSessions.find(s => s.id === activeSession);
+                                    const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
+                                    const owners = [1, 2, 3, 4].map(row => {
+                                      const slotKey = `P${selectedMapPage}R${row}`;
+                                      let ownerId = null;
+                                      Object.entries(session?.cells || {}).forEach(([cKey, tags]) => {
+                                        const isAssigned = (tags || []).some(t => t === slotKey || t === `P${selectedMapPage}`);
+                                        if (isCellForColumn(cKey, targetCol) && isAssigned) {
+                                          if (targetCol && cKey.endsWith(`_${targetCol.id}`)) {
+                                            ownerId = cKey.substring(0, cKey.length - targetCol.id.length - 1).trim();
+                                          } else if (targetCol) {
+                                            ownerId = cKey.substring(0, cKey.length - targetCol.name.length - 1).trim();
+                                          }
+                                        }
+                                      });
+                                      return ownerId;
+                                    }).filter(Boolean);
+                                    return owners.length === 4 && new Set(owners).size === 1 ? "var(--green)" : "var(--accent)";
+                                  })()
                                 }}
                               >
-                                <option value="none" disabled style={{ background: "#1a1e2e" }}>Set Full Page To...</option>
+                                <option value="none" style={{ background: "#1a1e2e" }}>Clear Full Page Assignment</option>
                                 {sessionMembers.map(m => (
                                   <option key={m.memberId} value={m.memberId} style={{ background: "#1a1e2e" }}>{m.ign}</option>
                                 ))}
@@ -1256,8 +1291,8 @@ function AuctionBuilder() {
                                 const assigned = currentSessionGrid[key] || [];
                                 const hasConflict = assigned.length > 1;
                                 
-                                // Find current member ID for this slot from session cells (robust match)
-                                let currentMemId = "none";
+                                // Find all candidate owners for this slot from session cells (robust match)
+                                const assignedMemberIds = [];
                                 const currentSess = auctionSessions.find(s => s.id === activeSession);
                                 const targetCol = currentSess?.columns?.find(c => c.id === (selectedMapColId || currentSess?.columns?.[0]?.id));
 
@@ -1267,24 +1302,38 @@ function AuctionBuilder() {
                                     let mId = "";
                                     if (cKey.endsWith(`_${targetCol.id}`)) mId = cKey.substring(0, cKey.length - targetCol.id.length - 1);
                                     else mId = cKey.substring(0, cKey.length - targetCol.name.length - 1);
-                                    currentMemId = mId.trim();
+                                    const normalized = mId.trim();
+                                    if (normalized) assignedMemberIds.push(normalized);
                                   }
                                 });
+                                const uniqueAssignedIds = [...new Set(assignedMemberIds)];
+                                const currentMemId = uniqueAssignedIds.length === 1 ? uniqueAssignedIds[0] : "none";
 
+                                const isDragTarget = draggedOverSlot === key;
                                 return (
-                                  <div key={row} style={{ 
-                                    padding: "8px 10px", borderRadius: 10, 
-                                    background: hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)",
-                                    border: `1px solid ${hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)"}`,
-                                    position: "relative",
-                                    boxShadow: currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none",
-                                    backdropFilter: "blur(8px)",
-                                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                                    animation: hasConflict ? "pulse-red 2s infinite" : currentMemId !== "none" ? "pulse-green 4s infinite" : "none",
-                                    minHeight: 52,
-                                    display: "flex", flexDirection: "column", justifyContent: "center"
-                                  }}>
-                                    <div style={{ opacity: 0.6, fontWeight: 900, fontSize: 8, marginBottom: 4, color: currentMemId !== "none" ? "var(--green)" : "inherit", letterSpacing: 1 }}>{`SLOT ${row}`}</div>
+                                  <div
+                                    key={row}
+                                    onDragOver={e => { if (dragging) { e.preventDefault(); setDraggedOverSlot(key); } }}
+                                    onDragLeave={() => setDraggedOverSlot(null)}
+                                    onDrop={e => { if (dragging) { e.preventDefault(); handleDropdownAssignment(selectedMapPage, row, dragging); setDraggedOverSlot(null); } }}
+                                    style={{ 
+                                      padding: "8px 10px", borderRadius: 10, 
+                                      background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)"),
+                                      border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)")}`,
+                                      position: "relative",
+                                      boxShadow: isDragTarget ? "0 0 18px rgba(99,130,230,0.35)" : (currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none"),
+                                      backdropFilter: "blur(8px)",
+                                      transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+                                      animation: hasConflict ? "pulse-red 2s infinite" : (currentMemId !== "none" && !isDragTarget ? "pulse-green 4s infinite" : "none"),
+                                      minHeight: 52,
+                                      display: "flex", flexDirection: "column", justifyContent: "center",
+                                      transform: isDragTarget ? "scale(1.03)" : "scale(1)",
+                                      cursor: dragging ? "copy" : "default"
+                                    }}
+                                  >
+                                    <div style={{ opacity: 0.6, fontWeight: 900, fontSize: 8, marginBottom: 4, color: isDragTarget ? "var(--accent)" : (currentMemId !== "none" ? "var(--green)" : "inherit"), letterSpacing: 1 }}>
+                                      {isDragTarget ? "✦ DROP HERE" : `SLOT ${row}`}
+                                    </div>
                                     <div style={{ position: "relative" }}>
                                       <select 
                                         value={currentMemId}
@@ -1302,6 +1351,11 @@ function AuctionBuilder() {
                                       <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", opacity: 0.4, pointerEvents: "none", fontSize: 10 }}>▼</div>
                                     </div>
                                     {hasConflict && <div style={{ fontSize: 8, color: "#ff4d4d", marginTop: 2, fontWeight: 900, textShadow: "0 0 8px rgba(255,77,77,0.5)" }}>DUPLICATE!</div>}
+                                    {hasConflict && (
+                                      <div style={{ fontSize: 8, color: "rgba(255,77,77,0.8)", marginTop: 1 }}>
+                                        Choose one owner to resolve
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}

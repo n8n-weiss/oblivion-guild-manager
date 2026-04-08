@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
@@ -53,6 +53,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
+  const MotionDiv = motion.div;
 
   // 3D Card Tilt State
   const mouseX = useMotionValue(0);
@@ -62,6 +63,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const glareX = useTransform(mouseX, [-0.5, 0.5], ["-50%", "50%"]);
   const glareY = useTransform(mouseY, [-0.5, 0.5], ["-50%", "50%"]);
   const glareOpacity = useTransform(mouseX, [-0.5, 0, 0.5], [0.6, 0.1, 0.6]);
+  const holoBgPosition = useTransform(mouseX, [-0.5, 0.5], ["0% 50%", "100% 50%"]);
+  const holoOpacity = useTransform(mouseX, [-0.5, 0, 0.5], [0.8, 0, 0.8]);
 
   const handleMouseMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -187,7 +190,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
 
   // 4. Class Theme & Icon
-  const classThemes = useMemo(() => {
+  const classThemes = (() => {
     const themes = {};
     JOB_CLASSES.forEach(branch => {
       branch.jobs.forEach(job => {
@@ -199,18 +202,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     themes["Whitesmith"] = { color: "var(--color-blacksmith)", icon: "🔨" };
     themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
     return themes;
-  }, []);
+  })();
   const theme = classThemes[member.class] || { color: "var(--color-others)", icon: "👤" };
 
   const attStatus = attPct >= 80 ? { label: "Reliable", badge: "badge-active" }
     : attPct >= 60 ? { label: "Average", badge: "badge-casual" }
       : { label: "At Risk", badge: "badge-atrisk" };
-
-  let scoreClass = "At Risk";
-  if (totalGLScore > 80) scoreClass = "Core";
-  else if (totalGLScore >= 60) scoreClass = "Active";
-  else if (totalGLScore >= 40) scoreClass = "Casual";
-  const scoreClassBadge = { Core: "badge-core", Active: "badge-active", Casual: "badge-casual", "At Risk": "badge-atrisk" };
 
   // Support-specific stats
   const isSupport = member.role === "Support";
@@ -233,7 +230,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const nextRankThresholds = [50, 100, 150, 200];
   const nextThreshold = nextRankThresholds.find(t => t > totalGLScore) || 200;
   const pointsToNextRank = nextThreshold - totalGLScore;
-  const rankProgress = Math.min(100, Math.round((totalGLScore / nextThreshold) * 100));
 
   const level = Math.max(1, Math.floor(Math.sqrt(totalGLScore * 5)));
   const nextLevelScore = Math.pow((level + 1) / 5, 2);
@@ -322,7 +318,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const toggleCollapse = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
 
   // 9. My Loot History from Auction Builder
-  const myLootHistory = useMemo(() => {
+  const myLootHistory = (() => {
     const entries = [];
     (auctionSessions || []).forEach(session => {
       const memberEntry = (session.members || []).find(sm => sm.memberId === member.memberId);
@@ -336,10 +332,10 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       });
     });
     return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [auctionSessions, member.memberId]);
+  })();
 
   // --- Participation Heatmap Logic ---
-  const heatmapData = useMemo(() => {
+  const heatmapData = (() => {
     const data = [];
     const today = new Date();
     // 21 weeks (approx 5 months)
@@ -359,15 +355,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       data.push({ date: dateStr, status, ev });
     }
     return data;
-  }, [memberEvents]);
+  })();
 
-  const ParticipationHeatmap = () => (
+  const renderParticipationHeatmap = () => (
     <div className="heatmap-container animate-fade-in">
       <div className="heatmap-grid">
         {heatmapData.map((day, i) => (
-          <div 
-            key={i} 
-            className={`heatmap-cell ${day.status}`} 
+          <div
+            key={i}
+            className={`heatmap-cell ${day.status}`}
             title={`${day.date}: ${day.ev ? day.ev.eventType + ' (' + day.status + ')' : 'No Event'}`}
           />
         ))}
@@ -383,7 +379,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     </div>
   );
 
-  const chartData = useMemo(() => {
+  const chartData = (() => {
     return [...memberEvents].reverse().map(ev => ({
       date: ev.eventDate.split('-').slice(1).join('/'), // Concise date
       fullDate: ev.eventDate,
@@ -392,9 +388,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       present: ev.att?.status === "present",
       type: ev.eventType
     }));
-  }, [memberEvents]);
+  })();
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const renderCustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -422,7 +418,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     return null;
   };
 
-  const RadarTooltip = ({ active, payload }) => {
+  const renderRadarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       return (
         <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
@@ -601,7 +597,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
       {/* Portal Hero */}
       <div style={{ perspective: 1200 }}>
-        <motion.div 
+        <MotionDiv
           className="portal-hero animate-fade-in" 
           style={{ 
             borderColor: theme.color, marginBottom: 20,
@@ -614,7 +610,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           onMouseLeave={handleMouseLeave}
         >
           {/* 3D Glare Overlay */}
-          <motion.div style={{
+          <MotionDiv style={{
             position: "absolute", width: "200%", height: "200%",
             top: "-50%", left: "-50%", zIndex: 30, pointerEvents: "none",
             background: `radial-gradient(circle at center, rgba(255,255,255,0.4) 0%, transparent 60%)`,
@@ -622,12 +618,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           }} />
 
           {/* Holographic Shimmer Overlay */}
-          <motion.div style={{
+          <MotionDiv style={{
             position: "absolute", inset: "-10%", zIndex: 25, pointerEvents: "none",
             background: `linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.1) 30%, ${theme.color}44 40%, transparent 50%, rgba(255,255,255,0.1) 60%, transparent 70%)`,
             backgroundSize: "200% 200%",
-            backgroundPosition: useTransform(mouseX, [-0.5, 0.5], ["0% 50%", "100% 50%"]),
-            opacity: useTransform(mouseX, [-0.5, 0, 0.5], [0.8, 0, 0.8]),
+            backgroundPosition: holoBgPosition,
+            opacity: holoOpacity,
             mixBlendMode: "color-dodge"
           }} />
 
@@ -757,7 +753,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             )}
           </div>
         </div>
-      </motion.div>
+        </MotionDiv>
     </div>
 
       {/* Stat Cards */}
@@ -883,7 +879,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           {/* Participation Heatmap */}
           <div className="card mb-4">
             <div className="card-title">📅 Participation Heatmap (Last 5 Months)</div>
-            <ParticipationHeatmap />
+            {renderParticipationHeatmap()}
           </div>
 
           {/* Radar + Chart row */}
@@ -906,7 +902,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                 <ResponsiveContainer width="100%" height="100%" minWidth={1}>
                   <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
                     <PolarGrid stroke="rgba(255,255,255,0.06)" />
-                    <PolarAngleAxis dataKey="subject" tick={<CustomRadarLabel cx={0} cy={0} />} />
+                    <PolarAngleAxis dataKey="subject" tick={CustomRadarLabel} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                     
                     <Radar 
@@ -923,7 +919,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                       strokeWidth={1} strokeDasharray="4 4" 
                     />
                     
-                    <Tooltip content={<RadarTooltip />} />
+                    <Tooltip content={renderRadarTooltip} />
                     <Legend iconType="diamond" verticalAlign="bottom" />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -937,7 +933,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+                    <Tooltip content={renderCustomTooltip} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
                     <Bar dataKey="score" name="GL Score" barSize={16} radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.present ? theme.color : "rgba(224,80,80,0.25)"} />

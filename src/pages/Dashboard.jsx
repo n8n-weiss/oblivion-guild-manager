@@ -1,10 +1,7 @@
 import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { computeScore, computeLeaderboard } from '../utils/scoring';
-import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -15,8 +12,25 @@ import {
   Tooltip
 } from 'recharts';
 
+function renderAttendanceTooltip({ active, payload, label }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
+        <p className="text-xs text-muted mb-1">{label}</p>
+        <p className="font-cinzel text-sm" style={{ color: "var(--accent)" }}>
+          Attendance: <span className="text-white">{payload[0].value}%</span>
+        </p>
+        <p className="text-xs text-muted">
+          {payload[0].payload.present} / {payload[0].payload.total} Members
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 function Dashboard() {
-  const { members, events, attendance, performance, parties, currentUser, userRole, showToast, onlineUsers = [] } = useGuild();
+  const { members, events, attendance, performance, parties, onlineUsers = [] } = useGuild();
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   const totalPresences = attendance.filter(a => a.status === "present").length;
@@ -26,9 +40,6 @@ function Dashboard() {
   const top5 = lb.slice(0, 5);
 
   const avatarColors = ["#6382e6", "#e05c8a", "#40c97a", "#f0c040", "#a78bfa", "#38bdf8", "#fb923c", "#f472b6", "#34d399", "#fbbf24"];
-
-  // Score distribution for bar chart
-  const maxScore = Math.max(...lb.map(m => m.totalScore), 1);
 
   // Role distribution
   const dpsCount = activeMembers.filter(m => m.role === "DPS").length;
@@ -121,45 +132,9 @@ function Dashboard() {
     });
   }, [events, attendance]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="card shadow-xl" style={{ border: "1px solid var(--border)", padding: "10px", background: "rgba(10, 15, 25, 0.95)", backdropFilter: "blur(8px)" }}>
-          <p className="text-xs text-muted mb-1">{label}</p>
-          <p className="font-cinzel text-sm" style={{ color: "var(--accent)" }}>
-            Attendance: <span className="text-white">{payload[0].value}%</span>
-          </p>
-          <p className="text-xs text-muted">
-            {payload[0].payload.present} / {payload[0].payload.total} Members
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
-  };
-
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="show"
-    >
-      <motion.div variants={itemVariants} className="page-header flex justify-between items-end">
+    <div>
+      <div className="page-header flex justify-between items-end">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="page-title">📊 Dashboard</h1>
@@ -181,9 +156,9 @@ function Dashboard() {
             <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "var(--gold)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={itemVariants} className="stats-grid">
+      <div className="stats-grid">
         <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
           <div className="stat-icon">⚔️</div>
           <div className="stat-label">Active Members</div>
@@ -220,9 +195,9 @@ function Dashboard() {
             ● This season
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={itemVariants} className="grid-2 mb-4">
+      <div className="grid-2 mb-4">
         {/* Top 5 Players */}
         <div className="card">
           <div className="card-title">🏆 Top Players</div>
@@ -256,7 +231,7 @@ function Dashboard() {
               { label: "Active", count: composition.Active, color: "var(--green)", icon: "🔥" },
               { label: "Casual", count: composition.Casual, color: "var(--accent)", icon: "🎮" },
               { label: "At Risk", count: composition["At Risk"], color: "var(--red)", icon: "⚠️" }
-            ].map((tier, i) => (
+            ].map((tier) => (
               <div key={tier.label} className="flex items-center gap-3">
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: `${tier.color}11`, border: `1px solid ${tier.color}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
                   {tier.icon}
@@ -280,9 +255,9 @@ function Dashboard() {
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={itemVariants} className="grid-2 mb-4">
+      <div className="grid-2 mb-4">
         {/* Activity Feed */}
         <div className="card">
           <div className="card-title">📡 Guild Activity</div>
@@ -322,9 +297,9 @@ function Dashboard() {
             ))}
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={itemVariants} className="card mb-4">
+      <div className="card mb-4">
         <div className="card-title">📈 Guild Attendance Trend</div>
         <div style={{ minHeight: 220, width: "100%", marginTop: 20 }}>
           <ResponsiveContainer width="100%" height={220}>
@@ -349,7 +324,7 @@ function Dashboard() {
                 tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 domain={[0, 100]}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+              <Tooltip content={renderAttendanceTooltip} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
               <Area
                 type="monotone"
                 dataKey="attendance"
@@ -363,9 +338,9 @@ function Dashboard() {
           </ResponsiveContainer>
         </div>
         <div className="text-xs text-muted mt-2">Attendance trend across last 10 guild events.</div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={itemVariants} className="grid-2">
+      <div className="grid-2">
         {/* Role Distribution + Class Breakdown */}
         <div className="card">
           <div className="card-title">📖 Role Distribution</div>
@@ -552,8 +527,8 @@ function Dashboard() {
             {events.length === 0 && <div className="text-muted text-sm" style={{ padding: "16px 0" }}>No events yet.</div>}
           </div>
         </div>
-      </motion.div>
-      <motion.div variants={itemVariants} className="grid-2" style={{ marginTop: 20 }}>
+      </div>
+      <div className="grid-2" style={{ marginTop: 20 }}>
         {/* Party Performance Comparison */}
         <div className="card">
           <div className="card-title">🛡️ Party Strength Comparison</div>
@@ -584,8 +559,8 @@ function Dashboard() {
             )}
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
