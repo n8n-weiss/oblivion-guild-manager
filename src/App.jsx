@@ -30,6 +30,21 @@ const LoginPage = React.lazy(() => import("./pages/LoginPage"));
 const UserManagementPage = React.lazy(() => import("./pages/UserManagementPage"));
 const RequestsPage = React.lazy(() => import("./pages/RequestsPage"));
 const MotionDiv = motion.div;
+const pagePrefetchers = {
+  dashboard: () => import("./pages/Dashboard"),
+  members: () => import("./pages/MembersPage"),
+  events: () => import("./pages/EventsPage"),
+  absences: () => import("./pages/AbsencesPage"),
+  leaderboard: () => import("./pages/LeaderboardPage"),
+  party: () => import("./pages/PartyBuilder"),
+  import: () => import("./pages/ImportPage"),
+  report: () => import("./pages/WeeklyReportPage"),
+  auction: () => import("./pages/AuctionBuilder"),
+  users: () => import("./pages/UserManagementPage"),
+  auditlog: () => import("./pages/AuditLogPage"),
+  requests: () => import("./pages/RequestsPage")
+};
+const prefetchedPages = new Set();
 
 const PageWrapper = ({ children, id }) => (
   <MotionDiv
@@ -61,6 +76,16 @@ export default function App() {
   const pendingRequestsCount = 
     requests.filter(r => r.status === "pending").length + 
     joinRequests.filter(r => r.status === "pending").length;
+
+  const prefetchPage = React.useCallback((pageId) => {
+    if (!pageId || prefetchedPages.has(pageId)) return;
+    const loader = pagePrefetchers[pageId];
+    if (!loader) return;
+    prefetchedPages.add(pageId);
+    loader().catch(() => {
+      prefetchedPages.delete(pageId);
+    });
+  }, []);
 
 
   const handleSignOut = async () => {
@@ -214,10 +239,11 @@ export default function App() {
             if (isMember && item.id === "members") label = "My Profile";
 
             return (
-  <MotionDiv
+              <MotionDiv 
                 key={item.id} 
                 className={`nav-item ${page === item.id ? "active" : ""}`} 
                 onClick={() => { setPage(item.id); setProfileMember(null); }}
+                onMouseEnter={() => prefetchPage(item.id)}
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: 0.05 * NAV_ITEMS.findIndex(i => i.id === item.id) }}
@@ -313,8 +339,13 @@ export default function App() {
           if (label === "Leaderboard") label = "Rank";
 
           return (
-            <button key={item.id} className={`mobile-nav-item ${page === item.id ? "active" : ""}`} 
-              onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}>
+            <button
+              key={item.id}
+              className={`mobile-nav-item ${page === item.id ? "active" : ""}`}
+              onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}
+              onMouseEnter={() => prefetchPage(item.id)}
+              onTouchStart={() => prefetchPage(item.id)}
+            >
               <Icon name={item.id === "members" && isMember ? "user" : item.icon} size={20} />
               <span>{label}</span>
             </button>
