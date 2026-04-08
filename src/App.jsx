@@ -87,14 +87,16 @@ export default function App() {
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
-    notifications, requests, joinRequests,
-    metadataNotice, setMetadataNotice, metadataActivity, syncStatus, triggerSyncRetry
+    notifications, requests, joinRequests, onlineUsers,
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
   const [showTreasury, setShowTreasury] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [retryBusy, setRetryBusy] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagCopied, setDiagCopied] = useState(false);
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
   const pendingRequestsCount = 
@@ -123,6 +125,29 @@ export default function App() {
     await signOut(auth);
     setPage("dashboard");
     showToast("Signed out successfully", "success");
+  };
+  const copyDiagnostics = async () => {
+    const payload = {
+      page,
+      syncStatus,
+      unreadCount,
+      onlineUsers: onlineUsers?.length || 0,
+      pendingRequestsCount,
+      hasMetadataNotice: !!metadataNotice,
+      hasAuctionConflict: !!pendingAuctionConflict,
+      metadataActivityCount: metadataActivity?.length || 0,
+      auth: currentUser?.email ? "auth" : "anon",
+      role: isAdmin ? "admin" : isOfficer ? "officer" : isMember ? "member" : "unknown",
+      mode: import.meta.env.MODE,
+      ts: new Date().toISOString()
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setDiagCopied(true);
+      window.setTimeout(() => setDiagCopied(false), 1600);
+    } catch {
+      showToast("Failed to copy diagnostics", "error");
+    }
   };
 
   // RBAC: Redirect members if they are on a restricted page
@@ -393,6 +418,42 @@ export default function App() {
 
       {/* Main Content Areas */}
       <main className="main-content">
+        {isArchitect && (
+          <div style={{ position: "fixed", top: 10, right: 14, zIndex: 120, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ border: "1px solid rgba(255,255,255,0.2)", fontSize: 11 }}
+              onClick={() => setShowDiag(v => !v)}
+            >
+              {showDiag ? "Hide Diagnostics" : "Show Diagnostics"}
+            </button>
+            {showDiag && (
+              <div style={{ width: 300, padding: 10, borderRadius: 10, border: "1px solid rgba(99,130,230,0.35)", background: "rgba(10,12,18,0.92)", backdropFilter: "blur(8px)" }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", letterSpacing: 1, marginBottom: 8 }}>ARCHITECT DIAGNOSTICS</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+                  <div>Page: <strong>{page}</strong></div>
+                  <div>Sync: <strong>{syncStatus}</strong></div>
+                  <div>Unread: <strong>{unreadCount}</strong></div>
+                  <div>Online: <strong>{onlineUsers?.length || 0}</strong></div>
+                  <div>Req Pending: <strong>{pendingRequestsCount}</strong></div>
+                  <div>Meta Notice: <strong>{metadataNotice ? "yes" : "no"}</strong></div>
+                  <div>Auction Conflict: <strong>{pendingAuctionConflict ? "yes" : "no"}</strong></div>
+                  <div>Recent Meta Events: <strong>{metadataActivity?.length || 0}</strong></div>
+                  <div>User: <strong>{currentUser?.email ? "auth" : "anon"}</strong></div>
+                  <div>Role Flags: <strong>{isAdmin ? "admin" : isOfficer ? "officer" : isMember ? "member" : "n/a"}</strong></div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 10, color: "var(--text-muted)" }}>
+                  Build: {import.meta.env.MODE} | {new Date().toLocaleTimeString()}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ width: "100%" }} onClick={copyDiagnostics}>
+                    {diagCopied ? "Copied!" : "Copy Diagnostics"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
         <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
           <span

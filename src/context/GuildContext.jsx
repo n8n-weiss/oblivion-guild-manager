@@ -142,7 +142,11 @@ export const GuildProvider = ({ children, initialData }) => {
   const myRank = myProfile?.guildRank || "Member";
   const isStatusActive = (myProfile?.status || "active") === "active";
   
-  const isArchitect = myRank === "System Architect" || myRank === "Creator" || userRole === "architect";
+  const isArchitect =
+    myRank === "System Architect" ||
+    myRank === "System Architect (Creator)" ||
+    myRank === "Creator" ||
+    userRole === "architect";
   const hasAdminRank = ["Guild Master", "Vice Guild Master", "Commander"].includes(myRank) || isArchitect;
   const hasOfficerRank = ["Charisma Baby", "Baby Charisma", "Officer"].includes(myRank) || hasAdminRank;
 
