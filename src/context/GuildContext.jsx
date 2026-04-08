@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -558,54 +558,184 @@ export const GuildProvider = ({ children, initialData }) => {
   useEffect(() => {
     if ((!currentUser && !initialData) || !needsBattleData) return;
     const unsubs = [];
-
-    const unsubAtt = onSnapshot(collection(db, "attendance"), (snap) => {
-      const flat = [];
-      snap.docs.forEach(d => {
-        const { eventId, members: attMembers } = d.data();
-        Object.entries(attMembers || {}).forEach(([memberId, status]) => {
-          flat.push({ eventId, memberId, status });
-        });
-      });
-      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.attendance)) {
-        setAttendance(flat);
-        prevData.current.attendance = [...flat];
+    const sourceEvents = events.length ? events : (initialData?.INITIAL_EVENTS || []);
+    const eventIds = Array.from(new Set(sourceEvents.map(e => e?.eventId).filter(Boolean)));
+    const monthKeys = Array.from(new Set(
+      sourceEvents
+        .map(e => String(e?.eventDate || "").slice(0, 7))
+        .filter(Boolean)
+    ));
+    if (eventIds.length === 0) {
+      if (prevData.current.attendance?.length) {
+        setAttendance([]);
+        prevData.current.attendance = [];
       }
-    });
-    unsubs.push(unsubAtt);
-
-    const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
-      const flat = [];
-      snap.docs.forEach(d => {
-        const { eventId, members: perfMembers } = d.data();
-        Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
-          flat.push({ ...pData, eventId, memberId });
-        });
-      });
-      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.performance)) {
-        setPerformance(flat);
-        prevData.current.performance = [...flat];
+      if (prevData.current.performance?.length) {
+        setPerformance([]);
+        prevData.current.performance = [];
       }
-    });
-    unsubs.push(unsubPerf);
-
-    const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
-      const flat = [];
-      snap.docs.forEach(d => {
-        const { eventId, ratings: eoRatingsMap } = d.data();
-        Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
-          flat.push({ eventId, memberId, rating });
-        });
-      });
-      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.eoRatings)) {
-        setEoRatings(flat);
-        prevData.current.eoRatings = [...flat];
+      if (prevData.current.eoRatings?.length) {
+        setEoRatings([]);
+        prevData.current.eoRatings = [];
       }
+      return () => {};
+    }
+    const chunkSize = 10;
+    const chunks = [];
+    for (let i = 0; i < eventIds.length; i += chunkSize) {
+      chunks.push(eventIds.slice(i, i + chunkSize));
+    }
+    const monthChunks = [];
+    for (let i = 0; i < monthKeys.length; i += chunkSize) {
+      monthChunks.push(monthKeys.slice(i, i + chunkSize));
+    }
+    const flattenSnapshotStores = (stores) => {
+      const out = [];
+      stores.forEach((arr) => out.push(...arr));
+      return out;
+    };
+    const mergePreferBuckets = (legacyFlat, bucketFlat) => {
+      const merged = new Map();
+      legacyFlat.forEach((item) => {
+        merged.set(`${item.eventId}__${item.memberId}`, item);
+      });
+      bucketFlat.forEach((item) => {
+        merged.set(`${item.eventId}__${item.memberId}`, item);
+      });
+      return Array.from(merged.values());
+    };
+
+    const attendanceStores = new Map();
+    const attendanceBucketStores = new Map();
+    const emitAttendance = () => {
+      const legacyFlat = flattenSnapshotStores(attendanceStores);
+      const bucketFlat = flattenSnapshotStores(attendanceBucketStores);
+      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
+      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.attendance)) {
+        setAttendance(merged);
+        prevData.current.attendance = [...merged];
+      }
+    };
+    chunks.forEach((ids, idx) => {
+      const q = query(collection(db, "attendance"), where(documentId(), "in", ids));
+      const unsubAtt = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, members: attMembers } = d.data();
+          Object.entries(attMembers || {}).forEach(([memberId, status]) => {
+            flat.push({ eventId, memberId, status });
+          });
+        });
+        attendanceStores.set(idx, flat);
+        emitAttendance();
+      });
+      unsubs.push(unsubAtt);
     });
-    unsubs.push(unsubEo);
+    monthChunks.forEach((months, idx) => {
+      const q = query(collection(db, "attendanceBuckets"), where("month", "in", months));
+      const unsubAttBucket = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, members: attMembers } = d.data();
+          if (!eventId || !eventIds.includes(eventId)) return;
+          Object.entries(attMembers || {}).forEach(([memberId, status]) => {
+            flat.push({ eventId, memberId, status });
+          });
+        });
+        attendanceBucketStores.set(idx, flat);
+        emitAttendance();
+      });
+      unsubs.push(unsubAttBucket);
+    });
+
+    const performanceStores = new Map();
+    const performanceBucketStores = new Map();
+    const emitPerformance = () => {
+      const legacyFlat = flattenSnapshotStores(performanceStores);
+      const bucketFlat = flattenSnapshotStores(performanceBucketStores);
+      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
+      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.performance)) {
+        setPerformance(merged);
+        prevData.current.performance = [...merged];
+      }
+    };
+    chunks.forEach((ids, idx) => {
+      const q = query(collection(db, "performance"), where(documentId(), "in", ids));
+      const unsubPerf = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, members: perfMembers } = d.data();
+          Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
+            flat.push({ ...pData, eventId, memberId });
+          });
+        });
+        performanceStores.set(idx, flat);
+        emitPerformance();
+      });
+      unsubs.push(unsubPerf);
+    });
+    monthChunks.forEach((months, idx) => {
+      const q = query(collection(db, "performanceBuckets"), where("month", "in", months));
+      const unsubPerfBucket = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, members: perfMembers } = d.data();
+          if (!eventId || !eventIds.includes(eventId)) return;
+          Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
+            flat.push({ ...pData, eventId, memberId });
+          });
+        });
+        performanceBucketStores.set(idx, flat);
+        emitPerformance();
+      });
+      unsubs.push(unsubPerfBucket);
+    });
+
+    const eoStores = new Map();
+    const eoBucketStores = new Map();
+    const emitEo = () => {
+      const legacyFlat = flattenSnapshotStores(eoStores);
+      const bucketFlat = flattenSnapshotStores(eoBucketStores);
+      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
+      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.eoRatings)) {
+        setEoRatings(merged);
+        prevData.current.eoRatings = [...merged];
+      }
+    };
+    chunks.forEach((ids, idx) => {
+      const q = query(collection(db, "eoRatings"), where(documentId(), "in", ids));
+      const unsubEo = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, ratings: eoRatingsMap } = d.data();
+          Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
+            flat.push({ eventId, memberId, rating });
+          });
+        });
+        eoStores.set(idx, flat);
+        emitEo();
+      });
+      unsubs.push(unsubEo);
+    });
+    monthChunks.forEach((months, idx) => {
+      const q = query(collection(db, "eoRatingsBuckets"), where("month", "in", months));
+      const unsubEoBucket = onSnapshot(q, (snap) => {
+        const flat = [];
+        snap.docs.forEach(d => {
+          const { eventId, ratings: eoRatingsMap } = d.data();
+          if (!eventId || !eventIds.includes(eventId)) return;
+          Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
+            flat.push({ eventId, memberId, rating });
+          });
+        });
+        eoBucketStores.set(idx, flat);
+        emitEo();
+      });
+      unsubs.push(unsubEoBucket);
+    });
 
     return () => { unsubs.forEach(u => u()); };
-  }, [currentUser, initialData, needsBattleData]);
+  }, [currentUser, initialData, needsBattleData, events]);
 
   useEffect(() => {
     if ((!currentUser && !initialData) || !needsPresenceData) return;
@@ -652,6 +782,10 @@ export const GuildProvider = ({ children, initialData }) => {
         const batch = writeBatch(db);
         let changesCount = 0;
         let wroteMetadata = false;
+        const eventMonthMap = new Map([
+          ...prevData.current.events.map(e => [e.eventId, String(e?.eventDate || "").slice(0, 7)]),
+          ...events.map(e => [e.eventId, String(e?.eventDate || "").slice(0, 7)])
+        ]);
         const hasMetadataPartiesChanges =
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
@@ -698,6 +832,12 @@ export const GuildProvider = ({ children, initialData }) => {
               batch.delete(doc(db, "attendance", eid));
               batch.delete(doc(db, "performance", eid));
               batch.delete(doc(db, "eoRatings", eid));
+              const eventMonth = eventMonthMap.get(eid);
+              if (eventMonth) {
+                batch.delete(doc(db, "attendanceBuckets", `${eventMonth}_${eid}`));
+                batch.delete(doc(db, "performanceBuckets", `${eventMonth}_${eid}`));
+                batch.delete(doc(db, "eoRatingsBuckets", `${eventMonth}_${eid}`));
+              }
             }
           });
           events.forEach(e => batch.set(doc(db, "events", e.eventId), e));
@@ -710,7 +850,13 @@ export const GuildProvider = ({ children, initialData }) => {
             if (!grouped[a.eventId]) grouped[a.eventId] = {};
             grouped[a.eventId][a.memberId] = a.status;
           });
-          Object.keys(grouped).forEach(eid => batch.set(doc(db, "attendance", eid), { eventId: eid, members: grouped[eid] }));
+          Object.keys(grouped).forEach(eid => {
+            batch.set(doc(db, "attendance", eid), { eventId: eid, members: grouped[eid] });
+            const month = eventMonthMap.get(eid);
+            if (month) {
+              batch.set(doc(db, "attendanceBuckets", `${month}_${eid}`), { eventId: eid, month, members: grouped[eid] });
+            }
+          });
           prevData.current.attendance = [...attendance];
           changesCount++;
         }
@@ -720,7 +866,13 @@ export const GuildProvider = ({ children, initialData }) => {
             if (!grouped[p.eventId]) grouped[p.eventId] = {};
             grouped[p.eventId][p.memberId] = p;
           });
-          Object.keys(grouped).forEach(eid => batch.set(doc(db, "performance", eid), { eventId: eid, members: grouped[eid] }));
+          Object.keys(grouped).forEach(eid => {
+            batch.set(doc(db, "performance", eid), { eventId: eid, members: grouped[eid] });
+            const month = eventMonthMap.get(eid);
+            if (month) {
+              batch.set(doc(db, "performanceBuckets", `${month}_${eid}`), { eventId: eid, month, members: grouped[eid] });
+            }
+          });
           prevData.current.performance = [...performance];
           changesCount++;
         }
@@ -730,7 +882,13 @@ export const GuildProvider = ({ children, initialData }) => {
             if (!grouped[r.eventId]) grouped[r.eventId] = {};
             grouped[r.eventId][r.memberId] = r.rating;
           });
-          Object.keys(grouped).forEach(eid => batch.set(doc(db, "eoRatings", eid), { eventId: eid, ratings: grouped[eid] }));
+          Object.keys(grouped).forEach(eid => {
+            batch.set(doc(db, "eoRatings", eid), { eventId: eid, ratings: grouped[eid] });
+            const month = eventMonthMap.get(eid);
+            if (month) {
+              batch.set(doc(db, "eoRatingsBuckets", `${month}_${eid}`), { eventId: eid, month, ratings: grouped[eid] });
+            }
+          });
           prevData.current.eoRatings = [...eoRatings];
           changesCount++;
         }
@@ -1095,6 +1253,86 @@ export const GuildProvider = ({ children, initialData }) => {
       setDoc(doc(db, "metadata", "discord"), metadata.discord || {}, { merge: true })
     ]);
   };
+  const backfillBattleBuckets = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    const [eventsSnap, attSnap, perfSnap, eoSnap] = await Promise.all([
+      getDocs(collection(db, "events")),
+      getDocs(collection(db, "attendance")),
+      getDocs(collection(db, "performance")),
+      getDocs(collection(db, "eoRatings"))
+    ]);
+    const eventMonthMap = new Map();
+    eventsSnap.docs.forEach((d) => {
+      const ev = d.data();
+      if (ev?.eventId) eventMonthMap.set(ev.eventId, String(ev?.eventDate || "").slice(0, 7));
+    });
+    const ops = [];
+    attSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      const month = eventMonthMap.get(eventId);
+      if (!eventId || !month) return;
+      ops.push((b) => b.set(doc(db, "attendanceBuckets", `${month}_${eventId}`), { eventId, month, members: payload?.members || {} }, { merge: true }));
+    });
+    perfSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      const month = eventMonthMap.get(eventId);
+      if (!eventId || !month) return;
+      ops.push((b) => b.set(doc(db, "performanceBuckets", `${month}_${eventId}`), { eventId, month, members: payload?.members || {} }, { merge: true }));
+    });
+    eoSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      const month = eventMonthMap.get(eventId);
+      if (!eventId || !month) return;
+      ops.push((b) => b.set(doc(db, "eoRatingsBuckets", `${month}_${eventId}`), { eventId, month, ratings: payload?.ratings || {} }, { merge: true }));
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = writeBatch(db);
+      ops.slice(i, i + 400).forEach(fn => fn(b));
+      await b.commit();
+    }
+    return { totalBucketDocs: ops.length };
+  };
+  const estimateBattleBucketBackfill = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    const [eventsSnap, attSnap, perfSnap, eoSnap] = await Promise.all([
+      getDocs(collection(db, "events")),
+      getDocs(collection(db, "attendance")),
+      getDocs(collection(db, "performance")),
+      getDocs(collection(db, "eoRatings"))
+    ]);
+    const eventMonthMap = new Map();
+    eventsSnap.docs.forEach((d) => {
+      const ev = d.data();
+      if (ev?.eventId) eventMonthMap.set(ev.eventId, String(ev?.eventDate || "").slice(0, 7));
+    });
+    let attendanceEligible = 0;
+    let performanceEligible = 0;
+    let eoEligible = 0;
+    attSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      if (eventId && eventMonthMap.get(eventId)) attendanceEligible += 1;
+    });
+    perfSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      if (eventId && eventMonthMap.get(eventId)) performanceEligible += 1;
+    });
+    eoSnap.docs.forEach((d) => {
+      const payload = d.data();
+      const eventId = payload?.eventId || d.id;
+      if (eventId && eventMonthMap.get(eventId)) eoEligible += 1;
+    });
+    return {
+      attendanceEligible,
+      performanceEligible,
+      eoEligible,
+      totalBucketDocs: attendanceEligible + performanceEligible + eoEligible
+    };
+  };
   const resolveAuctionConflict = (action) => {
     if (!pendingAuctionConflict) return;
     if (action === "apply_remote") {
@@ -1354,7 +1592,7 @@ export const GuildProvider = ({ children, initialData }) => {
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
-    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot
+    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill
 
   };
 

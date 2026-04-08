@@ -5,7 +5,7 @@ import DiscordSettings from '../components/common/DiscordSettings';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function ImportPage() {
-  const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot } = useGuild();
+  const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill } = useGuild();
   const CONFIRM_TOKEN = "RESTORE";
   const [preview, setPreview] = useState([]);
   const [fileName, setFileName] = useState("");
@@ -18,6 +18,9 @@ function ImportPage() {
   const [restorePreview, setRestorePreview] = useState(null);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [backfillingBuckets, setBackfillingBuckets] = useState(false);
+  const [estimatingBuckets, setEstimatingBuckets] = useState(false);
+  const [bucketEstimate, setBucketEstimate] = useState(null);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -270,6 +273,37 @@ function ImportPage() {
       showToast("Backup restore failed", "error");
     }
   };
+  const handleBackfillBuckets = async () => {
+    try {
+      setBackfillingBuckets(true);
+      const result = await backfillBattleBuckets();
+      showToast(`Bucket backfill complete (${result?.totalBucketDocs || 0} docs written)`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Bucket backfill failed", "error");
+    } finally {
+      setBackfillingBuckets(false);
+    }
+  };
+  const handleEstimateBuckets = React.useCallback(async () => {
+    try {
+      setEstimatingBuckets(true);
+      const estimate = await estimateBattleBucketBackfill();
+      setBucketEstimate(estimate);
+      showToast(`Estimated ${estimate?.totalBucketDocs || 0} bucket docs`, "info");
+    } catch (err) {
+      console.error(err);
+      showToast("Bucket estimate failed", "error");
+    } finally {
+      setEstimatingBuckets(false);
+    }
+  }, [estimateBattleBucketBackfill, showToast]);
+  React.useEffect(() => {
+    if (!isArchitect || activeTab !== "backup") return;
+    if (estimatingBuckets || backfillingBuckets) return;
+    if (bucketEstimate) return;
+    handleEstimateBuckets();
+  }, [isArchitect, activeTab, estimatingBuckets, backfillingBuckets, bucketEstimate, handleEstimateBuckets]);
 
   return (
     <div>
@@ -358,7 +392,36 @@ function ImportPage() {
               <button className="btn btn-primary" onClick={downloadBackup}>
                 <Icon name="save" size={12} /> Export Full Backup
               </button>
+              <button className="btn btn-ghost" onClick={handleEstimateBuckets} disabled={estimatingBuckets || backfillingBuckets}>
+                <Icon name="search" size={12} /> {estimatingBuckets ? "Estimating..." : "Estimate Backfill"}
+              </button>
+              <button className="btn btn-ghost" onClick={handleBackfillBuckets} disabled={backfillingBuckets}>
+                <Icon name="refresh" size={12} /> {backfillingBuckets ? "Backfilling..." : "Backfill Battle Buckets"}
+              </button>
             </div>
+            <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
+              Backfill copies legacy attendance/performance/eo docs into monthly bucket docs for faster scoped reads.
+            </div>
+            {bucketEstimate && (
+              <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: "1px solid rgba(99,130,230,0.35)", background: "rgba(99,130,230,0.08)", fontSize: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <strong>Dry-run estimate:</strong> {bucketEstimate.totalBucketDocs} docs
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={handleEstimateBuckets}
+                    disabled={estimatingBuckets || backfillingBuckets}
+                    style={{ padding: "2px 8px", fontSize: 11 }}
+                  >
+                    {estimatingBuckets ? "Refreshing..." : "Refresh estimate"}
+                  </button>
+                </div>
+                {" "}(<span>attendance {bucketEstimate.attendanceEligible}</span>,{" "}
+                <span>performance {bucketEstimate.performanceEligible}</span>,{" "}
+                <span>eo {bucketEstimate.eoEligible}</span>)
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <label className="text-xs font-bold">Restore Mode</label>
               <select className="form-select" style={{ width: 180 }} value={backupMode} onChange={e => setBackupMode(e.target.value)}>
