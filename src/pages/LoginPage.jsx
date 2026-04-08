@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -6,14 +6,19 @@ import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firesto
 import Icon from '../components/ui/icons';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
+import Modal from '../components/ui/Modal';
 
 function LoginPage() {
   const MotionDiv = motion.div;
   const { submitJoinRequest } = useGuild();
   const [tab, setTab] = useState("login"); // login, register
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => localStorage.getItem("last_login_uid_v1") || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsOn, setCapsOn] = useState(false);
+  const [showForgotUid, setShowForgotUid] = useState(false);
+  const [authNotice, setAuthNotice] = useState("");
   // Registration States
   const [regDiscord, setRegDiscord] = useState("");
   const [regIgn, setRegIgn] = useState("");
@@ -24,13 +29,20 @@ function LoginPage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const uidHintOk = !email || /@oblivion\.com$/i.test(email.trim());
+
+  useEffect(() => {
+    if (tab !== "login") setShowPassword(false);
+  }, [tab]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) { setError("Please fill in all fields."); return; }
     setLoading(true);
     setError("");
+    setAuthNotice("Authenticating guild credentials...");
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      localStorage.setItem("last_login_uid_v1", email.trim().toLowerCase());
     } catch {
       // Fallback: Check if there's an approved join request that hasn't been "claimed" (created) yet
       try {
@@ -53,6 +65,7 @@ function LoginPage() {
               displayName: r.ign,
               createdAt: new Date()
             });
+            localStorage.setItem("last_login_uid_v1", email.trim().toLowerCase());
             return;
           }
         }
@@ -62,6 +75,7 @@ function LoginPage() {
       setError("Invalid email or password. If you just applied, please wait for an Officer to approve your request.");
     } finally {
       setLoading(false);
+      setAuthNotice("");
     }
   };
 
@@ -175,21 +189,76 @@ function LoginPage() {
             <div key="tab-login" style={{ animation: "fade-in 0.4s ease-out" }}>
               <div style={{ fontFamily: "Cinzel,serif", fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Welcome</div>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>Sign in to access your OBLIVION Portal</div>
+              {!!error && (
+                <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(224,80,80,0.15)", border: "1px solid rgba(224,80,80,0.4)", borderRadius: 8, fontSize: 12, color: "var(--red)" }}>
+                  ⚠️ {error}
+                </div>
+              )}
 
               <div className="form-grid" style={{ gap: 16 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ color: "var(--text-secondary)" }}>Email / Username</label>
-                  <input className="form-input" type="email" placeholder="email: yourdiscordusername@oblivion.com"
+                  <label className="form-label" style={{ color: "var(--text-secondary)" }}>Portal Email</label>
+                  <input className="form-input" type="email" placeholder="yourdiscordusername@oblivion.com"
                     value={email} onChange={e => setEmail(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleLogin()}
                     style={{ background: "rgba(8, 10, 15, 0.5)" }} />
+                  <div style={{ marginTop: 6, fontSize: 11, color: uidHintOk ? "var(--text-muted)" : "var(--gold)" }}>
+                    Example email: `yourdiscordusername@oblivion.com`
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "2px 8px", fontSize: 11 }}
+                      onClick={() => setShowForgotUid(true)}
+                    >
+                      Forgot UID?
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "2px 8px", fontSize: 11 }}
+                      onClick={() => {
+                        localStorage.removeItem("last_login_uid_v1");
+                        setEmail("");
+                        setAuthNotice("");
+                        setError("");
+                      }}
+                      title="Clear remembered UID/email from this device"
+                    >
+                      Clear remembered UID
+                    </button>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label" style={{ color: "var(--text-secondary)" }}>Password</label>
-                  <input className="form-input" type="password" placeholder="password: OBL+UID or OBL123456"
-                    value={password} onChange={e => setPassword(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleLogin()}
-                    style={{ background: "rgba(8, 10, 15, 0.5)" }} />
+                  <div style={{ position: "relative" }}>
+                    <input className="form-input" type={showPassword ? "text" : "password"} placeholder="OBL+UID or OBL123456"
+                      value={password} onChange={e => setPassword(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleLogin()}
+                      onKeyUp={(e) => setCapsOn(!!e.getModifierState?.("CapsLock"))}
+                      onFocus={(e) => setCapsOn(!!e.getModifierState?.("CapsLock"))}
+                      style={{ background: "rgba(8, 10, 15, 0.5)", paddingRight: 84 }} />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setShowPassword(v => !v)}
+                      style={{ position: "absolute", right: 6, top: 6, padding: "3px 8px", fontSize: 11 }}
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {capsOn && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: "var(--gold)" }}>
+                      Caps Lock is on.
+                    </div>
+                  )}
+                  {!capsOn && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>
+                      Example password: `OBL123456`
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -197,6 +266,11 @@ function LoginPage() {
                 onClick={handleLogin} disabled={loading}>
                 {loading ? "Signing in..." : "Sign In ⚔"}
               </button>
+              {loading && authNotice && (
+                <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)" }}>
+                  {authNotice}
+                </div>
+              )}
             </div>
           ) : (
             <div key="tab-register" style={{ animation: "fade-in 0.4s ease-out" }}>
@@ -286,7 +360,7 @@ function LoginPage() {
             </div>
           )}
 
-          {error && (
+          {error && tab !== "login" && (
             <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(224,80,80,0.15)", border: "1px solid rgba(224,80,80,0.4)", borderRadius: 8, fontSize: 12, color: "var(--red)" }}>
               ⚠️ {error}
             </div>
@@ -302,6 +376,26 @@ function LoginPage() {
           Need help? DM Masters and Officers in Discord.
         </MotionDiv>
       </div>
+      {showForgotUid && (
+        <Modal
+          title="Recover Your Login UID"
+          onClose={() => setShowForgotUid(false)}
+          footer={<button className="btn btn-primary" onClick={() => setShowForgotUid(false)}>Got it</button>}
+        >
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            Use these steps to recover your login UID/email:
+            <ol style={{ margin: "10px 0 0 18px", padding: 0 }}>
+              <li>Check your Discord username used in your join request.</li>
+              <li>Remove symbols/spaces and lowercase it.</li>
+              <li>Add <strong>@oblivion.com</strong> at the end.</li>
+              <li>Use your password format: <strong>OBL + UID</strong> (example: <strong>OBL123456</strong>).</li>
+            </ol>
+            <div style={{ marginTop: 10, fontSize: 12 }}>
+              If still blocked, contact Masters/Officers for account verification.
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
