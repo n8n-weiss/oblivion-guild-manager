@@ -94,6 +94,8 @@ export const GuildProvider = ({ children, initialData }) => {
   });
   const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
+  const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
+  const needsPresenceData = page === "dashboard" || page === "members";
 
   const [raidParties, setRaidParties] = useState(() => {
     try {
@@ -179,7 +181,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
 
     writePresence(); // write immediately on login
-    const heartbeat = setInterval(writePresence, 3 * 60 * 1000); // every 3 minutes
+    const heartbeat = setInterval(writePresence, 10 * 60 * 1000); // every 10 minutes
 
     return () => clearInterval(heartbeat);
   }, [currentUser]);
@@ -329,64 +331,6 @@ export const GuildProvider = ({ children, initialData }) => {
         });
         unsubs.push(unsubJoinReqs);
 
-        const unsubAtt = onSnapshot(collection(db, "attendance"), (snap) => {
-          const flat = [];
-          snap.docs.forEach(d => {
-            const { eventId, members: attMembers } = d.data();
-            Object.entries(attMembers || {}).forEach(([memberId, status]) => {
-              flat.push({ eventId, memberId, status });
-            });
-          });
-          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.attendance)) {
-            setAttendance(flat);
-            prevData.current.attendance = [...flat];
-          }
-        });
-        unsubs.push(unsubAtt);
-
-        const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
-          const flat = [];
-          snap.docs.forEach(d => {
-            const { eventId, members: perfMembers } = d.data();
-            Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
-              flat.push({ ...pData, eventId, memberId });
-            });
-          });
-          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.performance)) {
-            setPerformance(flat);
-            prevData.current.performance = [...flat];
-          }
-        });
-        unsubs.push(unsubPerf);
-
-        const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
-          const flat = [];
-          snap.docs.forEach(d => {
-            const { eventId, ratings: eoRatingsMap } = d.data();
-            Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
-              flat.push({ eventId, memberId, rating });
-            });
-          });
-          if (JSON.stringify(flat) !== JSON.stringify(prevData.current.eoRatings)) {
-            setEoRatings(flat);
-            prevData.current.eoRatings = [...flat];
-          }
-        });
-        unsubs.push(unsubEo);
-
-        const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
-          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-          const online = snap.docs
-            .map(d => ({ uid: d.id, ...d.data() }))
-            .filter(p => {
-              if (!p.lastSeen) return false;
-              const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
-              return ms > fiveMinutesAgo;
-            });
-          setOnlineUsers(online);
-        });
-        unsubs.push(unsubPresence);
-
       } catch (err) {
         console.error("Listener setup error:", err);
         setLoading(false);
@@ -395,6 +339,75 @@ export const GuildProvider = ({ children, initialData }) => {
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
   }, [initialData, currentUser]);
+
+  // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
+  useEffect(() => {
+    if ((!currentUser && !initialData) || !needsBattleData) return;
+    const unsubs = [];
+
+    const unsubAtt = onSnapshot(collection(db, "attendance"), (snap) => {
+      const flat = [];
+      snap.docs.forEach(d => {
+        const { eventId, members: attMembers } = d.data();
+        Object.entries(attMembers || {}).forEach(([memberId, status]) => {
+          flat.push({ eventId, memberId, status });
+        });
+      });
+      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.attendance)) {
+        setAttendance(flat);
+        prevData.current.attendance = [...flat];
+      }
+    });
+    unsubs.push(unsubAtt);
+
+    const unsubPerf = onSnapshot(collection(db, "performance"), (snap) => {
+      const flat = [];
+      snap.docs.forEach(d => {
+        const { eventId, members: perfMembers } = d.data();
+        Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
+          flat.push({ ...pData, eventId, memberId });
+        });
+      });
+      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.performance)) {
+        setPerformance(flat);
+        prevData.current.performance = [...flat];
+      }
+    });
+    unsubs.push(unsubPerf);
+
+    const unsubEo = onSnapshot(collection(db, "eoRatings"), (snap) => {
+      const flat = [];
+      snap.docs.forEach(d => {
+        const { eventId, ratings: eoRatingsMap } = d.data();
+        Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
+          flat.push({ eventId, memberId, rating });
+        });
+      });
+      if (JSON.stringify(flat) !== JSON.stringify(prevData.current.eoRatings)) {
+        setEoRatings(flat);
+        prevData.current.eoRatings = [...flat];
+      }
+    });
+    unsubs.push(unsubEo);
+
+    return () => { unsubs.forEach(u => u()); };
+  }, [currentUser, initialData, needsBattleData]);
+
+  useEffect(() => {
+    if ((!currentUser && !initialData) || !needsPresenceData) return;
+    const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+      const online = snap.docs
+        .map(d => ({ uid: d.id, ...d.data() }))
+        .filter(p => {
+          if (!p.lastSeen) return false;
+          const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
+          return ms > fiveMinutesAgo;
+        });
+      setOnlineUsers(online);
+    });
+    return () => unsubPresence();
+  }, [currentUser, initialData, needsPresenceData]);
 
   useEffect(() => {
     if (loading) return;
