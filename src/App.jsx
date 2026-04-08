@@ -65,7 +65,8 @@ export default function App() {
     page, setPage,
     toast, setToast, showToast,
     members, events, absences,
-    notifications, requests, joinRequests
+    notifications, requests, joinRequests,
+    metadataNotice, setMetadataNotice
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -361,6 +362,42 @@ export default function App() {
       {/* Main Content Areas */}
       <main className="main-content">
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
+        {metadataNotice && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(240,192,64,0.35)",
+              background: "rgba(240,192,64,0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap"
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>
+              ⚠️ {metadataNotice.message}
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+                onClick={() => window.location.reload()}
+              >
+                Refresh
+              </button>
+              <button
+                className="btn btn-sm"
+                style={{ background: "var(--gold)", color: "#111", fontWeight: 800 }}
+                onClick={() => setMetadataNotice(null)}
+              >
+                Apply Latest
+              </button>
+            </div>
+          </div>
+        )}
         
         {(!isStatusActive && !isArchitect) ? (
           <PageWrapper id="access-revoked">

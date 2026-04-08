@@ -94,6 +94,7 @@ export const GuildProvider = ({ children, initialData }) => {
   });
   const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
+  const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
   const needsPresenceData = page === "dashboard" || page === "members";
 
@@ -246,8 +247,46 @@ export const GuildProvider = ({ children, initialData }) => {
           // Only update if there is actually a change in the metadata doc
           const currentMetaString = JSON.stringify(data);
           if (currentMetaString === prevData.current.lastMetaRaw) return;
+          const prevMetaVersion = Number(prevData.current.metaVersion || 0);
+          const nextMetaVersion = Number(data.version || 0);
+          const updatedByOtherOfficer =
+            prevMetaVersion > 0 &&
+            nextMetaVersion > prevMetaVersion &&
+            data.lastEditorUid &&
+            data.lastEditorUid !== currentUser?.uid;
+
+          if (updatedByOtherOfficer) {
+            const changedAreas = [];
+            const incomingParties = (data.parties || []).map(p => Array.isArray(p) ? p : (p.members || []));
+            const incomingRaidParties = (data.raidParties || []).map(p => Array.isArray(p) ? p : (p.members || []));
+            if (JSON.stringify(incomingParties) !== JSON.stringify(prevData.current.parties) ||
+                JSON.stringify(data.partyNames || []) !== JSON.stringify(prevData.current.partyNames)) {
+              changedAreas.push("Parties");
+            }
+            if (JSON.stringify(data.auctionSessions || []) !== JSON.stringify(prevData.current.auctionSessions) ||
+                JSON.stringify(data.auctionTemplates || []) !== JSON.stringify(prevData.current.auctionTemplates)) {
+              changedAreas.push("Auction");
+            }
+            if (JSON.stringify(incomingRaidParties) !== JSON.stringify(prevData.current.raidParties) ||
+                JSON.stringify(data.raidPartyNames || []) !== JSON.stringify(prevData.current.raidPartyNames)) {
+              changedAreas.push("Raid Parties");
+            }
+            if (JSON.stringify(data.discord || {}) !== JSON.stringify(prevData.current.discordConfig || {})) {
+              changedAreas.push("Discord Settings");
+            }
+            if (JSON.stringify(data.resourceCategories || []) !== JSON.stringify(prevData.current.resourceCategories || [])) {
+              changedAreas.push("Resource Categories");
+            }
+            const affectedText = changedAreas.length > 0 ? ` (${changedAreas.join(", ")})` : "";
+            setMetadataNotice({
+              kind: "external_update",
+              message: `Another officer updated shared settings/data${affectedText}. Please review latest values before continuing edits.`,
+              timestamp: Date.now()
+            });
+          }
+
           prevData.current.lastMetaRaw = currentMetaString;
-          prevData.current.metaVersion = Number(data.version || 0);
+          prevData.current.metaVersion = nextMetaVersion;
 
           const cloudPartiesRaw = data.parties || [];
           const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
@@ -538,6 +577,11 @@ export const GuildProvider = ({ children, initialData }) => {
             changesCount++;
           } catch (metaErr) {
             if (metaErr?.message === "META_VERSION_CONFLICT") {
+              setMetadataNotice({
+                kind: "save_conflict",
+                message: "Your save was blocked because newer shared changes exist. Latest metadata has been loaded.",
+                timestamp: Date.now()
+              });
               showToast("Another officer saved changes first. Reloaded latest metadata to avoid overwrite.", "warning");
             } else {
               throw metaErr;
@@ -981,6 +1025,7 @@ export const GuildProvider = ({ children, initialData }) => {
     joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
+    metadataNotice, setMetadataNotice,
     resetDatabase
 
   };
