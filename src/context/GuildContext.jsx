@@ -80,7 +80,7 @@ export const GuildProvider = ({ children, initialData }) => {
       auction_results: { enabled: true, webhookUrl: "", mentions: {} }
     },
     templates: {
-      new_join: { title: "📝 New Join Request", description: "A new recruitment application has been received from **{ign}**!" },
+      new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
       welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
       vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
       event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
@@ -266,23 +266,24 @@ export const GuildProvider = ({ children, initialData }) => {
             officerRoleId: discRaw.officerRoleId || "",
             oblivionRoleId: discRaw.oblivionRoleId || "",
             notifications: {
-              join_requests: migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both"),
-              welcome: migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member"),
-              vanguard: migrateMentions(discRaw.notifications?.vanguard, "officer"),
-              events: migrateMentions(discRaw.notifications?.events, "none"),
-              absences: migrateMentions(discRaw.notifications?.absences, "member"),
-              auction_results: migrateMentions(discRaw.notifications?.auction_results, "none")
+              join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true }, ...migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both") },
+              welcome: { enabled: true, webhookUrl: "", mentions: { member: true }, ...migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member") },
+              vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.vanguard, "officer") },
+              events: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.events, "none") },
+              absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true }, ...migrateMentions(discRaw.notifications?.absences, "member") },
+              auction_results: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.auction_results, "none") }
             },
             templates: {
-              new_join: discRaw.templates?.new_join || { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
-              welcome: discRaw.templates?.welcome || { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
-              vanguard: discRaw.templates?.vanguard || { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
-              event_created: discRaw.templates?.event_created || { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
-              absence_filed: discRaw.templates?.absence_filed || { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence." },
-              absence_removed: discRaw.templates?.absence_removed || { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura." },
-              auction_results: discRaw.templates?.auction_results || { 
+              new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!", ...(discRaw.templates?.new_join || {}) },
+              welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!", ...(discRaw.templates?.welcome || {}) },
+              vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request.", ...(discRaw.templates?.vanguard || {}) },
+              event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance.", ...(discRaw.templates?.event_created || {}) },
+              absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence.", ...(discRaw.templates?.absence_filed || {}) },
+              absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura.", ...(discRaw.templates?.absence_removed || {}) },
+              auction_results: { 
                 title: "🏛️ Auction Table Results", 
-                description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)" 
+                description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)",
+                ...(discRaw.templates?.auction_results || {})
               }
             }
           };

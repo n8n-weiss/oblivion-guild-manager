@@ -145,7 +145,7 @@ function AuctionBuilder() {
           showToast("Failed to generate image blob", "error");
           return;
         }
-        await sendDiscordImage(blob, `Loot_${session.name}.png`, `Loot session results for **${session.name}** are now available! 🏛️💎`, "auction_results", { name: session.name });
+        await sendDiscordImage(blob, `Loot_${session.name}.png`, `Loot session results for **${session.name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)`, "auction_results", { name: session.name });
       }, 'image/png');
       
     } catch (err) {

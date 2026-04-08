@@ -8,12 +8,23 @@ const DiscordSettings = () => {
   const [activeSection, setActiveSection] = useState("general");
   const [isTesting, setIsTesting] = useState(false);
 
+  const lastSyncedConfig = React.useRef(JSON.stringify(discordConfig));
+
   useEffect(() => {
-    // Only update local config if it's different from context (e.g. initial load or after save)
-    // and ONLY if the user doesn't have unsaved changes or we just saved.
-    const isSame = JSON.stringify(localConfig) === JSON.stringify(discordConfig);
-    if (!isSame) {
-      setLocalConfig(discordConfig);
+    // Only update local config if the user hasn't made any unsaved changes,
+    // or if we just performed a save (in which case they will be equal again).
+    const isLocalSameAsLastSync = JSON.stringify(localConfig) === lastSyncedConfig.current;
+    
+    // If the server data has changed since our last sync
+    if (lastSyncedConfig.current !== JSON.stringify(discordConfig)) {
+      if (isLocalSameAsLastSync) {
+        // User hasn't touched anything, safe to update to the latest server data
+        setLocalConfig(discordConfig);
+        lastSyncedConfig.current = JSON.stringify(discordConfig);
+      }
+      // If user HAS unsaved changes, we do NOT overwrite them.
+      // We just update our reference of what the server HAS.
+      lastSyncedConfig.current = JSON.stringify(discordConfig);
     }
   }, [discordConfig]);
 
@@ -44,7 +55,7 @@ const DiscordSettings = () => {
       ...prev,
       templates: {
         ...prev.templates,
-        [key]: { ...prev.templates[key], [field]: val }
+        [key]: { ...(prev.templates?.[key] || {}), [field]: val }
       }
     }));
   };
