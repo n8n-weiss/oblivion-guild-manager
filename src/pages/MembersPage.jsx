@@ -4,6 +4,7 @@ import { JOB_CLASSES } from '../utils/constants';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import StatePanel from '../components/common/StatePanel';
 import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
@@ -196,7 +197,7 @@ function MembersPage({ onViewProfile }) {
           </div>
         </div>
 
-        <div className="section-header">
+        <div className="section-header sticky-actions">
           <div className="flex gap-2 items-center">
             <div className="search-bar">
               <span className="search-icon"><Icon name="search" size={14} /></span>
@@ -219,7 +220,13 @@ function MembersPage({ onViewProfile }) {
 
         {/* Member Table */}
         {filtered.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-icon">⚔</div><div className="empty-state-text">No members found</div></div>
+          <StatePanel
+            icon="⚔️"
+            title="No members found"
+            description="Try adjusting search or filters, or add a new member."
+            actionLabel={isOfficer ? "Add Member" : ""}
+            onAction={isOfficer ? openAdd : undefined}
+          />
         ) : (
           <>
             <div className="table-wrap hide-on-mobile">

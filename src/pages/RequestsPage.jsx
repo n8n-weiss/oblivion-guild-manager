@@ -4,6 +4,7 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from '../utils/audit';
 import Icon from '../components/ui/icons';
 import ConfettiEffect from '../components/effects/ConfettiEffect';
+import StatePanel from '../components/common/StatePanel';
 
 function RequestsPage() {
   const { 
@@ -147,9 +148,12 @@ function RequestsPage() {
         {subTab === "profile" ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 24 }}>
             {pendingRequests.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '80px 0', background: 'rgba(255,255,255,0.02)', borderRadius: 20, border: '1px dashed var(--border)' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>✨</div>
-                <div style={{ color: 'var(--text-muted)', fontWeight: 600 }}>All clear! No pending profile changes.</div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <StatePanel
+                  icon="✨"
+                  title="All clear"
+                  description="No pending profile changes."
+                />
               </div>
             ) : (
               pendingRequests.map((r, idx) => {
@@ -212,9 +216,12 @@ function RequestsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 24 }}>
             {pendingJoin.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '80px 0', background: 'rgba(255,255,255,0.02)', borderRadius: 20, border: '1px dashed var(--border)' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>🛡️</div>
-                <div style={{ color: 'var(--text-muted)', fontWeight: 600 }}>No pending applications. Guild is quiet.</div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <StatePanel
+                  icon="🛡️"
+                  title="No pending applications"
+                  description="Guild is quiet right now."
+                />
               </div>
             ) : (
               pendingJoin.map((r, idx) => {
@@ -367,7 +374,11 @@ function RequestsPage() {
                 {[...processedRequests, ...processedJoin].length === 0 && (
                   <tr>
                     <td colSpan="6" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                      No processing history found.
+                      <StatePanel
+                        icon="📜"
+                        title="No processing history found"
+                        description="Approved or rejected requests will appear here."
+                      />
                     </td>
                   </tr>
                 )}

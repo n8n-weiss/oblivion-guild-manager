@@ -99,6 +99,20 @@ export default function App() {
   const [showDiag, setShowDiag] = useState(false);
   const [diagCopied, setDiagCopied] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [densityMode, setDensityMode] = useState(() => localStorage.getItem("ui_density_mode") || "comfy");
+  const [highContrastMode, setHighContrastMode] = useState(() => localStorage.getItem("ui_high_contrast_mode") === "1");
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [commandIndex, setCommandIndex] = useState(0);
+  const [recentCommandIds, setRecentCommandIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem("recent_command_ids_v1");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    } catch {
+      return [];
+    }
+  });
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
   const pendingRequestsCount = 
@@ -121,6 +135,40 @@ export default function App() {
       showToast("App updated to the latest version after sync. Please retry your action.", "info");
     }
   }, [showToast]);
+  React.useEffect(() => {
+    localStorage.setItem("ui_density_mode", densityMode);
+  }, [densityMode]);
+  React.useEffect(() => {
+    localStorage.setItem("ui_high_contrast_mode", highContrastMode ? "1" : "0");
+  }, [highContrastMode]);
+  React.useEffect(() => {
+    localStorage.setItem("recent_command_ids_v1", JSON.stringify(recentCommandIds.slice(0, 6)));
+  }, [recentCommandIds]);
+  React.useEffect(() => {
+    let rafId = 0;
+    const updateStickyState = () => {
+      rafId = 0;
+      const stickyNodes = document.querySelectorAll(".sticky-actions");
+      stickyNodes.forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        const topOffset = Number.parseFloat(window.getComputedStyle(node).top || "0") || 0;
+        const isStuck = rect.top <= topOffset + 0.5;
+        node.classList.toggle("is-stuck", isStuck);
+      });
+    };
+    const onScrollOrResize = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(updateStickyState);
+    };
+    updateStickyState();
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [page, densityMode, highContrastMode, showCommandPalette, showNotifications]);
 
   React.useEffect(() => {
     let awaitingGo = false;
@@ -133,12 +181,18 @@ export default function App() {
       }
     };
     const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowCommandPalette(true);
+        return;
+      }
       const targetTag = (e.target?.tagName || "").toLowerCase();
       const typing = e.target?.isContentEditable || targetTag === "input" || targetTag === "textarea" || targetTag === "select";
       if (e.key === "Escape") {
         setShowNotifications(false);
         setShowDiag(false);
         setShowShortcutsHelp(false);
+        setShowCommandPalette(false);
         resetGo();
         return;
       }
@@ -179,6 +233,76 @@ export default function App() {
       resetGo();
     };
   }, [setPage]);
+  const commandActions = React.useMemo(() => {
+    const actions = [];
+    const pageActions = NAV_ITEMS.filter(item => {
+      if (isMember) return item.id === "members";
+      if (isAdmin) return !(item.id === "users" && !isArchitect);
+      if (isOfficer) return item.id !== "users" && item.id !== "auditlog";
+      return false;
+    }).map(item => ({
+      id: `page-${item.id}`,
+      label: `Go to ${item.label}`,
+      group: "Navigation",
+      hint: "g + key",
+      keywords: `${item.id} ${item.label} page navigate`,
+      run: () => {
+        setPage(item.id);
+        setProfileMember(null);
+        window.scrollTo(0, 0);
+      }
+    }));
+    actions.push(...pageActions);
+    actions.push({
+      id: "open-notifications",
+      label: "Open Notifications",
+      group: "View",
+      hint: "bell",
+      keywords: "notifications alerts bell",
+      run: () => setShowNotifications(true)
+    });
+    actions.push({
+      id: "toggle-density",
+      label: `Switch Density (${densityMode === "compact" ? "to Comfy" : "to Compact"})`,
+      group: "View",
+      hint: "display",
+      keywords: "density compact comfy display",
+      run: () => setDensityMode(v => v === "compact" ? "comfy" : "compact")
+    });
+    if (isArchitect) {
+      actions.push({
+        id: "toggle-diag",
+        label: `${showDiag ? "Hide" : "Show"} Architect Diagnostics`,
+        group: "Admin",
+        hint: "architect",
+        keywords: "diagnostics debug panel architect",
+        run: () => setShowDiag(v => !v)
+      });
+    }
+    return actions;
+  }, [isMember, isAdmin, isOfficer, isArchitect, densityMode, showDiag, setPage]);
+  const filteredCommandActions = React.useMemo(() => {
+    const q = commandQuery.trim().toLowerCase();
+    if (!q) {
+      const byId = new Map(commandActions.map(a => [a.id, a]));
+      const recent = recentCommandIds.map(id => byId.get(id)).filter(Boolean).map(a => ({ ...a, group: "Recent" }));
+      const recentIds = new Set(recent.map(a => a.id));
+      const rest = commandActions.filter(a => !recentIds.has(a.id));
+      return [...recent, ...rest];
+    }
+    return commandActions.filter(a => a.label.toLowerCase().includes(q) || a.keywords.toLowerCase().includes(q));
+  }, [commandActions, commandQuery, recentCommandIds]);
+  React.useEffect(() => {
+    if (!showCommandPalette) return;
+    setCommandIndex(0);
+  }, [showCommandPalette, commandQuery]);
+  const runCommandAction = React.useCallback((action) => {
+    if (!action) return;
+    setRecentCommandIds(prev => [action.id, ...prev.filter(id => id !== action.id)].slice(0, 6));
+    action.run();
+    setShowCommandPalette(false);
+    setCommandQuery("");
+  }, []);
 
 
   const handleSignOut = async () => {
@@ -283,7 +407,7 @@ export default function App() {
   }
 
   if (loading) return (
-    <div className="app-root">
+    <div className={`app-root density-${densityMode} ${highContrastMode ? "high-contrast" : ""}`}>
       <nav className="sidebar" style={{ opacity: 0.5 }}>
         <div className="sidebar-logo">
           <div style={{ fontFamily: "Cinzel,serif", fontSize: 28, color: "var(--accent)" }}>OBLIVION</div>
@@ -304,7 +428,7 @@ export default function App() {
   );
 
   return (
-    <div className="app-root">
+    <div className={`app-root density-${densityMode} ${highContrastMode ? "high-contrast" : ""}`}>
       {/* Sidebar */}
       <nav className="sidebar">
         <div className="sidebar-logo" style={{ textAlign: "center", overflow: "visible" }}>
@@ -417,6 +541,41 @@ export default function App() {
               <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid rgba(255,255,255,0.05)" }} onClick={handleSignOut}>
                 Sign Out
               </button>
+              <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                <div style={{ width: "100%" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                    Display Density
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className={`btn btn-sm ${densityMode === "compact" ? "btn-primary" : "btn-ghost"}`}
+                  style={{ flex: 1, justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
+                  onClick={() => setDensityMode("compact")}
+                  title="Compact shows more rows and tighter spacing."
+                >
+                  ▦ Compact
+                </button>
+                <button
+                  className={`btn btn-sm ${densityMode === "comfy" ? "btn-primary" : "btn-ghost"}`}
+                  style={{ flex: 1, justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
+                  onClick={() => setDensityMode("comfy")}
+                  title="Comfy adds breathing room and larger spacing."
+                >
+                  ◻ Comfy
+                </button>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <button
+                      className={`btn btn-sm ${highContrastMode ? "btn-primary" : "btn-ghost"}`}
+                      style={{ width: "100%", justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
+                      onClick={() => setHighContrastMode(v => !v)}
+                      title="Toggle stronger contrast and focus visibility."
+                    >
+                      {highContrastMode ? "◉ High Contrast On" : "◎ High Contrast Off"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -541,6 +700,48 @@ export default function App() {
           >
             {syncStatus === "saving" ? "Saving..." : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync issue" : "Synced"}
           </span>
+          <span
+            title="Current display density mode"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              border: "1px solid rgba(99,130,230,0.28)",
+              color: "var(--accent)",
+              background: "rgba(99,130,230,0.1)"
+            }}
+          >
+            Density: {densityMode === "compact" ? "Compact" : "Comfy"}
+          </span>
+          {highContrastMode && (
+            <button
+              type="button"
+              aria-label="Toggle high contrast mode"
+              title="Accessibility mode is enabled. Click to toggle."
+              onClick={() => setHighContrastMode(v => !v)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 10px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: 0.2,
+                border: "1px solid rgba(240,192,64,0.35)",
+                color: "var(--gold)",
+                background: "rgba(240,192,64,0.12)",
+                cursor: "pointer"
+              }}
+            >
+              A11y: High Contrast
+            </button>
+          )}
           {(syncStatus === "offline" || syncStatus === "error") && (
             <button
               className="btn btn-ghost btn-sm"
@@ -758,6 +959,79 @@ export default function App() {
             <div><strong>g then m/e/a/l/d/p/r/i</strong> Quick go to page</div>
             <div><strong>?</strong> Open this help</div>
             <div><strong>Esc</strong> Close overlays/panels</div>
+          </div>
+        </Modal>
+      )}
+      {showCommandPalette && (
+        <Modal
+          title="Command Palette"
+          onClose={() => { setShowCommandPalette(false); setCommandQuery(""); }}
+          footer={<button className="btn btn-ghost" onClick={() => { setShowCommandPalette(false); setCommandQuery(""); }}>Close</button>}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              className="form-input"
+              autoFocus
+              placeholder="Type a command (e.g. members, notifications, density)"
+              value={commandQuery}
+              onChange={(e) => setCommandQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setCommandIndex((i) => Math.min(i + 1, Math.max(0, filteredCommandActions.length - 1)));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setCommandIndex((i) => Math.max(0, i - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  runCommandAction(filteredCommandActions[commandIndex]);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setShowCommandPalette(false);
+                  setCommandQuery("");
+                }
+              }}
+            />
+            <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+              {filteredCommandActions.length === 0 && (
+                <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "6px 4px" }}>No matching commands.</div>
+              )}
+              {filteredCommandActions.map((action, idx) => (
+                <React.Fragment key={action.id}>
+                  {(idx === 0 || filteredCommandActions[idx - 1]?.group !== action.group) && (
+                    <div
+                      style={{
+                        marginTop: idx === 0 ? 0 : 6,
+                        padding: "2px 4px",
+                        fontSize: 10,
+                        color: "var(--text-muted)",
+                        letterSpacing: 1,
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      {action.group || "General"}
+                    </div>
+                  )}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onMouseEnter={() => setCommandIndex(idx)}
+                    onClick={() => runCommandAction(action)}
+                    style={{
+                      justifyContent: "space-between",
+                      border: idx === commandIndex ? "1px solid var(--accent)" : "1px solid rgba(255,255,255,0.1)",
+                      background: idx === commandIndex ? "rgba(99,130,230,0.12)" : "transparent"
+                    }}
+                  >
+                    <span>{action.label}</span>
+                    {action.hint && (
+                      <span style={{ fontSize: 10, color: "var(--text-muted)", opacity: 0.9 }}>
+                        {action.hint}
+                      </span>
+                    )}
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </Modal>
       )}

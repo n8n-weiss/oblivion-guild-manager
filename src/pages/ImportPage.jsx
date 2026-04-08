@@ -3,6 +3,7 @@ import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import DiscordSettings from '../components/common/DiscordSettings';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
+import StatePanel from '../components/common/StatePanel';
 
 function ImportPage() {
   const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill } = useGuild();
@@ -312,7 +313,7 @@ function ImportPage() {
         <p className="page-subtitle">Manage roster data and system integrations</p>
       </div>
 
-      <div className="tabs mb-6">
+      <div className="tabs mb-6 sticky-actions">
         <button className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`} onClick={() => setActiveTab('import')}>📥 Import</button>
         <button className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>📤 Export</button>
         <button className={`tab-btn ${activeTab === 'discord' ? 'active' : ''}`} onClick={() => setActiveTab('discord')}>🤖 Discord</button>
@@ -373,6 +374,16 @@ function ImportPage() {
                 <Icon name="save" size={12} /> Download Current Roster
               </button>
             </div>
+            {members.length === 0 && (
+              <div style={{ marginTop: 12 }}>
+                <StatePanel
+                  icon="📤"
+                  title="No members to export yet"
+                  description="Import roster data first, then export current portal roster."
+                  tone="warning"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

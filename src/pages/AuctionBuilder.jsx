@@ -6,6 +6,7 @@ import html2canvas from 'html2canvas';
 import Modal from '../components/ui/Modal';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 import ConfirmTwiceButton from '../components/common/ConfirmTwiceButton';
+import StatePanel from '../components/common/StatePanel';
 
 const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   session,
@@ -1007,7 +1008,7 @@ function AuctionBuilder() {
         <p className="page-subtitle">Distribute resources per member per session</p>
       </div>
 
-      <div className="flex gap-2 mb-6" style={{ background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 10, width: "fit-content" }}>
+      <div className="flex gap-2 mb-6 sticky-actions" style={{ background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 10, width: "fit-content" }}>
         <button className={`btn btn-sm ${view === "sessions" ? "btn-primary" : "btn-ghost"}`} onClick={() => setView("sessions")}>Sessions</button>
         <button className={`btn btn-sm ${view === "history" ? "btn-primary" : "btn-ghost"}`} onClick={() => setView("history")}>Loot History</button>
       </div>
@@ -1047,7 +1048,13 @@ function AuctionBuilder() {
           )}
 
           <div className="flex flex-col gap-2">
-            {auctionSessions.length === 0 && <div className="empty-state"><div className="empty-state-icon">📜</div><div className="empty-state-text">No sessions yet — create one!</div></div>}
+            {auctionSessions.length === 0 && (
+              <StatePanel
+                icon="📜"
+                title="No sessions yet"
+                description="Create your first auction session to start assigning members and loot."
+              />
+            )}
             {auctionSessions.slice().reverse().map(s => (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer" }}
                 onClick={() => { setActiveSession(s.id); setView("editor"); }}>
@@ -1074,7 +1081,13 @@ function AuctionBuilder() {
             <div className="card-title" style={{ marginBottom: 0 }}>Templates</div>
           </div>
           <div className="flex flex-col gap-2">
-            {auctionTemplates.length === 0 && <div className="empty-state"><div className="empty-state-icon">📋</div><div className="empty-state-text">No templates yet — save one from a session!</div></div>}
+            {auctionTemplates.length === 0 && (
+              <StatePanel
+                icon="📋"
+                title="No templates yet"
+                description="Save a session as template to speed up future runs."
+              />
+            )}
             {auctionTemplates.map(t => (
               <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10 }}>
                 <div style={{ flex: 1 }}>
@@ -1106,7 +1119,7 @@ function AuctionBuilder() {
 
     return (
       <div>
-        <div className="page-header">
+        <div className="page-header sticky-actions">
           <button className="btn btn-ghost mb-3" onClick={() => setView("sessions")}><Icon name="arrow-left" size={14} /> Back to Sessions</button>
           <h1 className="page-title">📊 Loot History Summary</h1>
           <p className="page-subtitle">Comprehensive record of all resource distribution</p>
@@ -1181,7 +1194,7 @@ function AuctionBuilder() {
   return (
     <>
     <div>
-      <div className="page-header">
+      <div className="page-header sticky-actions">
         <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 12 }}>
           <div className="flex items-center gap-3">
             <button className="btn btn-ghost" onClick={() => { setView("sessions"); setEditingCell(null); }}><Icon name="x" size={14} /> Back</button>

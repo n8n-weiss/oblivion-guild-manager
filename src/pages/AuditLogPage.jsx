@@ -5,6 +5,7 @@ import { useGuild } from '../context/GuildContext';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
+import StatePanel from '../components/common/StatePanel';
 
 
 function AuditLogPage() {
@@ -138,12 +139,19 @@ function AuditLogPage() {
 
       {/* Log entries */}
       <div className="card">
-        {loading && <div className="empty-state"><div className="empty-state-text">Loading logs...</div></div>}
+        {loading && (
+          <StatePanel
+            icon="⏳"
+            title="Loading audit logs..."
+            description="Fetching latest activity records."
+          />
+        )}
         {!loading && filtered.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-state-icon">📋</div>
-            <div className="empty-state-text">No audit logs yet — changes will appear here</div>
-          </div>
+          <StatePanel
+            icon="📋"
+            title="No audit logs yet"
+            description="Changes will appear here once officers/admins perform actions."
+          />
         )}
         {!loading && filtered.map((log, i) => (
           <div key={log.id} style={{

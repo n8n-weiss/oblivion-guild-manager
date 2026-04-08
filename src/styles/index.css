@@ -61,6 +61,19 @@
     --text-secondary: #8892b0;
     --text-muted: #4a5568;
     --sidebar-w: 250px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 28px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --font-title: 28px;
+    --font-subtitle: 15px;
+    --font-card-title: 15px;
+    --font-body: 16px;
   }
 
   * {
@@ -186,7 +199,7 @@
 
   body {
     font-family: 'Outfit', sans-serif;
-    font-size: 16px;
+    font-size: var(--font-body);
     background: var(--bg-deepest);
     color: var(--text-primary);
     min-height: 100vh;
@@ -197,6 +210,71 @@
     display: flex;
     min-height: 100vh;
   }
+
+/* Accessibility: High Contrast Mode */
+.app-root.high-contrast {
+  --border: rgba(225, 235, 255, 0.35);
+  --border-bright: rgba(225, 235, 255, 0.6);
+  --text-primary: #ffffff;
+  --text-secondary: #dbe4ff;
+  --text-muted: #b7c4ea;
+  --bg-card: rgba(10, 14, 24, 0.9);
+  --bg-card2: rgba(16, 22, 36, 0.95);
+  --bg-hover: rgba(70, 95, 170, 0.35);
+  --accent-light: rgba(130, 170, 255, 0.2);
+}
+.app-root.high-contrast .card,
+.app-root.high-contrast .modal,
+.app-root.high-contrast .table-wrap,
+.app-root.high-contrast .btn-ghost {
+  border-color: var(--border-bright);
+}
+.app-root.high-contrast .form-input:focus,
+.app-root.high-contrast .form-select:focus,
+.app-root.high-contrast .tab-btn:focus-visible,
+.app-root.high-contrast .btn:focus-visible,
+.app-root.high-contrast .nav-item:focus-visible,
+.app-root.high-contrast .mobile-nav-item:focus-visible {
+  outline: 2px solid #b7ccff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(130, 170, 255, 0.35);
+}
+
+/* Global Density Modes */
+.app-root.density-compact .main-content {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+.app-root.density-compact .card {
+  padding: 18px;
+}
+.app-root.density-compact .card-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.app-root.density-compact .tabs {
+  margin-bottom: 16px;
+  gap: 6px;
+}
+.app-root.density-compact .tab-btn {
+  padding: 6px 12px;
+}
+.app-root.density-compact thead th,
+.app-root.density-compact tbody td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.app-root.density-comfy .main-content {
+  padding-top: 36px;
+  padding-bottom: 36px;
+}
+.app-root.density-comfy .card {
+  padding: 24px;
+}
+.app-root.density-comfy .tabs {
+  margin-bottom: 24px;
+}
 
   /* ── Sidebar ── */
   .sidebar {
@@ -340,26 +418,26 @@
   .main-content {
     margin-left: var(--sidebar-w);
     flex: 1;
-    padding: 36px 44px;
+    padding: calc(var(--space-6) + var(--space-2)) calc(var(--space-7) + var(--space-6));
     min-height: 100vh;
     background: transparent;
     position: relative;
   }
 
   .page-header {
-    margin-bottom: 28px;
+    margin-bottom: var(--space-7);
   }
 
   .page-title {
     font-family: 'Cinzel', serif;
-    font-size: 28px;
+    font-size: var(--font-title);
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: 1px;
   }
 
   .page-subtitle {
-    font-size: 15px;
+    font-size: var(--font-subtitle);
     color: var(--text-secondary);
     margin-top: 4px;
     letter-spacing: 0.5px;
@@ -371,8 +449,8 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: var(--glass-border);
-    border-radius: 16px;
-    padding: 24px;
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
     position: relative;
     overflow: hidden;
     box-shadow: var(--shadow-premium);
@@ -395,12 +473,12 @@
 
   .card-title {
     font-family: 'Cinzel', serif;
-    font-size: 15px;
+    font-size: var(--font-card-title);
     font-weight: 600;
     letter-spacing: 1.5px;
     color: var(--text-secondary);
     text-transform: uppercase;
-    margin-bottom: 14px;
+    margin-bottom: var(--space-3);
   }
 
   /* ── Stat Cards ── */
@@ -741,8 +819,8 @@
   .form-select {
     background: var(--bg-deepest);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
     color: var(--text-primary);
     font-family: 'Rajdhani', sans-serif;
     font-size: 16px;
@@ -835,8 +913,8 @@
   .modal {
     background: var(--bg-card);
     border: 1px solid var(--border-bright);
-    border-radius: 16px;
-    padding: 28px;
+    border-radius: var(--radius-lg);
+    padding: var(--space-7);
     width: 100%;
     max-width: 520px;
     position: relative;
@@ -1507,7 +1585,7 @@
 @media (max-width: 900px) {
   .main-content {
     margin-left: 0;
-    padding: 24px 16px 100px; /* Extra padding at bottom for nav */
+    padding: var(--space-6) var(--space-4) 100px; /* Extra padding at bottom for nav */
   }
 
   .mobile-nav {
@@ -1515,12 +1593,12 @@
   }
 
   .page-title {
-    font-size: 24px;
+    font-size: calc(var(--font-title) - 4px);
     text-align: center;
   }
 
   .page-header {
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1562,7 +1640,7 @@
   }
 
   .card {
-    padding: 16px;
+    padding: var(--space-4);
   }
 
   /* Table Fixes */
@@ -1700,22 +1778,22 @@ body::before {
 /* Tabs System */
 .tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 
 .tab-btn {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s;
 }
 
@@ -1728,6 +1806,49 @@ body::before {
   background: var(--accent-light);
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--border-bright);
+}
+
+/* Sticky quick actions */
+.sticky-actions {
+  position: sticky;
+  top: 10px;
+  z-index: 35;
+  background: rgba(8, 10, 15, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 12px;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.sticky-actions.is-stuck {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, rgba(130, 170, 255, 0.1) 0%, rgba(8, 10, 15, 0.78) 32%);
+}
+.app-root.high-contrast .sticky-actions.is-stuck {
+  border-color: rgba(225, 235, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(225, 235, 255, 0.2);
+  background: linear-gradient(180deg, rgba(183, 204, 255, 0.18) 0%, rgba(10, 14, 24, 0.92) 34%);
+}
+.app-root.density-compact .sticky-actions {
+  padding: 6px;
+}
+.app-root.density-comfy .sticky-actions {
+  top: 14px;
+  padding: 10px;
+}
+@media (max-width: 900px) {
+  .sticky-actions {
+    top: 6px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+  }
+  .app-root.density-comfy .sticky-actions {
+    top: 8px;
+  }
 }
 
 /* ── MICRO-INTERACTIONS ── */
