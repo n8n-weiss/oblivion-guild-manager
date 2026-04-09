@@ -58,7 +58,6 @@ function EventsPage() {
         { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
       ],
       "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-      "none",
       "events",
       "event_created",
       { type: form.eventType, date: form.eventDate }
