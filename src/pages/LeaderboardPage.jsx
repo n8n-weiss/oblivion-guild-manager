@@ -5,6 +5,12 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 import { computeLeaderboard } from '../utils/scoring';
 
 function LeaderboardPage({ onViewProfile }) {
+  const ALERT_RULES = {
+    attendanceRiskPct: 65,
+    fastClimberDelta: 1,
+    needsReviewDropDelta: 2,
+    noShowStreak: 2
+  };
   const { members, events, attendance, performance, eoRatings } = useGuild();
   const LEADERBOARD_PRESETS_KEY = "leaderboard_view_presets_v1";
   const LEADERBOARD_TABLE_UI_KEY = "leaderboard_table_ui_v1";
@@ -37,6 +43,7 @@ function LeaderboardPage({ onViewProfile }) {
     }
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAlertRules, setShowAlertRules] = useState(false);
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const scopedData = useMemo(() => {
     if (periodScope === "all") {
@@ -146,6 +153,20 @@ function LeaderboardPage({ onViewProfile }) {
     if (delta < 0) return { label: `↓${Math.abs(delta)}`, color: "var(--red)" };
     return { label: "—", color: "var(--text-muted)" };
   };
+  const alertChipsFor = (member, currentRank) => {
+    const chips = [];
+    if ((member.consecutiveAbsent || 0) >= ALERT_RULES.noShowStreak) chips.push({ label: "2x No Show", tone: "badge-atrisk" });
+    if ((member.attendancePct || 0) < ALERT_RULES.attendanceRiskPct) chips.push({ label: "Attendance Risk", tone: "badge-atrisk" });
+    const mv = movementFor(member.memberId, currentRank).label;
+    if (mv.startsWith("↑")) {
+      const n = Number(mv.replace("↑", ""));
+      if (n >= ALERT_RULES.fastClimberDelta) chips.push({ label: "Fast Climber", tone: "badge-active" });
+    } else if (mv.startsWith("↓")) {
+      const n = Number(mv.replace("↓", ""));
+      if (n >= ALERT_RULES.needsReviewDropDelta) chips.push({ label: "Needs Review", tone: "badge-casual" });
+    }
+    return chips.slice(0, 2);
+  };
   const queueFiltered = useMemo(() => {
     if (queueMode === "all") return lb;
     if (queueMode === "risk") return lb.filter(m => m.attendancePct < 60 || m.classification === "At Risk");
@@ -205,6 +226,26 @@ function LeaderboardPage({ onViewProfile }) {
     const reliable = [...lb].sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore).slice(0, 5);
     return { risky, reliable };
   }, [lbMode, lb, eoLb]);
+  const periodLabel = periodScope === "all" ? "All-time" : periodScope === "30d" ? "Last 30d" : "Last 8 events";
+  const weeklyReviewSummary = useMemo(() => {
+    const moversUp = topMovers.climbers.map(r => `${r.member.ign} (↑${r.delta}, #${r.currentRank})`).join(", ") || "None";
+    const moversDown = topMovers.droppers.map(r => `${r.member.ign} (↓${Math.abs(r.delta)}, #${r.currentRank})`).join(", ") || "None";
+    const riskList = actionSnapshot.risky.slice(0, 3).map(m => `${m.ign} (${lbMode === "eo" ? `${m.eoPresent}/${m.eoTotal} EO` : `${m.attendancePct}% att`})`).join(", ") || "None";
+    const reliableList = actionSnapshot.reliable.slice(0, 3).map(m => `${m.ign} (${lbMode === "eo" ? `${m.avgRating}★` : `${m.attendancePct}%`})`).join(", ") || "None";
+    const top3 = filtered.slice(0, 3).map((m, i) => `${i + 1}. ${m.ign}`).join(" | ") || "No data";
+    return [
+      "📊 Weekly Leaderboard Review",
+      `Mode: ${lbMode === "eo" ? "EO Ratings" : lbMode}`,
+      `Period: ${periodLabel}`,
+      `Queue: ${queueMode}`,
+      "",
+      `Top 3: ${top3}`,
+      `Biggest Climbers: ${moversUp}`,
+      `Biggest Droppers: ${moversDown}`,
+      `At-Risk: ${riskList}`,
+      `Top Reliable: ${reliableList}`
+    ].join("\n");
+  }, [topMovers, actionSnapshot, lbMode, periodLabel, queueMode, filtered]);
   useEffect(() => { localStorage.setItem("leaderboard_filter", filter); }, [filter]);
   useEffect(() => { localStorage.setItem("leaderboard_mode", lbMode); }, [lbMode]);
   useEffect(() => { localStorage.setItem("leaderboard_scope_v1", periodScope); }, [periodScope]);
@@ -218,6 +259,18 @@ function LeaderboardPage({ onViewProfile }) {
   useEffect(() => {
     localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_details", showDetailCols ? "1" : "0");
   }, [showDetailCols]);
+  const handleExportWeeklyReview = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(weeklyReviewSummary);
+        window.alert("Weekly review summary copied to clipboard.");
+        return;
+      }
+    } catch (err) {
+      console.warn("Clipboard copy failed, falling back to prompt.", err);
+    }
+    window.prompt("Copy weekly review summary:", weeklyReviewSummary);
+  };
   const saveCurrentPreset = () => {
     const name = window.prompt("Preset name?", `Leaderboard ${viewPresets.length + 1}`);
     if (!name || !name.trim()) return;
@@ -353,6 +406,9 @@ function LeaderboardPage({ onViewProfile }) {
         <button className="btn btn-ghost btn-sm" onClick={saveCurrentPreset} title="Save current leaderboard mode and filter">
           <Icon name="save" size={12} /> Save View
         </button>
+        <button className="btn btn-ghost btn-sm" onClick={handleExportWeeklyReview} title="Copy weekly review summary">
+          <Icon name="copy" size={12} /> Export Weekly Review
+        </button>
         {viewPresets.map(p => (
           <div key={p.id} className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px" }}>
             <button
@@ -400,6 +456,9 @@ function LeaderboardPage({ onViewProfile }) {
         <button className={`btn btn-sm ${showAdvanced ? "btn-primary" : "btn-ghost"}`} onClick={() => setShowAdvanced(v => !v)}>
           <Icon name="search" size={12} /> {showAdvanced ? "Advanced Insights: On" : "Advanced Insights: Off"}
         </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowAlertRules(v => !v)}>
+          <Icon name="info" size={12} /> Alert Rules
+        </button>
         <div className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "4px 10px", flexWrap: "wrap" }}>
           <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: 0.4 }}>MOVEMENT</span>
           <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700 }}>↑ Up</span>
@@ -408,6 +467,22 @@ function LeaderboardPage({ onViewProfile }) {
           <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>NEW First seen</span>
         </div>
       </div>
+      {showAlertRules && (
+        <div className="card" style={{ marginBottom: 12, border: "1px solid rgba(99,130,230,0.35)", background: "rgba(99,130,230,0.08)" }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+            <div className="card-title" style={{ marginBottom: 0 }}>Alert Rules (Current)</div>
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowAlertRules(false)} title="Close alert rules">
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+          <div className="text-xs text-muted" style={{ display: "grid", gap: 6 }}>
+            <div>• <strong>Attendance Risk</strong>: below <strong>{ALERT_RULES.attendanceRiskPct}%</strong></div>
+            <div>• <strong>Fast Climber</strong>: rank gain of <strong>+{ALERT_RULES.fastClimberDelta}</strong> or more</div>
+            <div>• <strong>Needs Review</strong>: rank drop of <strong>-{ALERT_RULES.needsReviewDropDelta}</strong> or more</div>
+            <div>• <strong>2x No Show</strong>: consecutive absent streak of <strong>{ALERT_RULES.noShowStreak}</strong>+</div>
+          </div>
+        </div>
+      )}
       <div className="sticky-actions" style={{ marginBottom: 16 }}>
         <div className="quick-summary-bar" style={{ padding: "8px 10px", borderRadius: 12 }}>
           <div className="summary-item" style={{ minWidth: 120 }}>
@@ -624,6 +699,7 @@ function LeaderboardPage({ onViewProfile }) {
                 <th>{lbMode === "Combat" ? "Total Score" : lbMode === "Duty" ? "Attendance" : lbMode === "Support" ? "SPI Score" : "Stability"}</th>
                 <th>Movement</th>
                 <th>Attendance</th>
+                <th>Alerts</th>
                 {showDetailCols && <th>Intensity</th>}
                 {showDetailCols && <th>Metrics</th>}
                 {showDetailCols && <th>Classification</th>}
@@ -667,6 +743,13 @@ function LeaderboardPage({ onViewProfile }) {
                       <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 10 }}>
                         {m.attendancePct}% ({m.attStatus?.label || "Average"})
                       </span>
+                    </td>
+                    <td>
+                      <div className="flex gap-1" style={{ flexWrap: "wrap" }}>
+                        {alertChipsFor(m, i + 1).length ? alertChipsFor(m, i + 1).map(ch => (
+                          <span key={ch.label} className={`badge ${ch.tone}`} style={{ fontSize: 9 }}>{ch.label}</span>
+                        )) : <span className="text-xs text-muted">—</span>}
+                      </div>
                     </td>
                     {showDetailCols && <td style={{ minWidth: 140 }}>
                       <div className="score-bar-wrap">
@@ -740,6 +823,9 @@ function LeaderboardPage({ onViewProfile }) {
                      <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{m.role}</span>
                      <span className={`badge ${m.classification === "Core" ? "badge-core" : m.classification === "Active" ? "badge-active" : m.classification === "Casual" ? "badge-casual" : "badge-atrisk"}`} style={{ fontSize: 9 }}>{m.classification}</span>
                      <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 9 }}>🎯 {m.attStatus?.label}</span>
+                     {alertChipsFor(m, i + 1).map(ch => (
+                       <span key={ch.label} className={`badge ${ch.tone}`} style={{ fontSize: 9 }}>{ch.label}</span>
+                     ))}
                   </div>
 
                   <div className="score-bar-wrap mb-1" style={{ height: 4 }}>
