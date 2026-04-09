@@ -33,7 +33,6 @@ function AbsencesPage() {
         { name: "Will be Online?", value: form.onlineStatus, inline: true }
       ],
       null,
-      "none",
       "absences",
       "absence_filed",
       { ign: member?.ign || form.memberId, event: form.eventType, date: form.eventDate, reason: form.reason, online: form.onlineStatus },
@@ -60,7 +59,6 @@ function AbsencesPage() {
         { name: "Event", value: `${absence?.eventType} (${absence?.eventDate})`, inline: true }
       ],
       null,
-      "none",
       "absences",
       "absence_removed",
       { ign: member?.ign || absence?.memberId, event: absence?.eventType, date: absence?.eventDate },
