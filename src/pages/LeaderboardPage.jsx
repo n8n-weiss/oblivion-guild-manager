@@ -8,6 +8,7 @@ function LeaderboardPage({ onViewProfile }) {
   const { members, events, attendance, performance, eoRatings } = useGuild();
   const LEADERBOARD_PRESETS_KEY = "leaderboard_view_presets_v1";
   const LEADERBOARD_TABLE_UI_KEY = "leaderboard_table_ui_v1";
+  const LEADERBOARD_RANK_SNAPSHOT_KEY = "leaderboard_rank_snapshots_v1";
   const [filter, setFilter] = useState(() => localStorage.getItem("leaderboard_filter") || "All");
   const [lbMode, setLbMode] = useState(() => localStorage.getItem("leaderboard_mode") || "Combat"); // "Combat" | "Duty" | "Consistency" | "Support" | "eo"
   const [viewPresets, setViewPresets] = useState(() => {
@@ -87,6 +88,78 @@ function LeaderboardPage({ onViewProfile }) {
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
   const podiumData = lbMode === "eo" ? eoLb.slice(0, 3) : lb.slice(0, 3);
+  const currentModeRows = lbMode === "eo" ? eoLb : lb;
+  const currentRankMap = useMemo(
+    () => Object.fromEntries(currentModeRows.map((m, idx) => [String(m.memberId || "").toLowerCase(), idx + 1])),
+    [currentModeRows]
+  );
+  const previousRankMap = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_RANK_SNAPSHOT_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed?.[lbMode] || {};
+    } catch {
+      return {};
+    }
+  }, [lbMode]);
+  useEffect(() => {
+    if (JSON.stringify(previousRankMap) === JSON.stringify(currentRankMap)) return;
+    let snapshots = {};
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_RANK_SNAPSHOT_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      snapshots = parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      snapshots = {};
+    }
+    const next = { ...snapshots, [lbMode]: currentRankMap };
+    localStorage.setItem(LEADERBOARD_RANK_SNAPSHOT_KEY, JSON.stringify(next));
+  }, [lbMode, currentRankMap, previousRankMap]);
+  const movementFor = (memberId, currentRank) => {
+    const key = String(memberId || "").toLowerCase();
+    const prevRank = previousRankMap?.[key];
+    if (!prevRank || !currentRank) return { label: "NEW", color: "var(--text-muted)" };
+    const delta = prevRank - currentRank;
+    if (delta > 0) return { label: `↑${delta}`, color: "var(--green)" };
+    if (delta < 0) return { label: `↓${Math.abs(delta)}`, color: "var(--red)" };
+    return { label: "—", color: "var(--text-muted)" };
+  };
+  const overviewCards = useMemo(() => {
+    if (lbMode === "eo") {
+      return [
+        { label: "EO Top", value: eoLb[0]?.ign || "—", tone: "var(--gold)" },
+        { label: "Best Avg Rating", value: [...eoLb].sort((a, b) => b.avgRating - a.avgRating)[0]?.ign || "—", tone: "var(--accent)" },
+        { label: "Most EO Attendance", value: [...eoLb].sort((a, b) => b.eoPresent - a.eoPresent)[0]?.ign || "—", tone: "var(--green)" }
+      ];
+    }
+    return [
+      { label: "Top DPS", value: [...lb].filter(m => (m.role || "").toLowerCase() === "dps").sort((a, b) => b.totalScore - a.totalScore)[0]?.ign || "—", tone: "var(--red)" },
+      { label: "Top Support", value: [...lb].filter(m => (m.role || "").toLowerCase().includes("support")).sort((a, b) => b.supportIndex - a.supportIndex)[0]?.ign || "—", tone: "var(--gold)" },
+      { label: "Best Attendance", value: [...lb].sort((a, b) => b.attendancePct - a.attendancePct)[0]?.ign || "—", tone: "var(--green)" }
+    ];
+  }, [lbMode, lb, eoLb]);
+  const topMovers = useMemo(() => {
+    const movementRows = currentModeRows
+      .map((m, idx) => {
+        const memberId = String(m.memberId || "").toLowerCase();
+        const prevRank = Number(previousRankMap?.[memberId] || 0);
+        const currentRank = lbMode === "eo" ? Number(m.eoRank || idx + 1) : idx + 1;
+        if (!prevRank || !currentRank) return null;
+        const delta = prevRank - currentRank;
+        if (delta === 0) return null;
+        return { member: m, delta, currentRank };
+      })
+      .filter(Boolean);
+    const climbers = [...movementRows]
+      .filter(r => r.delta > 0)
+      .sort((a, b) => b.delta - a.delta || a.currentRank - b.currentRank)
+      .slice(0, 3);
+    const droppers = [...movementRows]
+      .filter(r => r.delta < 0)
+      .sort((a, b) => a.delta - b.delta || a.currentRank - b.currentRank)
+      .slice(0, 3);
+    return { climbers, droppers };
+  }, [currentModeRows, previousRankMap, lbMode]);
   useEffect(() => { localStorage.setItem("leaderboard_filter", filter); }, [filter]);
   useEffect(() => { localStorage.setItem("leaderboard_mode", lbMode); }, [lbMode]);
   useEffect(() => {
@@ -251,6 +324,65 @@ function LeaderboardPage({ onViewProfile }) {
         </button>
         <button className={`btn btn-sm ${visibleCols.metrics ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("metrics")}>Metrics</button>
         <button className={`btn btn-sm ${visibleCols.classification ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("classification")}>Classification</button>
+        <div className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "4px 10px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: 0.4 }}>MOVEMENT</span>
+          <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700 }}>↑ Up</span>
+          <span style={{ fontSize: 11, color: "var(--red)", fontWeight: 700 }}>↓ Down</span>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>— Same</span>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>NEW First seen</span>
+        </div>
+      </div>
+      <div className="sticky-actions" style={{ marginBottom: 16 }}>
+        <div className="quick-summary-bar" style={{ padding: "8px 10px", borderRadius: 12 }}>
+          <div className="summary-item" style={{ minWidth: 120 }}>
+            <span className="summary-label">MODE</span>
+            <span className="summary-value">{lbMode === "eo" ? "EO Ratings" : lbMode}</span>
+          </div>
+          {overviewCards.map(card => (
+            <div key={card.label} className="summary-item" style={{ minWidth: 170, borderColor: card.tone }}>
+              <span className="summary-label">{card.label}</span>
+              <span className="summary-value" style={{ color: card.tone }}>{card.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="section-header">
+          <div className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>
+            Top Movers ({lbMode === "eo" ? "EO Ratings" : lbMode})
+          </div>
+          <div className="text-xs text-muted">Compared to previous snapshot in this mode</div>
+        </div>
+        <div className="grid-2" style={{ gap: 14 }}>
+          <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(64,201,122,0.25)", background: "rgba(64,201,122,0.08)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "var(--green)", textTransform: "uppercase", marginBottom: 8 }}>📈 Biggest Climbers</div>
+            {topMovers.climbers.length ? topMovers.climbers.map(row => (
+              <div key={row.member.memberId} className="flex items-center justify-between" style={{ marginBottom: 6, gap: 10 }}>
+                <div className="flex items-center" style={{ gap: 6 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px", fontSize: 12 }} onClick={() => onViewProfile && onViewProfile(row.member)}>
+                    {row.member.ign}
+                  </button>
+                  <span className="badge badge-casual" style={{ fontSize: 10, padding: "2px 6px" }}>{`#${row.currentRank}`}</span>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--green)", fontWeight: 700 }}>{`↑${row.delta}`}</span>
+              </div>
+            )) : <div className="text-xs text-muted">No upward movement yet.</div>}
+          </div>
+          <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(224,80,80,0.25)", background: "rgba(224,80,80,0.08)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "var(--red)", textTransform: "uppercase", marginBottom: 8 }}>📉 Biggest Droppers</div>
+            {topMovers.droppers.length ? topMovers.droppers.map(row => (
+              <div key={row.member.memberId} className="flex items-center justify-between" style={{ marginBottom: 6, gap: 10 }}>
+                <div className="flex items-center" style={{ gap: 6 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px", fontSize: 12 }} onClick={() => onViewProfile && onViewProfile(row.member)}>
+                    {row.member.ign}
+                  </button>
+                  <span className="badge badge-casual" style={{ fontSize: 10, padding: "2px 6px" }}>{`#${row.currentRank}`}</span>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--red)", fontWeight: 700 }}>{`↓${Math.abs(row.delta)}`}</span>
+              </div>
+            )) : <div className="text-xs text-muted">No downward movement yet.</div>}
+          </div>
+        </div>
       </div>
 
       {/* Top 3 podium - DYNAMIC for all modes */}
@@ -388,12 +520,17 @@ function LeaderboardPage({ onViewProfile }) {
                     </td>
                     <td><span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 10 }}>{m.role}</span></td>
                     <td>
-                      <span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
-                        {lbMode === "Combat" ? m.totalScore : 
-                         lbMode === "Duty" ? `${m.attendancePct}%` : 
-                         lbMode === "Support" ? m.supportIndex : 
-                         Math.round((m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40))}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
+                          {lbMode === "Combat" ? m.totalScore : 
+                          lbMode === "Duty" ? `${m.attendancePct}%` : 
+                          lbMode === "Support" ? m.supportIndex : 
+                          Math.round((m.attendancePct * 0.6) + ((m.totalScore / (Math.max(...lb.map(x => x.totalScore), 1))) * 40))}
+                        </span>
+                        <span className="badge badge-casual" style={{ fontSize: 10, color: movementFor(m.memberId, i + 1).color }}>
+                          {movementFor(m.memberId, i + 1).label}
+                        </span>
+                      </div>
                     </td>
                     <td style={{ minWidth: 140 }}>
                       <div className="score-bar-wrap">
@@ -459,6 +596,7 @@ function LeaderboardPage({ onViewProfile }) {
                     <div style={{ textAlign: "right" }}>
                       <div className="font-cinzel" style={{ fontSize: 18, fontWeight: 700, color: rankColors[i] || "var(--text-primary)" }}>{val}</div>
                       <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>{lbMode} SCORE</div>
+                      <div style={{ marginTop: 2, fontSize: 10, color: movementFor(m.memberId, i + 1).color }}>{movementFor(m.memberId, i + 1).label}</div>
                     </div>
                   </div>
 
@@ -525,9 +663,14 @@ function LeaderboardPage({ onViewProfile }) {
                       </td>
                       <td><span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 10 }}>{m.role}</span></td>
                       <td>
-                        <span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: "var(--gold)" }}>
-                          {m.totalEoScore} <span style={{ fontSize: 11, color: "var(--text-muted)" }}>pts</span>
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="font-cinzel" style={{ fontSize: 15, fontWeight: 700, color: "var(--gold)" }}>
+                            {m.totalEoScore} <span style={{ fontSize: 11, color: "var(--text-muted)" }}>pts</span>
+                          </span>
+                          <span className="badge badge-casual" style={{ fontSize: 10, color: movementFor(m.memberId, m.eoRank).color }}>
+                            {movementFor(m.memberId, m.eoRank).label}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ minWidth: 140 }}>
                         <div className="score-bar-wrap">
