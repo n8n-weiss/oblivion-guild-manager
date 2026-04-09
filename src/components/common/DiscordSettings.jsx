@@ -122,8 +122,14 @@ const DiscordSettings = () => {
   const validateDiscordConfig = () => {
     const cfg = normalizeDiscordConfig(localConfig);
     const issues = [];
-    const webhookRegex = /^https:\/\/(canary\.)?discord\.com\/api\/webhooks\/\d+\/[\w-]+$/i;
-    const hasGlobalWebhook = webhookRegex.test((cfg.webhookUrl || "").trim());
+    // Accept official Discord webhook domains and common token formats.
+    const webhookRegex = /^https:\/\/(?:(?:canary|ptb)\.)?discord\.com\/api\/webhooks\/\d+\/[A-Za-z0-9._-]+\/?$/i;
+    const normalizeWebhook = (url = "") => String(url || "").trim();
+    const isWebhookValid = (url = "") => {
+      const value = normalizeWebhook(url);
+      return value.length > 0 && webhookRegex.test(value);
+    };
+    const hasGlobalWebhook = isWebhookValid(cfg.webhookUrl);
 
     if (!hasGlobalWebhook) {
       issues.push("Global webhook URL is missing or invalid.");
@@ -131,8 +137,8 @@ const DiscordSettings = () => {
 
     Object.entries(cfg.notifications || {}).forEach(([cat, catCfg]) => {
       if (!catCfg?.enabled) return;
-      const override = (catCfg.webhookUrl || "").trim();
-      if (override && !webhookRegex.test(override)) {
+      const override = normalizeWebhook(catCfg.webhookUrl);
+      if (override && !isWebhookValid(override)) {
         issues.push(`[${cat}] Override webhook format looks invalid.`);
         return;
       }
