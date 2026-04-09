@@ -11,6 +11,8 @@ function LeaderboardPage({ onViewProfile }) {
   const LEADERBOARD_RANK_SNAPSHOT_KEY = "leaderboard_rank_snapshots_v1";
   const [filter, setFilter] = useState(() => localStorage.getItem("leaderboard_filter") || "All");
   const [lbMode, setLbMode] = useState(() => localStorage.getItem("leaderboard_mode") || "Combat"); // "Combat" | "Duty" | "Consistency" | "Support" | "eo"
+  const [periodScope, setPeriodScope] = useState(() => localStorage.getItem("leaderboard_scope_v1") || "all"); // all | 30d | last8
+  const [queueMode, setQueueMode] = useState(() => localStorage.getItem("leaderboard_queue_v1") || "all"); // all | risk | movers | support
   const [viewPresets, setViewPresets] = useState(() => {
     try {
       const raw = localStorage.getItem(LEADERBOARD_PRESETS_KEY);
@@ -27,22 +29,43 @@ function LeaderboardPage({ onViewProfile }) {
       return false;
     }
   });
-  const [visibleCols, setVisibleCols] = useState(() => {
+  const [showDetailCols, setShowDetailCols] = useState(() => {
     try {
-      const raw = localStorage.getItem(LEADERBOARD_TABLE_UI_KEY + "_cols");
-      const parsed = raw ? JSON.parse(raw) : null;
-      return {
-        metrics: parsed?.metrics !== false,
-        classification: parsed?.classification !== false
-      };
+      return localStorage.getItem(LEADERBOARD_TABLE_UI_KEY + "_details") === "1";
     } catch {
-      return { metrics: true, classification: true };
+      return false;
     }
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const scopedData = useMemo(() => {
+    if (periodScope === "all") {
+      return { scopedEvents: events, scopedAttendance: attendance, scopedPerformance: performance, scopedEoRatings: eoRatings };
+    }
+    const sorted = [...events].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+    let scopedEvents = sorted;
+    if (periodScope === "30d") {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      scopedEvents = sorted.filter(e => new Date(e.eventDate) >= cutoff);
+    } else if (periodScope === "last8") {
+      scopedEvents = sorted.slice(0, 8);
+    }
+    const scopedIds = new Set(scopedEvents.map(e => e.eventId));
+    const scopedAttendance = attendance.filter(a => scopedIds.has(a.eventId));
+    const scopedPerformance = performance.filter(p => scopedIds.has(p.eventId));
+    const scopedEoRatings = eoRatings.filter(r => !r.eventId || scopedIds.has(r.eventId));
+    return { scopedEvents, scopedAttendance, scopedPerformance, scopedEoRatings };
+  }, [periodScope, events, attendance, performance, eoRatings]);
   
   const lb = useMemo(() => {
-    const rawLb = computeLeaderboard(activeMembers, events, attendance, performance, eoRatings);
+    const rawLb = computeLeaderboard(
+      activeMembers,
+      scopedData.scopedEvents,
+      scopedData.scopedAttendance,
+      scopedData.scopedPerformance,
+      scopedData.scopedEoRatings
+    );
     
     // Sort based on mode
     let sorted = [...rawLb];
@@ -63,9 +86,8 @@ function LeaderboardPage({ onViewProfile }) {
     }
     
     return sorted.map((m, i) => ({ ...m, dynamicRank: i + 1 }));
-  }, [activeMembers, events, attendance, performance, eoRatings, lbMode]);
+  }, [activeMembers, scopedData, lbMode]);
 
-  const filtered = filter === "All" ? lb : lb.filter(m => m.classification === filter);
   const maxVal = Math.max(...lb.map(m => 
     lbMode === "Duty" ? m.attendancePct : 
     lbMode === "Support" ? m.supportIndex : 
@@ -74,16 +96,16 @@ function LeaderboardPage({ onViewProfile }) {
   ), 1);
 
   // EO leaderboard
-  const eoEvents = events.filter(e => e.eventType === "Emperium Overrun");
+  const eoEvents = scopedData.scopedEvents.filter(e => e.eventType === "Emperium Overrun");
   const eoLb = useMemo(() => activeMembers.map(member => {
     const mId = (member.memberId || "").toLowerCase();
-    const memberRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
-    const eoPresent = eoEvents.filter(ev => attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId && a.status === "present")).length;
+    const memberRatings = scopedData.scopedEoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
+    const eoPresent = eoEvents.filter(ev => scopedData.scopedAttendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId && a.status === "present")).length;
     const totalEoScore = memberRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
     const avgRating = memberRatings.length > 0 ? Math.round((totalEoScore / memberRatings.length) * 10) / 10 : 0;
     return { ...member, totalEoScore, eoPresent, eoTotal: eoEvents.length, avgRating };
   }).sort((a, b) => b.totalEoScore - a.totalEoScore).map((m, i) => ({ ...m, eoRank: i + 1 }))
-    , [activeMembers, eoRatings, eoEvents, attendance]);
+    , [activeMembers, scopedData, eoEvents]);
   const maxEoScore = Math.max(...eoLb.map(m => m.totalEoScore), 1);
 
   const rankColors = ["var(--gold)", "#c0c0c0", "#cd7f32"];
@@ -124,6 +146,19 @@ function LeaderboardPage({ onViewProfile }) {
     if (delta < 0) return { label: `↓${Math.abs(delta)}`, color: "var(--red)" };
     return { label: "—", color: "var(--text-muted)" };
   };
+  const queueFiltered = useMemo(() => {
+    if (queueMode === "all") return lb;
+    if (queueMode === "risk") return lb.filter(m => m.attendancePct < 60 || m.classification === "At Risk");
+    if (queueMode === "movers") return lb.filter((m, idx) => {
+      const key = String(m.memberId || "").toLowerCase();
+      const prevRank = Number(previousRankMap?.[key] || 0);
+      const currentRank = idx + 1;
+      return prevRank > 0 && prevRank !== currentRank;
+    });
+    if (queueMode === "support") return lb.filter(m => (m.role || "").toLowerCase().includes("support"));
+    return lb;
+  }, [lb, queueMode, previousRankMap]);
+  const filtered = filter === "All" ? queueFiltered : queueFiltered.filter(m => m.classification === filter);
   const overviewCards = useMemo(() => {
     if (lbMode === "eo") {
       return [
@@ -160,8 +195,20 @@ function LeaderboardPage({ onViewProfile }) {
       .slice(0, 3);
     return { climbers, droppers };
   }, [currentModeRows, previousRankMap, lbMode]);
+  const actionSnapshot = useMemo(() => {
+    if (lbMode === "eo") {
+      const risky = [...eoLb].sort((a, b) => (a.eoPresent / Math.max(1, a.eoTotal)) - (b.eoPresent / Math.max(1, b.eoTotal))).slice(0, 5);
+      const reliable = [...eoLb].sort((a, b) => b.avgRating - a.avgRating || b.eoPresent - a.eoPresent).slice(0, 5);
+      return { risky, reliable };
+    }
+    const risky = [...lb].sort((a, b) => a.attendancePct - b.attendancePct || a.totalScore - b.totalScore).slice(0, 5);
+    const reliable = [...lb].sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore).slice(0, 5);
+    return { risky, reliable };
+  }, [lbMode, lb, eoLb]);
   useEffect(() => { localStorage.setItem("leaderboard_filter", filter); }, [filter]);
   useEffect(() => { localStorage.setItem("leaderboard_mode", lbMode); }, [lbMode]);
+  useEffect(() => { localStorage.setItem("leaderboard_scope_v1", periodScope); }, [periodScope]);
+  useEffect(() => { localStorage.setItem("leaderboard_queue_v1", queueMode); }, [queueMode]);
   useEffect(() => {
     localStorage.setItem(LEADERBOARD_PRESETS_KEY, JSON.stringify(viewPresets.slice(0, 8)));
   }, [viewPresets]);
@@ -169,8 +216,8 @@ function LeaderboardPage({ onViewProfile }) {
     localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_compact", tableCompact ? "1" : "0");
   }, [tableCompact]);
   useEffect(() => {
-    localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_cols", JSON.stringify(visibleCols));
-  }, [visibleCols]);
+    localStorage.setItem(LEADERBOARD_TABLE_UI_KEY + "_details", showDetailCols ? "1" : "0");
+  }, [showDetailCols]);
   const saveCurrentPreset = () => {
     const name = window.prompt("Preset name?", `Leaderboard ${viewPresets.length + 1}`);
     if (!name || !name.trim()) return;
@@ -205,10 +252,6 @@ function LeaderboardPage({ onViewProfile }) {
       return [found, ...prev.filter(p => p.id !== id)];
     });
   };
-  const toggleCol = (key) => {
-    setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-  
   const getPodiumValue = (m) => {
     if (!m) return "";
     if (lbMode === "Combat") return m.totalScore;
@@ -255,9 +298,25 @@ function LeaderboardPage({ onViewProfile }) {
                 </button>
               ))}
             </div>
+            <div className="flex gap-2 quick-summary-bar" style={{ margin: "8px 0 0", padding: "4px 0", overflowX: "auto", flexWrap: "nowrap" }}>
+              {[
+                { id: "all", label: "All-time" },
+                { id: "30d", label: "Last 30d" },
+                { id: "last8", label: "Last 8 events" }
+              ].map(s => (
+                <button
+                  key={s.id}
+                  className={`btn btn-sm ${periodScope === s.id ? "btn-primary" : "btn-ghost"}`}
+                  style={{ flex: "0 0 auto" }}
+                  onClick={() => setPeriodScope(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="hide-on-mobile">
-            <div className="flex gap-2">
+            <div className="flex gap-2" style={{ flexWrap: "wrap", justifyContent: "flex-end" }}>
               {[
                 { id: "Combat", label: "Combat", icon: "⚔️" },
                 { id: "Duty", label: "Duty", icon: "🛡️" },
@@ -271,6 +330,19 @@ function LeaderboardPage({ onViewProfile }) {
                   onClick={() => setLbMode(cat.id)}
                 >
                   {cat.icon} {cat.label}
+                </button>
+              ))}
+              {[
+                { id: "all", label: "All-time" },
+                { id: "30d", label: "Last 30d" },
+                { id: "last8", label: "Last 8 events" }
+              ].map(s => (
+                <button
+                  key={s.id}
+                  className={`btn btn-sm ${periodScope === s.id ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setPeriodScope(s.id)}
+                >
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -322,8 +394,12 @@ function LeaderboardPage({ onViewProfile }) {
         <button className={`btn btn-sm ${tableCompact ? "btn-primary" : "btn-ghost"}`} onClick={() => setTableCompact(v => !v)}>
           <Icon name="grid" size={12} /> {tableCompact ? "Compact Rows: On" : "Compact Rows: Off"}
         </button>
-        <button className={`btn btn-sm ${visibleCols.metrics ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("metrics")}>Metrics</button>
-        <button className={`btn btn-sm ${visibleCols.classification ? "btn-primary" : "btn-ghost"}`} onClick={() => toggleCol("classification")}>Classification</button>
+        <button className={`btn btn-sm ${showDetailCols ? "btn-primary" : "btn-ghost"}`} onClick={() => setShowDetailCols(v => !v)}>
+          <Icon name="list" size={12} /> {showDetailCols ? "Detail Columns: On" : "Detail Columns: Off"}
+        </button>
+        <button className={`btn btn-sm ${showAdvanced ? "btn-primary" : "btn-ghost"}`} onClick={() => setShowAdvanced(v => !v)}>
+          <Icon name="search" size={12} /> {showAdvanced ? "Advanced Insights: On" : "Advanced Insights: Off"}
+        </button>
         <div className="badge badge-casual" style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "4px 10px", flexWrap: "wrap" }}>
           <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: 0.4 }}>MOVEMENT</span>
           <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700 }}>↑ Up</span>
@@ -344,7 +420,24 @@ function LeaderboardPage({ onViewProfile }) {
               <span className="summary-value" style={{ color: card.tone }}>{card.value}</span>
             </div>
           ))}
+          <div className="summary-item" style={{ minWidth: 160 }}>
+            <span className="summary-label">PERIOD</span>
+            <span className="summary-value">{periodScope === "all" ? "All-time" : periodScope === "30d" ? "Last 30d" : "Last 8 events"}</span>
+          </div>
         </div>
+      </div>
+      <div className="flex gap-2 mb-4" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        <span className="text-xs text-muted" style={{ letterSpacing: 1 }}>Action Queue:</span>
+        {[
+          { id: "all", label: "All" },
+          { id: "risk", label: "Needs Follow-up" },
+          { id: "movers", label: "Top Movers" },
+          { id: "support", label: "Support Priority" }
+        ].map(q => (
+          <button key={q.id} className={`btn btn-sm ${queueMode === q.id ? "btn-primary" : "btn-ghost"}`} onClick={() => setQueueMode(q.id)}>
+            {q.label}
+          </button>
+        ))}
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="section-header">
@@ -384,7 +477,42 @@ function LeaderboardPage({ onViewProfile }) {
           </div>
         </div>
       </div>
+      <div className="grid-2 gap-4 mb-4">
+        <div className="card">
+          <div className="card-title">🚨 At-Risk Members</div>
+          <div className="text-xs text-muted" style={{ marginBottom: 10 }}>Needs officer follow-up soon</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {actionSnapshot.risky.map((m, idx) => (
+              <div key={m.memberId} className="flex items-center justify-between" style={{ gap: 10 }}>
+                <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px", fontSize: 12 }} onClick={() => onViewProfile && onViewProfile(m)}>
+                  {idx + 1}. {m.ign}
+                </button>
+                <span className="badge badge-atrisk" style={{ fontSize: 10 }}>
+                  {lbMode === "eo" ? `${m.eoPresent}/${m.eoTotal} EO` : `${m.attendancePct}% att`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-title">✅ Top Reliable</div>
+          <div className="text-xs text-muted" style={{ marginBottom: 10 }}>Most consistent contributors</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {actionSnapshot.reliable.map((m, idx) => (
+              <div key={m.memberId} className="flex items-center justify-between" style={{ gap: 10 }}>
+                <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px", fontSize: 12 }} onClick={() => onViewProfile && onViewProfile(m)}>
+                  {idx + 1}. {m.ign}
+                </button>
+                <span className="badge badge-active" style={{ fontSize: 10 }}>
+                  {lbMode === "eo" ? `${m.avgRating}★ avg` : `${m.attendancePct}% att`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
+      {showAdvanced && <>
       {/* Top 3 podium - DYNAMIC for all modes */}
       <div className="flex gap-4 items-end justify-center animate-slide-up" style={{ maxWidth: 700, margin: "0 auto 32px" }}>
         {[podiumData[1], podiumData[0], podiumData[2]].map((m, idx) => {
@@ -459,6 +587,7 @@ function LeaderboardPage({ onViewProfile }) {
           </div>
         ))}
       </div>}
+      </>}
 
       {/* Main Leaderboard Table */}
       {lbMode !== "eo" ? (
@@ -493,9 +622,11 @@ function LeaderboardPage({ onViewProfile }) {
               <thead><tr>
                 <th>#</th><th>Player</th><th>Role</th>
                 <th>{lbMode === "Combat" ? "Total Score" : lbMode === "Duty" ? "Attendance" : lbMode === "Support" ? "SPI Score" : "Stability"}</th>
-                <th>Intensity</th>
-                {visibleCols.metrics && <th>Metrics</th>}
-                {visibleCols.classification && <th>Classification</th>}
+                <th>Movement</th>
+                <th>Attendance</th>
+                {showDetailCols && <th>Intensity</th>}
+                {showDetailCols && <th>Metrics</th>}
+                {showDetailCols && <th>Classification</th>}
               </tr></thead>
               <tbody>
                 {filtered.map((m, i) => (
@@ -532,7 +663,12 @@ function LeaderboardPage({ onViewProfile }) {
                         </span>
                       </div>
                     </td>
-                    <td style={{ minWidth: 140 }}>
+                    <td>
+                      <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 10 }}>
+                        {m.attendancePct}% ({m.attStatus?.label || "Average"})
+                      </span>
+                    </td>
+                    {showDetailCols && <td style={{ minWidth: 140 }}>
                       <div className="score-bar-wrap">
                         <div className="score-bar-bg">
                           <div className="score-bar-fill score-bar-glow" style={{ 
@@ -546,14 +682,14 @@ function LeaderboardPage({ onViewProfile }) {
                           }} />
                         </div>
                       </div>
-                    </td>
-                    {visibleCols.metrics && <td>
+                    </td>}
+                    {showDetailCols && <td>
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         <div>Score: {m.totalScore}</div>
                         <div>Att: {m.attendancePct}%</div>
                       </div>
                     </td>}
-                    {visibleCols.classification && <td>
+                    {showDetailCols && <td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         <span className={`badge ${m.attStatus?.badge || "badge-casual"}`} style={{ fontSize: 10 }}>
                           🎯 {m.attStatus?.label || "Average"}
@@ -743,7 +879,7 @@ function LeaderboardPage({ onViewProfile }) {
       )}
 
       {/* Persistent Classification Legend */}
-      <div className="card mt-4" style={{ marginBottom: 24 }}>
+      {showAdvanced && <div className="card mt-4" style={{ marginBottom: 24 }}>
         <div className="card-title">Classification Legend</div>
 
         {/* Score Classification */}
@@ -780,7 +916,7 @@ function LeaderboardPage({ onViewProfile }) {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
