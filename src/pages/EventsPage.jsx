@@ -38,12 +38,18 @@ function EventsPage() {
     setEvents(prev => [...prev, newEvent]);
 
     // auto-load active members with absence-aware attendance
-    const newAtt = activeMembers.map(m => {
+    const newAtt = members
+      .filter(m => (m.status || "active") !== "left")
+      .map(m => {
       const hasAbsence = absences.find(a => a.memberId === m.memberId && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
       return { memberId: m.memberId, eventId, status: hasAbsence ? "loa" : "present" };
     });
 
-    setAttendance(prev => [...prev, ...newAtt]);
+    setAttendance(prev => {
+      const existingIds = new Set(prev.filter(a => a.eventId === eventId).map(a => (a.memberId || "").toLowerCase()));
+      const dedupedNew = newAtt.filter(a => !existingIds.has((a.memberId || "").toLowerCase()));
+      return [...prev, ...dedupedNew];
+    });
     showToast("Event created with attendance loaded", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
     
@@ -71,7 +77,7 @@ function EventsPage() {
     const current = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId);
     
     // Cycle: present -> absent -> loa -> present
-    let newStatus = "present";
+    let newStatus = "absent";
     if (current?.status === "present") newStatus = "absent";
     else if (current?.status === "absent") newStatus = "loa";
     else if (current?.status === "loa") newStatus = "present";
@@ -334,9 +340,9 @@ function EventsPage() {
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
-                            <button className={`att-toggle ${m.att?.status || "absent"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)} title="Click to cycle status (Present > Absent > LOA)">
-                              {m.att?.status === "present" ? <><Icon name="check" size={11} /> Present</> : 
-                               m.att?.status === "loa" ? <><Icon name="shield" size={11} /> LOA</> : 
+                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)} title="Click to cycle status (Present > Absent > LOA)">
+                              {(m.att?.status || "present") === "present" ? <><Icon name="check" size={11} /> Present</> : 
+                               (m.att?.status || "present") === "loa" ? <><Icon name="shield" size={11} /> LOA</> : 
                                <><Icon name="x" size={11} /> Absent</>}
                             </button>
                           </td>
