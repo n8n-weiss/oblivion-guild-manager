@@ -10,7 +10,7 @@ import Modal from '../components/ui/Modal';
 
 function LoginPage() {
   const MotionDiv = motion.div;
-  const { submitJoinRequest } = useGuild();
+  const { submitJoinRequest, submitReactivationRequest, members, joinRequests } = useGuild();
   const [tab, setTab] = useState("login"); // login, register
 
   const [email, setEmail] = useState(() => localStorage.getItem("last_login_uid_v1") || "");
@@ -18,7 +18,11 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
   const [showForgotUid, setShowForgotUid] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [authNotice, setAuthNotice] = useState("");
+  const [reactivateDiscord, setReactivateDiscord] = useState("");
+  const [reactivateUid, setReactivateUid] = useState("");
+  const [reactivateIgn, setReactivateIgn] = useState("");
   // Registration States
   const [regDiscord, setRegDiscord] = useState("");
   const [regIgn, setRegIgn] = useState("");
@@ -30,6 +34,38 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const uidHintOk = !email || /@oblivion\.com$/i.test(email.trim());
+  const normalizeDiscord = (value = "") => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const buildOblUid = (raw = "") => {
+    let clean = String(raw || "").toUpperCase().replace(/\s/g, "");
+    if (clean.startsWith("OBL")) clean = clean.substring(3);
+    return /^\d{6}$/.test(clean) ? `OBL${clean}` : "";
+  };
+  const regFinalUid = buildOblUid(regUid);
+  const regNormalizedDiscord = normalizeDiscord(regDiscord);
+  const regPortalEmail = regNormalizedDiscord ? `${regNormalizedDiscord}@oblivion.com` : "";
+  const existingMemberMatch = React.useMemo(() => {
+    if (!regFinalUid && !regNormalizedDiscord) return null;
+    return members.find((m) => {
+      const sameUid = regFinalUid && (m.memberId || "").toUpperCase() === regFinalUid;
+      const sameDiscord = regNormalizedDiscord && normalizeDiscord(m.discord || "") === regNormalizedDiscord;
+      return sameUid || sameDiscord;
+    }) || null;
+  }, [members, regFinalUid, regNormalizedDiscord]);
+  const existingJoinRequestMatch = React.useMemo(() => {
+    if (!regFinalUid && !regNormalizedDiscord) return null;
+    return joinRequests.find((r) => {
+      const sameUid = regFinalUid && (r.uid || "").toUpperCase() === regFinalUid;
+      const sameDiscord = regNormalizedDiscord && normalizeDiscord(r.discord || "") === regNormalizedDiscord;
+      const status = (r.status || "").toLowerCase();
+      const blocksSignup = status !== "rejected";
+      return (sameUid || sameDiscord) && blocksSignup;
+    }) || null;
+  }, [joinRequests, regFinalUid, regNormalizedDiscord]);
+  const duplicateRegistrationWarning = existingMemberMatch
+    ? `Member data already exists for ${existingMemberMatch.ign || regFinalUid}. Please sign in instead of creating a new Sign Up request.`
+    : existingJoinRequestMatch
+      ? `A Sign Up request already exists (${existingJoinRequestMatch.status || "pending"}). Please wait for officer action instead of submitting again.`
+      : "";
 
   useEffect(() => {
     if (tab !== "login") setShowPassword(false);
@@ -97,6 +133,10 @@ function LoginPage() {
     }
 
     const finalUid = `OBL${cleanUid}`;
+    if (duplicateRegistrationWarning) {
+      setError(duplicateRegistrationWarning);
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -125,6 +165,32 @@ function LoginPage() {
       setRegUid("OBL" + v);
     } else {
       setRegUid(v);
+    }
+  };
+
+  const handleReactivateRequest = async () => {
+    const normalizedDiscord = normalizeDiscord(reactivateDiscord);
+    const finalUid = buildOblUid(reactivateUid);
+    if (!normalizedDiscord || !finalUid) {
+      setError("For reactivation, enter valid Discord username and UID (OBL+6 digits).");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const success = await submitReactivationRequest({
+        discord: reactivateDiscord.trim(),
+        uid: finalUid,
+        ign: reactivateIgn.trim()
+      });
+      if (success) {
+        setShowReactivateModal(false);
+        setReactivateDiscord("");
+        setReactivateUid("");
+        setReactivateIgn("");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -213,6 +279,15 @@ function LoginPage() {
                       onClick={() => setShowForgotUid(true)}
                     >
                       Forgot UID?
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "2px 8px", fontSize: 11 }}
+                      onClick={() => setShowReactivateModal(true)}
+                      title="Submit account reactivation request"
+                    >
+                      Reactivate Account?
                     </button>
                     <button
                       type="button"
@@ -345,11 +420,20 @@ function LoginPage() {
                         </select>
                       </div>
                     </div>
-
+                    {duplicateRegistrationWarning && (
+                      <div style={{ padding: "10px 12px", background: "rgba(240,192,64,0.14)", border: "1px solid rgba(240,192,64,0.35)", borderRadius: 10, color: "var(--gold)", fontSize: 12, lineHeight: 1.5 }}>
+                        ⚠️ {duplicateRegistrationWarning}
+                        {regPortalEmail && (
+                          <div style={{ marginTop: 6, color: "var(--text-secondary)" }}>
+                            Expected portal email: <strong>{regPortalEmail}</strong>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <button className="btn w-full" style={{ position: "relative", overflow: "hidden", marginTop: 8, justifyContent: "center", padding: "12px", fontSize: 13, fontWeight: 700, letterSpacing: 1, background: "linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.5)", boxShadow: "0 4px 12px rgba(240,192,64,0.15)" }}
-                    onClick={handleRegister} disabled={loading}>
+                    onClick={handleRegister} disabled={loading || !!duplicateRegistrationWarning}>
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent, rgba(240,192,64,0.3), transparent)", transform: "translateX(-100%)", animation: "shimmer 2.5s infinite" }} />
                     <span style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8 }}>
                       {loading ? <span style={{ animation: "pulse 1s infinite" }}>Submitting...</span> : <><Icon name="edit" size={14} /> Apply to Join </>}
@@ -392,6 +476,38 @@ function LoginPage() {
             </ol>
             <div style={{ marginTop: 10, fontSize: 12 }}>
               If still blocked, contact Masters/Officers for account verification.
+            </div>
+          </div>
+        </Modal>
+      )}
+      {showReactivateModal && (
+        <Modal
+          title="Request Account Reactivation"
+          onClose={() => setShowReactivateModal(false)}
+          footer={(
+            <>
+              <button className="btn btn-ghost" onClick={() => setShowReactivateModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleReactivateRequest} disabled={loading}>
+                {loading ? "Submitting..." : "Submit Request"}
+              </button>
+            </>
+          )}
+        >
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            Use this if your old portal account needs to be reactivated by officers.
+          </div>
+          <div className="form-grid" style={{ gap: 12, marginTop: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Discord Username</label>
+              <input className="form-input" placeholder="e.g. reaper" value={reactivateDiscord} onChange={e => setReactivateDiscord(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">UID</label>
+              <input className="form-input" placeholder="OBL123456" value={reactivateUid} onChange={e => setReactivateUid(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">IGN (optional)</label>
+              <input className="form-input" placeholder="e.g. DarkReaper" value={reactivateIgn} onChange={e => setReactivateIgn(e.target.value)} />
             </div>
           </div>
         </Modal>

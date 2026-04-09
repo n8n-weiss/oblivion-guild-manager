@@ -1401,21 +1401,89 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const submitReactivationRequest = async (data) => {
+    try {
+      const uid = (data.uid || "").toUpperCase();
+      const normalizedDiscord = (data.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const existing = members.find((m) => {
+        const sameUid = (m.memberId || "").toUpperCase() === uid;
+        const sameDiscord = (m.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedDiscord;
+        return sameUid || sameDiscord;
+      });
+      if (!existing) {
+        showToast("No existing member record found for this UID/Discord.", "error");
+        return false;
+      }
+      const pendingExists = joinRequests.some((r) => {
+        const sameUid = (r.uid || "").toUpperCase() === uid;
+        const sameDiscord = (r.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedDiscord;
+        return (sameUid || sameDiscord) && r.status === "pending" && r.requestType === "reactivation";
+      });
+      if (pendingExists) {
+        showToast("A reactivation request is already pending for this account.", "error");
+        return false;
+      }
+      const req = {
+        discord: data.discord,
+        ign: data.ign || existing.ign || "Unknown",
+        uid,
+        jobClass: existing.class || "Unknown",
+        role: existing.role || "DPS",
+        status: "pending",
+        requestType: "reactivation",
+        timestamp: new Date().toISOString()
+      };
+      await setDoc(doc(collection(db, "join_requests")), req);
+      sendDiscordEmbed(
+        "♻️ Account Reactivation Request",
+        `A former member requested account reactivation for **${req.ign}**.`,
+        0x6382E6,
+        [
+          { name: "IGN", value: req.ign, inline: true },
+          { name: "UID", value: req.uid, inline: true },
+          { name: "Discord", value: req.discord || "N/A", inline: true }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "join_requests",
+        "new_join",
+        { ign: req.ign, class: req.jobClass, role: req.role, uid: req.uid, discord: req.discord || "N/A" }
+      );
+      showToast("Reactivation request submitted. Please wait for officer approval.", "success");
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to submit reactivation request", "error");
+      return false;
+    }
+  };
+
   const approveJoinRequest = async (requestId) => {
     try {
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
+      const cleanDiscord = (r.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const portalEmail = cleanDiscord ? `${cleanDiscord}@oblivion.com` : "";
+      const existingMember = members.find(m => (m.memberId || "").toLowerCase() === (r.uid || "").toLowerCase());
       const newMember = {
+        ...(existingMember || {}),
         memberId: r.uid,
         ign: r.ign,
         class: r.jobClass,
         role: r.role,
         discord: r.discord,
-        guildRank: "Member",
-        joinDate: new Date().toISOString().split('T')[0]
+        guildRank: existingMember?.guildRank || "Member",
+        joinDate: existingMember?.joinDate || new Date().toISOString().split('T')[0],
+        status: "active",
+        reactivatedAt: existingMember ? new Date().toISOString() : (existingMember?.reactivatedAt || null)
       };
       await setDoc(doc(db, "roster", r.uid), newMember);
-      await setDoc(doc(db, "join_requests", requestId), { ...r, status: "approved" });
+      await setDoc(doc(db, "join_requests", requestId), {
+        ...r,
+        status: "approved",
+        accountStatus: "activated",
+        activatedAt: new Date().toISOString(),
+        accountEmail: portalEmail
+      });
       sendDiscordEmbed(
         "🎉 New Member Joined!",
         `Welcome **${r.ign}** to our Guild Portal!`,
@@ -1592,7 +1660,7 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionTemplates, setAuctionTemplates,
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
-    joinRequests, submitJoinRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
+    joinRequests, submitJoinRequest, submitReactivationRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,

@@ -6,6 +6,8 @@ import Icon from '../components/ui/icons';
 import ConfettiEffect from '../components/effects/ConfettiEffect';
 import StatePanel from '../components/common/StatePanel';
 
+const normalizeDiscord = (value = "") => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
 function RequestsPage() {
   const { 
     requests, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
@@ -13,11 +15,13 @@ function RequestsPage() {
     isOfficer, isArchitect, members, currentUser 
   } = useGuild();
   
-  const [subTab, setSubTab] = useState("profile"); // profile, join
+  const [subTab, setSubTab] = useState("profile"); // profile, join, reactivation
+  const [statusFilter, setStatusFilter] = useState("all"); // all, pending, approved, rejected
   const [showConfetti, setShowConfetti] = useState(false);
 
   const pendingRequests = requests.filter(r => r.status === "pending");
-  const pendingJoin = joinRequests.filter(r => r.status === "pending");
+  const pendingJoin = joinRequests.filter(r => r.status === "pending" && r.requestType !== "reactivation");
+  const pendingReactivation = joinRequests.filter(r => r.status === "pending" && r.requestType === "reactivation");
   
   const processedRequests = requests.filter(r => r.status !== "pending");
   const processedJoin = joinRequests.filter(r => r.status !== "pending");
@@ -26,12 +30,12 @@ function RequestsPage() {
     const matches = [];
     const id = (app.uid || "").toLowerCase();
     const ign = (app.ign || "").toLowerCase();
-    const disc = (app.discord || "").toLowerCase();
+    const disc = normalizeDiscord(app.discord || "");
 
     allMembers.forEach(m => {
       if ((m.memberId || "").toLowerCase() === id) matches.push(`UID Match (${m.ign})`);
       if ((m.ign || "").toLowerCase() === ign) matches.push(`IGN Match (${m.memberId})`);
-      if ((m.discord || "").toLowerCase() === disc) matches.push(`Discord Match (${m.ign})`);
+      if (normalizeDiscord(m.discord || "") === disc) matches.push(`Discord Match (${m.ign})`);
     });
 
     return [...new Set(matches)]; // Unique matches
@@ -69,8 +73,8 @@ function RequestsPage() {
       await writeAuditLog(
         currentUser.email,
         currentUser.displayName || currentUser.email,
-        "join_request_approved",
-        `Approved membership for ${r.ign} (UID: ${r.uid})`
+        r.requestType === "reactivation" ? "reactivation_request_approved" : "join_request_approved",
+        `${r.requestType === "reactivation" ? "Approved reactivation" : "Approved membership"} for ${r.ign} (UID: ${r.uid})`
       );
     }
   };
@@ -81,11 +85,41 @@ function RequestsPage() {
       await writeAuditLog(
         currentUser.email,
         currentUser.displayName || currentUser.email,
-        "join_request_rejected",
-        `Rejected membership for ${r.ign} (UID: ${r.uid})`
+        r.requestType === "reactivation" ? "reactivation_request_rejected" : "join_request_rejected",
+        `${r.requestType === "reactivation" ? "Rejected reactivation" : "Rejected membership"} for ${r.ign} (UID: ${r.uid})`
       );
     }
   };
+
+  const tabItems = [
+    { id: "profile", label: "Profile Updates", count: pendingRequests.length, emptyTitle: "All clear", emptyDesc: "No pending profile changes.", emptyIcon: "✨" },
+    { id: "join", label: "Applications", count: pendingJoin.length, emptyTitle: "No pending applications", emptyDesc: "Guild is quiet right now.", emptyIcon: "🛡️" },
+    { id: "reactivation", label: "Reactivation", count: pendingReactivation.length, emptyTitle: "No pending reactivation requests", emptyDesc: "No old accounts waiting for reactivation.", emptyIcon: "♻️" }
+  ];
+  const filterItems = [
+    { id: "all", label: "All" },
+    { id: "pending", label: "Pending" },
+    { id: "approved", label: "Approved" },
+    { id: "rejected", label: "Rejected" }
+  ];
+  const applyStatusFilter = (rows) => {
+    if (statusFilter === "all") return rows;
+    return rows.filter(r => (r.status || "").toLowerCase() === statusFilter);
+  };
+  const pendingRowsByTab = {
+    profile: pendingRequests,
+    join: pendingJoin,
+    reactivation: pendingReactivation
+  };
+  const visiblePending = applyStatusFilter(pendingRowsByTab[subTab] || []);
+  const processedRows = [...processedRequests, ...processedJoin]
+    .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 10);
+  const visibleHistory = applyStatusFilter(processedRows.filter((r) => {
+    if (subTab === "profile") return r.uid === undefined;
+    if (subTab === "join") return r.uid !== undefined && r.requestType !== "reactivation";
+    return r.uid !== undefined && r.requestType === "reactivation";
+  }));
 
   const handleDelete = async (r, type = "profile") => {
     const success = type === "profile" ? await deleteRequest(r.id) : await deleteJoinRequest(r.id);
@@ -119,44 +153,54 @@ function RequestsPage() {
         
         {/* Modern Tab Switcher */}
         <div style={{ display: 'flex', background: 'rgba(0,0,0,0.4)', padding: 4, borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)' }}>
-          <button 
-            onClick={() => setSubTab("profile")}
-            style={{ 
-              padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', transition: 'all 0.3s',
-              background: subTab === "profile" ? 'var(--accent)' : 'transparent',
-              color: subTab === "profile" ? '#fff' : 'var(--text-muted)',
-              boxShadow: subTab === "profile" ? '0 4px 12px var(--accent-glow)' : 'none'
-            }}
-          >
-            Profile Updates {pendingRequests.length > 0 && <span style={{ marginLeft: 6, background: '#fff', color: 'var(--accent)', padding: '1px 6px', borderRadius: 10, fontSize: 10 }}>{pendingRequests.length}</span>}
-          </button>
-          <button 
-            onClick={() => setSubTab("join")}
-            style={{ 
-              padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', transition: 'all 0.3s',
-              background: subTab === "join" ? 'var(--accent)' : 'transparent',
-              color: subTab === "join" ? '#fff' : 'var(--text-muted)',
-              boxShadow: subTab === "join" ? '0 4px 12px var(--accent-glow)' : 'none'
-            }}
-          >
-            Applications {pendingJoin.length > 0 && <span style={{ marginLeft: 6, background: '#fff', color: 'var(--accent)', padding: '1px 6px', borderRadius: 10, fontSize: 10 }}>{pendingJoin.length}</span>}
-          </button>
+          {tabItems.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setSubTab(t.id); setStatusFilter("all"); }}
+              style={{
+                padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', transition: 'all 0.3s',
+                background: subTab === t.id ? 'var(--accent)' : 'transparent',
+                color: subTab === t.id ? '#fff' : 'var(--text-muted)',
+                boxShadow: subTab === t.id ? '0 4px 12px var(--accent-glow)' : 'none'
+              }}
+            >
+              {t.label} {t.count > 0 && <span style={{ marginLeft: 6, background: '#fff', color: 'var(--accent)', padding: '1px 6px', borderRadius: 10, fontSize: 10 }}>{t.count}</span>}
+            </button>
+          ))}
         </div>
       </div>
 
       <div style={{ marginBottom: 60 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {filterItems.map(f => (
+            <button
+              key={f.id}
+              className={`btn btn-sm ${statusFilter === f.id ? "" : "btn-ghost"}`}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                borderColor: statusFilter === f.id ? "var(--accent)" : "var(--border)",
+                background: statusFilter === f.id ? "rgba(99,130,230,0.15)" : "transparent",
+                color: statusFilter === f.id ? "var(--accent)" : "var(--text-muted)"
+              }}
+              onClick={() => setStatusFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
         {subTab === "profile" ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 24 }}>
-            {pendingRequests.length === 0 ? (
+            {visiblePending.length === 0 ? (
               <div style={{ gridColumn: '1/-1' }}>
                 <StatePanel
                   icon="✨"
-                  title="All clear"
-                  description="No pending profile changes."
+                  title={statusFilter === "all" ? "All clear" : `No ${statusFilter} items`}
+                  description={statusFilter === "all" ? "No pending profile changes." : "Try another filter to see more requests."}
                 />
               </div>
             ) : (
-              pendingRequests.map((r, idx) => {
+              visiblePending.map((r, idx) => {
                 const mIndex = members.findIndex(m => m.memberId === r.memberId);
                 const changes = [];
                 if (r.oldData.ign !== r.newData.ign) changes.push({ label: 'IGN', old: r.oldData.ign, new: r.newData.ign });
@@ -215,16 +259,16 @@ function RequestsPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 24 }}>
-            {pendingJoin.length === 0 ? (
+            {visiblePending.length === 0 ? (
               <div style={{ gridColumn: '1/-1' }}>
                 <StatePanel
-                  icon="🛡️"
-                  title="No pending applications"
-                  description="Guild is quiet right now."
+                  icon={tabItems.find(t => t.id === subTab)?.emptyIcon || "🛡️"}
+                  title={statusFilter === "all" ? (tabItems.find(t => t.id === subTab)?.emptyTitle || "No pending requests") : `No ${statusFilter} items`}
+                  description={statusFilter === "all" ? (tabItems.find(t => t.id === subTab)?.emptyDesc || "Nothing to process right now.") : "Try another filter to see more requests."}
                 />
               </div>
             ) : (
-              pendingJoin.map((r, idx) => {
+              visiblePending.map((r, idx) => {
                 const dups = getDuplicateInfo(r, members);
                 const isDup = dups.length > 0;
 
@@ -240,7 +284,7 @@ function RequestsPage() {
                         <div style={{ fontSize: 12, color: isDup ? 'var(--red)' : 'var(--accent)', fontWeight: 700 }}>UID: {r.uid}</div>
                       </div>
                       <div style={{ background: isDup ? 'rgba(224, 80, 80, 0.2)' : 'rgba(130,90,230,0.2)', padding: '4px 8px', borderRadius: 6, fontSize: 10, color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {isDup ? "DUPLICATE DATA" : "NEW APPLICANT"}
+                        {r.requestType === "reactivation" ? "REACTIVATION" : (isDup ? "DUPLICATE DATA" : "NEW APPLICANT")}
                       </div>
                     </div>
                     
@@ -285,7 +329,7 @@ function RequestsPage() {
                           style={{ background: 'linear-gradient(135deg, #8b5cf6, var(--accent))', color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}
                           onClick={() => handleApproveJoin(r)}
                         >
-                          Approve Join
+                          {r.requestType === "reactivation" ? "Approve Reactivation" : "Approve & Activate"}
                         </button>
                       </div>
                     </div>
@@ -303,7 +347,9 @@ function RequestsPage() {
       {/* History Section - Sleek Table */}
       <div style={{ marginBottom: 40 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>📜 Processing History</h2>
+          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+            📜 Processing History ({tabItems.find(t => t.id === subTab)?.label || "All"})
+          </h2>
           {isArchitect && (
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, opacity: 0.6 }} onClick={clearProcessedRequests}>
               <Icon name="trash" size={12} /> Clear All
@@ -325,11 +371,9 @@ function RequestsPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...processedRequests, ...processedJoin]
-                  .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
-                  .slice(0, 10)
-                  .map(r => {
+                {visibleHistory.map(r => {
                     const isJoin = r.uid !== undefined;
+                    const isReactivation = isJoin && r.requestType === "reactivation";
                     return (
                       <tr key={r.id}>
                         <td style={{ padding: '12px 20px', fontWeight: 700 }}>{r.requesterIgn || r.ign}</td>
@@ -340,7 +384,7 @@ function RequestsPage() {
                             color: isJoin ? '#a78bfa' : 'var(--accent)',
                             border: isJoin ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(99,130,230,0.3)'
                           }}>
-                            {isJoin ? "Join App" : "Profile"}
+                            {isJoin ? (isReactivation ? "Reactivate" : "Join App") : "Profile"}
                           </span>
                         </td>
                         <td>
@@ -350,7 +394,9 @@ function RequestsPage() {
                           </div>
                         </td>
                         <td style={{ color: 'var(--text-secondary)' }}>
-                          {isJoin ? `${r.jobClass} | ${r.role}` : `${r.newData.ign} | ${r.newData.class}`}
+                          {isJoin
+                            ? `${r.jobClass} | ${r.role}${r.status === "approved" ? ` | ${r.accountStatus === "activated" ? "Account Activated" : "Account Pending Activation"}` : ""}`
+                            : `${r.newData.ign} | ${r.newData.class}`}
                         </td>
                         <td style={{ color: 'var(--text-muted)' }}>
                           {new Date(r.timestamp).toLocaleDateString()}
@@ -371,12 +417,12 @@ function RequestsPage() {
                       </tr>
                     );
                   })}
-                {[...processedRequests, ...processedJoin].length === 0 && (
+                {visibleHistory.length === 0 && (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                    <td colSpan={isArchitect ? 6 : 5} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                       <StatePanel
                         icon="📜"
-                        title="No processing history found"
+                        title={`No ${tabItems.find(t => t.id === subTab)?.label?.toLowerCase() || "request"} history found`}
                         description="Approved or rejected requests will appear here."
                       />
                     </td>
