@@ -42,7 +42,7 @@ function EventsPage() {
       .filter(m => (m.status || "active") !== "left")
       .map(m => {
       const hasAbsence = absences.find(a => a.memberId === m.memberId && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
-      return { memberId: m.memberId, eventId, status: hasAbsence ? "loa" : "present" };
+      return { memberId: m.memberId, eventId, status: hasAbsence ? "absent" : "present" };
     });
 
     setAttendance(prev => {
