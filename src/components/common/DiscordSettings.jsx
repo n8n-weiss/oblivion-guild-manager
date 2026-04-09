@@ -3,9 +3,58 @@ import { useGuild } from '../../context/GuildContext';
 import Icon from '../ui/icons';
 import Modal from '../ui/Modal';
 
+const DEFAULT_NOTIFICATIONS = {
+  join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true, oblivion: false, member: false } },
+  welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
+  vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
+  events: { enabled: true, webhookUrl: "", mentions: {} },
+  event_digest: { enabled: true, webhookUrl: "", mentions: {} },
+  absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
+  auction_results: { enabled: true, webhookUrl: "", mentions: {} }
+};
+
+const DEFAULT_TEMPLATES = {
+  new_join: { title: "", description: "" },
+  welcome: { title: "", description: "" },
+  vanguard: { title: "", description: "" },
+  event_created: { title: "", description: "" },
+  event_digest: { title: "", description: "" },
+  absence_filed: { title: "", description: "" },
+  absence_removed: { title: "", description: "" },
+  auction_results: { title: "", description: "" }
+};
+
+const normalizeDiscordConfig = (cfg = {}) => {
+  const inputNotifs = cfg.notifications || {};
+  const inputTemplates = cfg.templates || {};
+  const notifications = Object.entries(DEFAULT_NOTIFICATIONS).reduce((acc, [key, fallback]) => {
+    const candidate = inputNotifs[key] || {};
+    acc[key] = {
+      ...fallback,
+      ...candidate,
+      mentions: { ...(fallback.mentions || {}), ...(candidate.mentions || {}) }
+    };
+    return acc;
+  }, {});
+
+  const templates = Object.entries(DEFAULT_TEMPLATES).reduce((acc, [key, fallback]) => {
+    acc[key] = { ...fallback, ...(inputTemplates[key] || {}) };
+    return acc;
+  }, {});
+
+  return {
+    webhookUrl: cfg.webhookUrl || "",
+    masterRoleId: cfg.masterRoleId || "",
+    officerRoleId: cfg.officerRoleId || "",
+    oblivionRoleId: cfg.oblivionRoleId || "",
+    notifications,
+    templates
+  };
+};
+
 const DiscordSettings = () => {
   const { discordConfig, setDiscordConfig, showToast, isArchitect } = useGuild();
-  const [localConfig, setLocalConfig] = useState(discordConfig);
+  const [localConfig, setLocalConfig] = useState(() => normalizeDiscordConfig(discordConfig));
   const [activeSection, setActiveSection] = useState("general");
   const [isTesting, setIsTesting] = useState(false);
   const [pendingRemoteConfig, setPendingRemoteConfig] = useState(null);
@@ -21,7 +70,7 @@ const DiscordSettings = () => {
       if (!parsed?.data) return;
       const shouldRestore = window.confirm("Restore unsaved Discord Settings draft?");
       if (shouldRestore) {
-        setLocalConfig(parsed.data);
+        setLocalConfig(normalizeDiscordConfig(parsed.data));
         showToast("Draft restored", "info");
       } else {
         localStorage.removeItem(DRAFT_KEY);
@@ -42,7 +91,7 @@ const DiscordSettings = () => {
     if (lastSyncedConfig.current !== remoteString) {
       if (isLocalSameAsLastSync) {
         // User hasn't touched anything, safe to update to the latest server data
-        setLocalConfig(discordConfig);
+        setLocalConfig(normalizeDiscordConfig(discordConfig));
         lastSyncedConfig.current = remoteString;
         setPendingRemoteConfig(null);
         return;
@@ -65,14 +114,45 @@ const DiscordSettings = () => {
   if (!isArchitect) return null;
 
   const handleSave = () => {
-    setDiscordConfig(localConfig);
+    setDiscordConfig(normalizeDiscordConfig(localConfig));
     localStorage.removeItem(DRAFT_KEY);
     showToast("Discord configuration saved!", "success");
   };
 
+  const validateDiscordConfig = () => {
+    const cfg = normalizeDiscordConfig(localConfig);
+    const issues = [];
+    const webhookRegex = /^https:\/\/(canary\.)?discord\.com\/api\/webhooks\/\d+\/[\w-]+$/i;
+    const hasGlobalWebhook = webhookRegex.test((cfg.webhookUrl || "").trim());
+
+    if (!hasGlobalWebhook) {
+      issues.push("Global webhook URL is missing or invalid.");
+    }
+
+    Object.entries(cfg.notifications || {}).forEach(([cat, catCfg]) => {
+      if (!catCfg?.enabled) return;
+      const override = (catCfg.webhookUrl || "").trim();
+      if (override && !webhookRegex.test(override)) {
+        issues.push(`[${cat}] Override webhook format looks invalid.`);
+        return;
+      }
+      if (!override && !hasGlobalWebhook) {
+        issues.push(`[${cat}] Enabled but no valid global or override webhook.`);
+      }
+    });
+
+    if (issues.length === 0) {
+      showToast("Discord config looks valid for all enabled categories.", "success");
+      return;
+    }
+
+    showToast(`${issues[0]} ${issues.length > 1 ? `(+${issues.length - 1} more)` : ""}`, "warning");
+    window.alert(`Discord Config Validation\n\n${issues.map((x, i) => `${i + 1}. ${x}`).join("\n")}`);
+  };
+
   const applyRemoteConfig = () => {
     if (!pendingRemoteConfig) return;
-    setLocalConfig(pendingRemoteConfig);
+    setLocalConfig(normalizeDiscordConfig(pendingRemoteConfig));
     lastSyncedConfig.current = JSON.stringify(pendingRemoteConfig);
     setPendingRemoteConfig(null);
     localStorage.removeItem(DRAFT_KEY);
@@ -91,14 +171,14 @@ const DiscordSettings = () => {
     setLocalConfig(prev => ({
       ...prev,
       notifications: {
-        ...prev.notifications,
-        [cat]: { ...prev.notifications[cat], [field]: val }
+        ...(prev.notifications || {}),
+        [cat]: { ...(DEFAULT_NOTIFICATIONS[cat] || { enabled: true, webhookUrl: "", mentions: {} }), ...(prev.notifications?.[cat] || {}), [field]: val }
       }
     }));
   };
 
   const toggleMention = (cat, type) => {
-    const current = localConfig.notifications[cat].mentions || {};
+    const current = localConfig.notifications?.[cat]?.mentions || {};
     updateNotif(cat, "mentions", { ...current, [type]: !current[type] });
   };
 
@@ -217,7 +297,7 @@ const DiscordSettings = () => {
         <label className="text-[10px] font-bold mb-1 block">WEBHOOK OVERRIDE (OPTIONAL)</label>
         <div className="flex gap-2">
           <input type="password" className="form-input form-input-sm" placeholder="Default global webhook will be used if blank..." value={localConfig.notifications?.[cat]?.webhookUrl || ""} onChange={e => updateNotif(cat, "webhookUrl", e.target.value)} />
-          <button className="btn btn-ghost btn-sm" onClick={() => testWebhook(localConfig.notifications[cat].webhookUrl)} disabled={isTesting}>Test</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => testWebhook(localConfig.notifications?.[cat]?.webhookUrl)} disabled={isTesting}>Test</button>
         </div>
       </div>
     </>
@@ -231,7 +311,10 @@ const DiscordSettings = () => {
             <Icon name="discord" size={20} color="#5865F2" />
             🤖 Discord Alert Center
           </div>
-          <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save All Config</button>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost btn-sm" onClick={validateDiscordConfig}>✅ Validate Config</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save All Config</button>
+          </div>
         </div>
 
         <div className="flex gap-4 mt-4" style={{ minHeight: 450 }}>
