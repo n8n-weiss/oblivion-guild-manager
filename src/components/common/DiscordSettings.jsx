@@ -54,12 +54,13 @@ const normalizeDiscordConfig = (cfg = {}) => {
 
 const DiscordSettings = () => {
   const { discordConfig, setDiscordConfig, showToast, isArchitect } = useGuild();
-  const [localConfig, setLocalConfig] = useState(() => normalizeDiscordConfig(discordConfig));
+  const normalizedRemoteConfig = React.useMemo(() => normalizeDiscordConfig(discordConfig), [discordConfig]);
+  const [localConfig, setLocalConfig] = useState(() => normalizedRemoteConfig);
   const [activeSection, setActiveSection] = useState("general");
   const [isTesting, setIsTesting] = useState(false);
   const [pendingRemoteConfig, setPendingRemoteConfig] = useState(null);
 
-  const lastSyncedConfig = React.useRef(JSON.stringify(discordConfig));
+  const lastSyncedConfig = React.useRef(JSON.stringify(normalizedRemoteConfig));
   const DRAFT_KEY = "draft_discord_settings_v1";
 
   useEffect(() => {
@@ -68,9 +69,16 @@ const DiscordSettings = () => {
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed?.data) return;
+      const normalizedDraft = normalizeDiscordConfig(parsed.data);
+      const currentSynced = normalizeDiscordConfig(discordConfig);
+      // Skip stale draft prompt when draft is same as current synced config.
+      if (JSON.stringify(normalizedDraft) === JSON.stringify(currentSynced)) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
       const shouldRestore = window.confirm("Restore unsaved Discord Settings draft?");
       if (shouldRestore) {
-        setLocalConfig(normalizeDiscordConfig(parsed.data));
+        setLocalConfig(normalizedDraft);
         showToast("Draft restored", "info");
       } else {
         localStorage.removeItem(DRAFT_KEY);
@@ -78,29 +86,28 @@ const DiscordSettings = () => {
     } catch {
       localStorage.removeItem(DRAFT_KEY);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [discordConfig, showToast]);
 
   useEffect(() => {
     // Only update local config if the user hasn't made any unsaved changes,
     // or if we just performed a save (in which case they will be equal again).
     const isLocalSameAsLastSync = JSON.stringify(localConfig) === lastSyncedConfig.current;
     
-    const remoteString = JSON.stringify(discordConfig);
+    const remoteString = JSON.stringify(normalizedRemoteConfig);
     // If the server data has changed since our last sync
     if (lastSyncedConfig.current !== remoteString) {
       if (isLocalSameAsLastSync) {
         // User hasn't touched anything, safe to update to the latest server data
-        setLocalConfig(normalizeDiscordConfig(discordConfig));
+        setLocalConfig(normalizedRemoteConfig);
         lastSyncedConfig.current = remoteString;
         setPendingRemoteConfig(null);
         return;
       }
       // User has unsaved changes and remote changed: keep local, ask explicit resolution.
-      setPendingRemoteConfig(discordConfig);
+      setPendingRemoteConfig(normalizedRemoteConfig);
       showToast("Remote Discord config updated by another officer. Resolve conflict.", "warning");
     }
-  }, [discordConfig, localConfig, showToast]);
+  }, [normalizedRemoteConfig, localConfig, showToast]);
 
   useEffect(() => {
     const localString = JSON.stringify(localConfig);
