@@ -46,6 +46,36 @@ function EventsPage() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [postingDigest, setPostingDigest] = useState(false);
   const [finalizingDigest, setFinalizingDigest] = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState({});
+
+  const groupedEvents = React.useMemo(() => {
+    const groups = {};
+    events.slice().reverse().forEach(ev => {
+      if (!ev.eventDate) return;
+      const dateObj = new Date(ev.eventDate);
+      if (!isNaN(dateObj)) {
+        const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        if (!groups[monthYear]) groups[monthYear] = [];
+        groups[monthYear].push(ev);
+      } else {
+        if (!groups["Unknown Date"]) groups["Unknown Date"] = [];
+        groups["Unknown Date"].push(ev);
+      }
+    });
+    return groups;
+  }, [events]);
+
+  const monthKeys = React.useMemo(() => Object.keys(groupedEvents), [groupedEvents]);
+
+  React.useEffect(() => {
+    if (monthKeys.length > 0 && Object.keys(expandedMonths).length === 0) {
+      setExpandedMonths({ [monthKeys[0]]: true });
+    }
+  }, [monthKeys, expandedMonths]);
+
+  const toggleMonth = (month) => {
+    setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] }));
+  };
 
   const deleteEvent = (eventId) => {
     const ev = events.find(e => e.eventId === eventId);
@@ -427,51 +457,71 @@ function EventsPage() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}><Icon name="plus" size={12} /> New</button>
           </div>
           <div className="flex flex-col gap-2">
-            {events.slice().reverse().map(ev => {
-              const evAtt = attendance.filter(a => a.eventId === ev.eventId);
-              const present = evAtt.filter(a => a.status === "present").length;
-              const isActive = selectedEvent?.eventId === ev.eventId;
+            {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
+            {monthKeys.map(month => {
+              const monthEvents = groupedEvents[month];
+              const isExpanded = !!expandedMonths[month];
               return (
-                <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
-                  className="card" style={{ cursor: "pointer", padding: "14px 16px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none" }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-cinzel" style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 700 }}>{ev.eventDate}</span>
-                    <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 9 }}>
-                      {ev.eventType === "Guild League" ? "GL" : "EO"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      {ev.battlelogAudit?.escalatedAt ? (
-                        <span className="badge badge-atrisk" style={{ fontSize: 9 }}>Escalated</span>
-                      ) : ev.battlelogAudit?.status === "submitted" ? (
-                        <span className="badge badge-active" style={{ fontSize: 9 }}>Audit Done</span>
-                      ) : ev.battlelogAudit?.status ? (
-                        <span className="badge badge-casual" style={{ fontSize: 9 }}>
-                          {ev.battlelogAudit.status === "overdue" ? "Audit Overdue" : "Audit Pending"}
-                        </span>
-                      ) : null}
+                <div key={month} style={{ marginBottom: 4 }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ width: "100%", justifyContent: "space-between", fontSize: 11, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: isExpanded ? 8 : 0 }}
+                    onClick={() => toggleMonth(month)}
+                  >
+                    <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{isExpanded ? "▼" : "▶"} {month.toUpperCase()}</span>
+                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{monthEvents.length}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="flex flex-col gap-2" style={{ animation: "fade-in 0.2s" }}>
+                      {monthEvents.map(ev => {
+                        const evAtt = attendance.filter(a => a.eventId === ev.eventId);
+                        const present = evAtt.filter(a => a.status === "present").length;
+                        const isActive = selectedEvent?.eventId === ev.eventId;
+                        return (
+                          <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
+                            className="card" style={{ cursor: "pointer", padding: "14px 16px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none" }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-cinzel" style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 700 }}>{ev.eventDate}</span>
+                              <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 9 }}>
+                                {ev.eventType === "Guild League" ? "GL" : "EO"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
+                              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                {ev.battlelogAudit?.escalatedAt ? (
+                                  <span className="badge badge-atrisk" style={{ fontSize: 9 }}>Escalated</span>
+                                ) : ev.battlelogAudit?.status === "submitted" ? (
+                                  <span className="badge badge-active" style={{ fontSize: 9 }}>Audit Done</span>
+                                ) : ev.battlelogAudit?.status ? (
+                                  <span className="badge badge-casual" style={{ fontSize: 9 }}>
+                                    {ev.battlelogAudit.status === "overdue" ? "Audit Overdue" : "Audit Pending"}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                              {confirmDelete === ev.eventId ? (
+                                <div className="flex gap-2 items-center">
+                                  <span className="text-xs text-muted">Delete?</span>
+                                  <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.eventId)}>Yes</button>
+                                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>No</button>
+                                </div>
+                              ) : (
+                                isAdmin ? <button className="btn btn-danger btn-sm" style={{ width: "100%" }}
+                                  onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
+                                  <Icon name="trash" size={12} /> Delete
+                                </button> : null
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-                    {confirmDelete === ev.eventId ? (
-                      <div className="flex gap-2 items-center">
-                        <span className="text-xs text-muted">Delete?</span>
-                        <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.eventId)}>Yes</button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>No</button>
-                      </div>
-                    ) : (
-                      isAdmin ? <button className="btn btn-danger btn-sm" style={{ width: "100%" }}
-                        onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
-                        <Icon name="trash" size={12} /> Delete
-                      </button> : null
-                    )}
-                  </div>
+                  )}
                 </div>
               );
             })}
-            {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
           </div>
         </div>
 

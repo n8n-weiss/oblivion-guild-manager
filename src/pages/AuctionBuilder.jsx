@@ -408,6 +408,37 @@ function AuctionBuilder() {
   const [trackerGroupCollapsed, setTrackerGroupCollapsed] = useState({});
   const [mapFocusMode, setMapFocusMode] = useState(() => localStorage.getItem("auction_mapFocusMode") === "1");
 
+  const [expandedSessionMonths, setExpandedSessionMonths] = useState({});
+
+  const groupedSessions = React.useMemo(() => {
+    const groups = {};
+    auctionSessions.slice().reverse().forEach(s => {
+      if (!s.date) return;
+      const dateObj = new Date(s.date);
+      if (!isNaN(dateObj)) {
+        const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        if (!groups[monthYear]) groups[monthYear] = [];
+        groups[monthYear].push(s);
+      } else {
+        if (!groups["Unknown Date"]) groups["Unknown Date"] = [];
+        groups["Unknown Date"].push(s);
+      }
+    });
+    return groups;
+  }, [auctionSessions]);
+
+  const sessionMonthKeys = React.useMemo(() => Object.keys(groupedSessions), [groupedSessions]);
+
+  React.useEffect(() => {
+    if (sessionMonthKeys.length > 0 && Object.keys(expandedSessionMonths).length === 0) {
+      setExpandedSessionMonths({ [sessionMonthKeys[0]]: true });
+    }
+  }, [sessionMonthKeys, expandedSessionMonths]);
+
+  const toggleSessionMonth = (month) => {
+    setExpandedSessionMonths(prev => ({ ...prev, [month]: !prev[month] }));
+  };
+
   React.useEffect(() => {
     try {
       const raw = localStorage.getItem(AUCTION_DRAFT_KEY);
@@ -1222,23 +1253,43 @@ function AuctionBuilder() {
                 description="Create your first auction session to start assigning members and loot."
               />
             )}
-            {auctionSessions.slice().reverse().map(s => (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer" }}
-                onClick={() => { setActiveSession(s.id); setView("editor"); }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
-                  <div className="text-xs text-muted">{s.date} · {s.members.length} members · {s.columns.length} resources</div>
+            {sessionMonthKeys.map(month => {
+              const monthSessions = groupedSessions[month];
+              const isExpanded = !!expandedSessionMonths[month];
+              return (
+                <div key={month} style={{ marginBottom: 4 }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ width: "100%", justifyContent: "space-between", fontSize: 11, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: isExpanded ? 8 : 0 }}
+                    onClick={() => toggleSessionMonth(month)}
+                  >
+                    <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{isExpanded ? "▼" : "▶"} {month.toUpperCase()}</span>
+                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{monthSessions.length}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="flex flex-col gap-2" style={{ animation: "fade-in 0.2s" }}>
+                      {monthSessions.map(s => (
+                        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer" }}
+                          onClick={() => { setActiveSession(s.id); setView("editor"); }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
+                            <div className="text-xs text-muted">{s.date} · {s.members.length} members · {s.columns.length} resources</div>
+                          </div>
+                          <ConfirmTwiceButton
+                            className="btn btn-danger btn-sm btn-icon"
+                            onClick={(e) => e.stopPropagation()}
+                            onConfirm={() => deleteSession(s.id)}
+                            icon={<Icon name="trash" size={12} />}
+                            iconOnly
+                            title="Delete session"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <ConfirmTwiceButton
-                  className="btn btn-danger btn-sm btn-icon"
-                  onClick={(e) => e.stopPropagation()}
-                  onConfirm={() => deleteSession(s.id)}
-                  icon={<Icon name="trash" size={12} />}
-                  iconOnly
-                  title="Delete session"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
