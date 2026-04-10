@@ -256,13 +256,13 @@ function EventsPage() {
     setPerformance(prev => {
       const exists = prev.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId);
       if (exists) return prev.map(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
-      return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, ...edits }];
+      return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0, ...edits }];
     });
     const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
     const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0} (${ev?.eventDate})`);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0}, Kills: ${edits.kills ?? 0}, Ast: ${edits.assists ?? 0} (${ev?.eventDate})`);
   };
 
   const evt = selectedEvent;
@@ -514,7 +514,7 @@ function EventsPage() {
                 <table>
                   <thead><tr>
                     <th>Member</th><th>Class</th><th>Attendance</th>
-                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>CTF Total</th><th>Perf Pts</th><th>Score</th><th></th></>}
+                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>CTF Total</th><th>Kills</th><th>Assists</th><th>Perf Pts</th><th>Score</th><th></th></>}
                     {selectedEvent.eventType === "Emperium Overrun" && <th>EO Rating</th>}
                   </tr></thead>
                   <tbody>
@@ -526,7 +526,9 @@ function EventsPage() {
                       const ctf3 = curPerf.ctf3 !== undefined ? curPerf.ctf3 : (m.perf?.ctf3 ?? 0);
                       const ctfTotal = ctf1 + ctf2 + ctf3;
                       const pp = curPerf.performancePoints !== undefined ? curPerf.performancePoints : (m.perf?.performancePoints ?? 0);
-                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp } });
+                      const kills = curPerf.kills !== undefined ? curPerf.kills : (m.perf?.kills ?? 0);
+                      const assists = curPerf.assists !== undefined ? curPerf.assists : (m.perf?.assists ?? 0);
+                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
                       return (
                         <tr key={m.memberId}>
                           <td>
@@ -570,6 +572,18 @@ function EventsPage() {
                                 }}>
                                   {ctfTotal}
                                 </span>
+                              </td>
+                              <td>
+                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
+                                  value={kills}
+                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))}
+                                  disabled={m.att?.status !== "present"} />
+                              </td>
+                              <td>
+                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
+                                  value={assists}
+                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))}
+                                  disabled={m.att?.status !== "present"} />
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{ width: 64, padding: "4px 8px", fontSize: 13 }} min={0}

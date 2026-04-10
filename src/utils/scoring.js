@@ -7,7 +7,9 @@ export function computeScore({ event, att, perf }) {
   const ctf3 = perf?.ctf3 ?? 0;
   const ctfTotal = ctf1 + ctf2 + ctf3;
   const pp = perf?.performancePoints ?? 0;
-  return ctfTotal + pp;
+  const kills = perf?.kills ?? 0;
+  const assists = perf?.assists ?? 0;
+  return ctfTotal + pp + kills + assists;
 }
 
 export function computeAttendanceStatus(attendancePct) {
@@ -23,6 +25,8 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     let absentCount = 0;
     let consecutiveAbsent = 0;
     let tempConsecutive = 0;
+    let totalKills = 0;
+    let totalAssists = 0;
 
     const mId = (member.memberId || "").toLowerCase();
 
@@ -56,6 +60,8 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
 
       if (event.eventType === "Guild League") {
         totalScore += computeScore({ event, att, perf });
+        totalKills += perf?.kills ?? 0;
+        totalAssists += perf?.assists ?? 0;
       }
     });
 
@@ -75,10 +81,10 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     const avgEoRating = memberEoRatings.length > 0 ? Math.round((totalEoScore / memberEoRatings.length) * 10) / 10 : 0;
 
     // Support Performance Index (SPI)
-    // Formula: (Attendance * 0.5) + (EO Rating * 10)
-    const supportIndex = Math.round((attendancePct * 0.5) + (avgEoRating * 10));
+    // Formula: (Attendance * 0.5) + (Assists * 5) + (EO Rating * 10)
+    const supportIndex = Math.round((attendancePct * 0.5) + (totalAssists * 5) + (avgEoRating * 10));
 
-    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex };
+    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }
