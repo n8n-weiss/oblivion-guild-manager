@@ -337,14 +337,14 @@ function EventsPage() {
     const topDps = withEventScore
       .filter(m => (m.role || "").toLowerCase() === "dps")
       .sort((a, b) => b.eventScore - a.eventScore)
-      .slice(0, 5);
+      .slice(0, 10);
     const topSupport = withEventScore
       .filter(m => (m.role || "").toLowerCase().includes("support"))
       .sort((a, b) => b.eventScore - a.eventScore)
-      .slice(0, 5);
+      .slice(0, 10);
     const topAttendance = [...leaderboardSnapshot]
       .sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore)
-      .slice(0, 5);
+      .slice(0, 10);
     const hashPayload = {
       eventId: eventObj.eventId,
       eventType: eventObj.eventType,
@@ -380,9 +380,9 @@ function EventsPage() {
         0xF0C040,
         [
           { name: "Event", value: `${selectedEvent.eventType} • ${selectedEvent.eventDate}`, inline: false },
-          { name: "Top 5 DPS", value: rowText(digest.topDps), inline: false },
-          { name: "Top 5 Support/Utility", value: rowText(digest.topSupport), inline: false },
-          { name: "Top 5 Attendance", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
+          { name: "Top 10 DPS", value: rowText(digest.topDps), inline: false },
+          { name: "Top 10 Support/Utility", value: rowText(digest.topSupport), inline: false },
+          { name: "Top 10 Attendance", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
         "event_digest",
@@ -547,7 +547,7 @@ function EventsPage() {
                 </div>
                 <div className="flex gap-2">
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
-                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize, Submit Audit & Post Top 5"}
+                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize, Submit Audit & Post Top 10"}
                   </button>
                   {digestIsUpdated && (
                     <button className="btn btn-ghost btn-sm" onClick={() => postEventDigest("repost")} disabled={postingDigest || finalizingDigest}>
