@@ -10,14 +10,35 @@ function EventsPage() {
   const {
     members, events, setEvents, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
-    showToast, isAdmin, currentUser, sendDiscordEmbed
+    showToast, isAdmin, currentUser, sendDiscordEmbed, discordConfig
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const officerPool = React.useMemo(() => {
+    const officerRanks = new Set([
+      "officer",
+      "charisma baby",
+      "baby charisma",
+      "guild master",
+      "vice guild master",
+      "commander",
+      "system architect",
+      "system architect (creator)",
+      "creator"
+    ]);
+    return members
+      .filter(m => (m.status || "active") === "active")
+      .filter(m => officerRanks.has(String(m.guildRank || "").toLowerCase()))
+      .sort((a, b) => String(a.ign || "").localeCompare(String(b.ign || "")));
+  }, [members]);
+  const rotationKey = "battlelog_rotation_idx_v1";
+  const escalationHours = 6;
+  const reminderInFlight = React.useRef(new Set());
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [postingDigest, setPostingDigest] = useState(false);
   const [finalizingDigest, setFinalizingDigest] = useState(false);
+  const [updatingAudit, setUpdatingAudit] = useState(false);
 
   const deleteEvent = (eventId) => {
     const ev = events.find(e => e.eventId === eventId);
@@ -29,12 +50,43 @@ function EventsPage() {
     setConfirmDelete(null);
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${ev?.eventType} — ${ev?.eventDate}`);
   };
-  const [form, setForm] = useState({ eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0] });
+  const [form, setForm] = useState({ eventType: "Guild League", eventDate: new Date().toISOString().split("T")[0], auditDueOffsetHours: 2 });
   const [perfEdits, setPerfEdits] = useState({});
+  const getNextAuditor = React.useCallback(() => {
+    if (!officerPool.length) return null;
+    let idx = 0;
+    try {
+      idx = Number(localStorage.getItem(rotationKey) || "0");
+    } catch {
+      idx = 0;
+    }
+    const auditor = officerPool[Math.abs(idx) % officerPool.length];
+    try {
+      localStorage.setItem(rotationKey, String((Math.abs(idx) + 1) % officerPool.length));
+    } catch (err) {
+      console.warn("Failed to persist battlelog rotation pointer", err);
+    }
+    return auditor;
+  }, [officerPool]);
 
   const createEvent = async () => {
     const eventId = `EVT${Date.now()}`;
-    const newEvent = { eventId, ...form };
+    const assignedAuditor = getNextAuditor();
+    const dueBase = new Date(`${form.eventDate}T00:00:00`);
+    const dueAt = new Date(dueBase.getTime() + Number(form.auditDueOffsetHours || 2) * 60 * 60 * 1000);
+    const newEvent = {
+      eventId,
+      ...form,
+      battlelogAudit: {
+        assignedMemberId: assignedAuditor?.memberId || null,
+        assignedIgn: assignedAuditor?.ign || "Unassigned",
+        status: "pending",
+        dueAt: dueAt.toISOString(),
+        reminderSentAt: null,
+        submittedAt: null,
+        submittedBy: null
+      }
+    };
     setEvents(prev => [...prev, newEvent]);
 
     // auto-load active members with absence-aware attendance
@@ -61,6 +113,8 @@ function EventsPage() {
       [
         { name: "Event Type", value: form.eventType, inline: true },
         { name: "Date", value: form.eventDate, inline: true },
+        { name: "Event Time", value: discordConfig?.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time", inline: false },
+        { name: "Battlelog Auditor", value: assignedAuditor?.ign || "Not assigned", inline: true },
         { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
       ],
       "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
@@ -71,6 +125,123 @@ function EventsPage() {
 
     setShowModal(false);
   };
+  const reassignAuditToNext = () => {
+    if (!selectedEvent) return;
+    const nextAuditor = getNextAuditor();
+    if (!nextAuditor) {
+      showToast("No active officers available for rotation", "warning");
+      return;
+    }
+    const nextAudit = {
+      ...(selectedEvent.battlelogAudit || {}),
+      assignedMemberId: nextAuditor.memberId,
+      assignedIgn: nextAuditor.ign,
+      status: selectedEvent.battlelogAudit?.submittedAt ? "submitted" : "pending"
+    };
+    setEvents(prev => prev.map(ev => ev.eventId === selectedEvent.eventId ? { ...ev, battlelogAudit: nextAudit } : ev));
+    setSelectedEvent(prev => prev ? { ...prev, battlelogAudit: nextAudit } : prev);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "battlelog_reassign", `${selectedEvent.eventType} ${selectedEvent.eventDate} → ${nextAuditor.ign}`);
+    showToast(`Audit reassigned to ${nextAuditor.ign}`, "success");
+  };
+  const markBattlelogSubmitted = () => {
+    if (!selectedEvent) return;
+    const updatedAudit = {
+      ...(selectedEvent.battlelogAudit || {}),
+      status: "submitted",
+      submittedAt: new Date().toISOString(),
+      submittedBy: currentUser?.email || "unknown"
+    };
+    setEvents(prev => prev.map(ev => ev.eventId === selectedEvent.eventId ? { ...ev, battlelogAudit: updatedAudit } : ev));
+    setSelectedEvent(prev => prev ? { ...prev, battlelogAudit: updatedAudit } : prev);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "battlelog_submit", `${selectedEvent.eventType} ${selectedEvent.eventDate}`);
+    showToast("Battlelog marked as submitted", "success");
+  };
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const now = Date.now();
+    const overduePending = events
+      .filter(ev => {
+        const audit = ev.battlelogAudit;
+        if (!audit) return false;
+        if (audit.status === "submitted") return false;
+        if (audit.reminderSentAt) return false;
+        const due = new Date(audit.dueAt || `${ev.eventDate}T23:00:00`).getTime();
+        return Number.isFinite(due) && due <= now;
+      })
+      .slice(0, 3);
+    if (!overduePending.length) return;
+    const escalationCandidates = events
+      .filter(ev => {
+        const audit = ev.battlelogAudit;
+        if (!audit) return false;
+        if (audit.status === "submitted") return false;
+        if (!audit.reminderSentAt || audit.escalatedAt) return false;
+        const due = new Date(audit.dueAt || `${ev.eventDate}T23:00:00`).getTime();
+        return Number.isFinite(due) && (now - due) >= escalationHours * 60 * 60 * 1000;
+      })
+      .slice(0, 3);
+    const run = async () => {
+      setUpdatingAudit(true);
+      for (const ev of overduePending) {
+        if (reminderInFlight.current.has(ev.eventId)) continue;
+        reminderInFlight.current.add(ev.eventId);
+        try {
+          await sendDiscordEmbed(
+            "📘 Battlelog Reminder",
+            "Battlelog audit is due. Assigned officer, please submit your audit logs.",
+            0xF0C040,
+            [
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
+              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true },
+              { name: "Due", value: new Date(ev.battlelogAudit?.dueAt || `${ev.eventDate}T23:00:00`).toLocaleString(), inline: true }
+            ],
+            null,
+            "battlelog_reminder",
+            "battlelog_reminder",
+            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" }
+          );
+          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
+            ...x,
+            battlelogAudit: { ...(x.battlelogAudit || {}), reminderSentAt: new Date().toISOString(), status: "overdue" }
+          } : x));
+        } catch (err) {
+          console.error("Battlelog reminder failed:", err);
+        } finally {
+          reminderInFlight.current.delete(ev.eventId);
+        }
+      }
+      for (const ev of escalationCandidates) {
+        if (reminderInFlight.current.has(ev.eventId)) continue;
+        reminderInFlight.current.add(ev.eventId);
+        try {
+          await sendDiscordEmbed(
+            "⏰ Battlelog Escalation",
+            `Battlelog is still pending ${escalationHours}+ hours after due time.`,
+            0xE05050,
+            [
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
+              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true },
+              { name: "Action", value: "Officer follow-up required", inline: true }
+            ],
+            null,
+            "battlelog_reminder",
+            "battlelog_reminder",
+            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" }
+          );
+          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
+            ...x,
+            battlelogAudit: { ...(x.battlelogAudit || {}), escalatedAt: new Date().toISOString(), status: "overdue" }
+          } : x));
+        } catch (err) {
+          console.error("Battlelog escalation failed:", err);
+        } finally {
+          reminderInFlight.current.delete(ev.eventId);
+        }
+      }
+      setUpdatingAudit(false);
+    };
+    run();
+  }, [events, sendDiscordEmbed, setEvents, currentUser]);
 
   const toggleAtt = (memberId, eventId) => {
     const mId = (memberId || "").toLowerCase();
@@ -265,6 +436,17 @@ function EventsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {ev.battlelogAudit?.escalatedAt ? (
+                        <span className="badge badge-atrisk" style={{ fontSize: 9 }}>Escalated</span>
+                      ) : ev.battlelogAudit?.status === "submitted" ? (
+                        <span className="badge badge-active" style={{ fontSize: 9 }}>Audit Done</span>
+                      ) : ev.battlelogAudit?.status ? (
+                        <span className="badge badge-casual" style={{ fontSize: 9 }}>
+                          {ev.battlelogAudit.status === "overdue" ? "Audit Overdue" : "Audit Pending"}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
                     {confirmDelete === ev.eventId ? (
@@ -297,6 +479,9 @@ function EventsPage() {
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
                     <span className="text-xs text-muted">{evtAtt.filter(a => a.status === "present").length}/{evtAtt.length} present</span>
+                    <span className={`badge ${selectedEvent.battlelogAudit?.status === "submitted" ? "badge-active" : selectedEvent.battlelogAudit?.status === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
+                      Audit: {selectedEvent.battlelogAudit?.status || "pending"}
+                    </span>
                     {digestAlreadyPosted && (
                       <span className={`badge ${digestIsUpdated ? "badge-casual" : "badge-active"}`} style={{ fontSize: 9 }}>
                         {digestIsUpdated ? "Digest Outdated" : "Digest Posted"}
@@ -305,6 +490,12 @@ function EventsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button className="btn btn-ghost btn-sm" onClick={reassignAuditToNext} disabled={updatingAudit}>
+                    <Icon name="refresh" size={12} /> Reassign Auditor
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={markBattlelogSubmitted} disabled={updatingAudit || selectedEvent.battlelogAudit?.status === "submitted"}>
+                    <Icon name="check" size={12} /> {selectedEvent.battlelogAudit?.status === "submitted" ? "Audit Submitted" : "Mark Audit Submitted"}
+                  </button>
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
                     <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize & Post Top 5"}
                   </button>
@@ -316,6 +507,10 @@ function EventsPage() {
                 </div>
               </div>
               <div className="table-wrap">
+                <div className="text-xs text-muted" style={{ marginBottom: 8 }}>
+                  Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>{" "}
+                  • Due: <strong>{selectedEvent.battlelogAudit?.dueAt ? new Date(selectedEvent.battlelogAudit.dueAt).toLocaleString() : "N/A"}</strong>
+                </div>
                 <table>
                   <thead><tr>
                     <th>Member</th><th>Class</th><th>Attendance</th>
@@ -463,6 +658,17 @@ function EventsPage() {
             <div className="form-group">
               <label className="form-label">Event Date</label>
               <input type="date" className="form-input" value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Audit Due (hours after event date start)</label>
+              <input
+                type="number"
+                min={1}
+                max={24}
+                className="form-input"
+                value={form.auditDueOffsetHours}
+                onChange={e => setForm(f => ({ ...f, auditDueOffsetHours: Math.max(1, Math.min(24, Number(e.target.value || 2))) }))}
+              />
             </div>
           </div>
           <div className="text-xs text-muted mt-2" style={{ padding: "10px 14px", background: "rgba(99,130,230,0.05)", borderRadius: 8, border: "1px solid var(--border)" }}>

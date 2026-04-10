@@ -9,6 +9,7 @@ const DEFAULT_NOTIFICATIONS = {
   vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
   events: { enabled: true, webhookUrl: "", mentions: {} },
   event_digest: { enabled: true, webhookUrl: "", mentions: {} },
+  battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true } },
   absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
   auction_results: { enabled: true, webhookUrl: "", mentions: {} }
 };
@@ -19,6 +20,7 @@ const DEFAULT_TEMPLATES = {
   vanguard: { title: "", description: "" },
   event_created: { title: "", description: "" },
   event_digest: { title: "", description: "" },
+  battlelog_reminder: { title: "", description: "" },
   absence_filed: { title: "", description: "" },
   absence_removed: { title: "", description: "" },
   auction_results: { title: "", description: "" }
@@ -47,6 +49,7 @@ const normalizeDiscordConfig = (cfg = {}) => {
     masterRoleId: cfg.masterRoleId || "",
     officerRoleId: cfg.officerRoleId || "",
     oblivionRoleId: cfg.oblivionRoleId || "",
+    eventTimeText: cfg.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time",
     notifications,
     templates
   };
@@ -408,10 +411,22 @@ const DiscordSettings = () => {
 
           {activeSection === "events" && (
             <div className="animate-fade-in">
+              <div className="form-group mb-4">
+                <label className="text-[10px] font-bold mb-1 block">DEFAULT EVENT TIME TEXT</label>
+                <textarea
+                  className="form-input form-input-sm"
+                  rows={3}
+                  value={localConfig.eventTimeText || ""}
+                  onChange={e => setLocalConfig(p => ({ ...p, eventTimeText: e.target.value }))}
+                />
+                <div className="text-[10px] text-muted mt-1">Used in New Event Scheduled Discord alerts.</div>
+              </div>
               {renderCategoryHead("events", "EVENT SCHEDULING")}
               {renderTemplateEditor("event_created", "New Event Created", ["type", "date"])}
               {renderCategoryHead("event_digest", "POST-EVENT DIGEST")}
               {renderTemplateEditor("event_digest", "Post-Event Digest", ["type", "date"])}
+              {renderCategoryHead("battlelog_reminder", "BATTLELOG REMINDERS")}
+              {renderTemplateEditor("battlelog_reminder", "Battlelog Reminder", ["type", "date", "auditor"])}
             </div>
           )}
 

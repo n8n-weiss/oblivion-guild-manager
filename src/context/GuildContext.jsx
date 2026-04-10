@@ -71,12 +71,14 @@ export const GuildProvider = ({ children, initialData }) => {
     masterRoleId: "", 
     officerRoleId: "",
     oblivionRoleId: "",
+    eventTimeText: "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time",
     notifications: {
       join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true, oblivion: false, member: false } },
       welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
       vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       events: { enabled: true, webhookUrl: "", mentions: {} },
       event_digest: { enabled: true, webhookUrl: "", mentions: {} },
+      battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
       auction_results: { enabled: true, webhookUrl: "", mentions: {} }
     },
@@ -86,6 +88,7 @@ export const GuildProvider = ({ children, initialData }) => {
       vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
       event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
       event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 5 DPS, Top 5 Support/Utility, and Top 5 Attendance snapshot for **{date}**." },
+      battlelog_reminder: { title: "📘 Battlelog Reminder ({type})", description: "Assigned auditor **{auditor}** — please submit battlelog for **{date}**." },
       absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
       absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." },
       auction_results: { 
@@ -479,12 +482,14 @@ export const GuildProvider = ({ children, initialData }) => {
             masterRoleId: discRaw.masterRoleId || "",
             officerRoleId: discRaw.officerRoleId || "",
             oblivionRoleId: discRaw.oblivionRoleId || "",
+            eventTimeText: discRaw.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time",
             notifications: {
               join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true }, ...migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both") },
               welcome: { enabled: true, webhookUrl: "", mentions: { member: true }, ...migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member") },
               vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.vanguard, "officer") },
               events: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.events, "none") },
               event_digest: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.event_digest, "none") },
+              battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.battlelog_reminder, "officer") },
               absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true }, ...migrateMentions(discRaw.notifications?.absences, "member") },
               auction_results: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.auction_results, "none") }
             },
@@ -494,6 +499,7 @@ export const GuildProvider = ({ children, initialData }) => {
               vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request.", ...(discRaw.templates?.vanguard || {}) },
               event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance.", ...(discRaw.templates?.event_created || {}) },
               event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 5 DPS, Top 5 Support/Utility, and Top 5 Attendance snapshot for **{date}**.", ...(discRaw.templates?.event_digest || {}) },
+              battlelog_reminder: { title: "📘 Battlelog Reminder ({type})", description: "Assigned auditor **{auditor}** — please submit battlelog for **{date}**.", ...(discRaw.templates?.battlelog_reminder || {}) },
               absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence.", ...(discRaw.templates?.absence_filed || {}) },
               absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura.", ...(discRaw.templates?.absence_removed || {}) },
               auction_results: {
