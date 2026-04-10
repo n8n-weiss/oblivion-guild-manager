@@ -56,6 +56,7 @@ const MotionDiv = motion.div;
 const pagePrefetchers = {
   dashboard: () => import("./pages/Dashboard"),
   members: () => import("./pages/MembersPage"),
+  "member-profile": () => import("./pages/MemberProfilePage"),
   events: () => import("./pages/EventsPage"),
   absences: () => import("./pages/AbsencesPage"),
   leaderboard: () => import("./pages/LeaderboardPage"),
@@ -80,6 +81,21 @@ const PageWrapper = ({ children, id }) => (
   >
     {children}
   </MotionDiv>
+);
+const MyProfileSkeleton = () => (
+  <div className="card animate-fade-in" style={{ maxWidth: 920, margin: "0 auto" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+      <div style={{ width: 62, height: 62, borderRadius: 12, background: "rgba(255,255,255,0.08)" }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ width: "42%", height: 16, borderRadius: 8, background: "rgba(255,255,255,0.08)", marginBottom: 8 }} />
+        <div style={{ width: "26%", height: 12, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
+      </div>
+    </div>
+    <div className="grid-2">
+      <CardSkeleton />
+      <CardSkeleton />
+    </div>
+  </div>
 );
 
 export default function App() {
@@ -115,6 +131,11 @@ export default function App() {
   });
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
+  const effectivePage = isMember ? "members" : page;
+  const ownMember = React.useMemo(
+    () => members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) || null,
+    [members, myMemberId]
+  );
   const pendingRequestsCount = 
     requests.filter(r => r.status === "pending").length + 
     joinRequests.filter(r => r.status === "pending").length;
@@ -135,6 +156,11 @@ export default function App() {
       showToast("App updated to the latest version after sync. Please retry your action.", "info");
     }
   }, [showToast]);
+  React.useEffect(() => {
+    if (isMember) {
+      prefetchPage("member-profile");
+    }
+  }, [isMember, prefetchPage]);
   React.useEffect(() => {
     localStorage.setItem("ui_density_mode", densityMode);
   }, [densityMode]);
@@ -334,13 +360,6 @@ export default function App() {
     }
   };
 
-  // RBAC: Redirect members if they are on a restricted page
-  React.useEffect(() => {
-    if (isMember && page !== "members") {
-      setPage("members");
-    }
-  }, [isMember, page, setPage]);
-
   // Dynamic Theme Tinting
   React.useEffect(() => {
     let activeColorVar = null;
@@ -483,7 +502,7 @@ export default function App() {
             return (
               <MotionDiv 
                 key={item.id} 
-                className={`nav-item ${page === item.id ? "active" : ""}`} 
+                className={`nav-item ${effectivePage === item.id ? "active" : ""}`} 
                 onClick={() => { setPage(item.id); setProfileMember(null); }}
                 onMouseEnter={() => prefetchPage(item.id)}
                 initial={{ x: -20, opacity: 0 }}
@@ -619,7 +638,7 @@ export default function App() {
           return (
             <button
               key={item.id}
-              className={`mobile-nav-item ${page === item.id ? "active" : ""}`}
+              className={`mobile-nav-item ${effectivePage === item.id ? "active" : ""}`}
               onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}
               onMouseEnter={() => prefetchPage(item.id)}
               onTouchStart={() => prefetchPage(item.id)}
@@ -836,27 +855,31 @@ export default function App() {
           <PageErrorBoundary>
             <React.Suspense
               fallback={
-                <div className="grid-2">
-                  <CardSkeleton />
-                  <CardSkeleton />
-                  <CardSkeleton />
-                  <CardSkeleton />
-                </div>
+                effectivePage === "members" && isMember
+                  ? <MyProfileSkeleton />
+                  : (
+                    <div className="grid-2">
+                      <CardSkeleton />
+                      <CardSkeleton />
+                      <CardSkeleton />
+                      <CardSkeleton />
+                    </div>
+                  )
               }
             >
               <AnimatePresence mode="wait">
-            {page === "dashboard" && (
+            {effectivePage === "dashboard" && (
               <PageWrapper id="dashboard">
                 <Dashboard />
               </PageWrapper>
             )}
 
-            {page === "members" && (
+            {effectivePage === "members" && (
               <PageWrapper id={profileMember ? `profile-${profileMember.memberId}` : "members"}>
                 {isMember ? (
-                  members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) ? (
+                  ownMember ? (
                     <MemberProfilePage
-                      member={members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase())}
+                      member={ownMember}
                       isOwnProfile={true}
                     />
                   ) : (
@@ -879,19 +902,19 @@ export default function App() {
               </PageWrapper>
             )}
 
-            {page === "events" && (
+            {effectivePage === "events" && (
               <PageWrapper id="events">
                 <EventsPage />
               </PageWrapper>
             )}
 
-            {page === "absences" && (
+            {effectivePage === "absences" && (
               <PageWrapper id="absences">
                 <AbsencesPage />
               </PageWrapper>
             )}
 
-            {page === "leaderboard" && (
+            {effectivePage === "leaderboard" && (
               <PageWrapper id={profileMember ? `profile-lb-${profileMember.memberId}` : "leaderboard"}>
                   {profileMember ? (
                     <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
@@ -901,43 +924,43 @@ export default function App() {
               </PageWrapper>
             )}
 
-            {page === "party" && (
+            {effectivePage === "party" && (
               <PageWrapper id="party">
                 <PartyBuilder />
               </PageWrapper>
             )}
 
-            {page === "import" && (
+            {effectivePage === "import" && (
               <PageWrapper id="import">
                 <ImportPage />
               </PageWrapper>
             )}
 
-            {page === "report" && (
+            {effectivePage === "report" && (
               <PageWrapper id="report">
                 <WeeklyReportPage />
               </PageWrapper>
             )}
 
-            {page === "auction" && (
+            {effectivePage === "auction" && (
               <PageWrapper id="auction">
                 <AuctionBuilder />
               </PageWrapper>
             )}
 
-            {page === "users" && isArchitect && (
+            {effectivePage === "users" && isArchitect && (
               <PageWrapper id="users">
                 <UserManagementPage />
               </PageWrapper>
             )}
 
-            {page === "auditlog" && isAdmin && (
+            {effectivePage === "auditlog" && isAdmin && (
               <PageWrapper id="auditlog">
                 <AuditLogPage />
               </PageWrapper>
             )}
 
-            {page === "requests" && isOfficer && (
+            {effectivePage === "requests" && isOfficer && (
               <PageWrapper id="requests">
                 <RequestsPage />
               </PageWrapper>
