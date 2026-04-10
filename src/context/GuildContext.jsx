@@ -104,6 +104,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
   const [syncRetryToken, setSyncRetryToken] = useState(0);
+  const [battlelogConfig, setBattlelogConfig] = useState({ weeklyAssignments: {}, rotationPoolMemberIds: [], lastEditorUid: null, lastUpdate: null });
   const needsBattleData = ["dashboard", "members", "events", "leaderboard", "report"].includes(page);
   const needsPresenceData = page === "dashboard" || page === "members";
 
@@ -127,7 +128,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
-  const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0 });
+  const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0, battlelog: 0 });
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
 
@@ -286,6 +287,7 @@ export const GuildProvider = ({ children, initialData }) => {
         const partiesMetaRef = doc(db, "metadata", "parties");
         const auctionMetaRef = doc(db, "metadata", "auction");
         const discordMetaRef = doc(db, "metadata", "discord");
+        const battlelogMetaRef = doc(db, "metadata", "battlelog");
         const readOnlyMemberSession = userRole === "member";
 
         if (!readOnlyMemberSession && legacyMetaSnap.exists()) {
@@ -294,6 +296,7 @@ export const GuildProvider = ({ children, initialData }) => {
             getDoc(auctionMetaRef),
             getDoc(discordMetaRef)
           ]);
+          const battlelogSnap = await getDoc(battlelogMetaRef);
           const legacyVersion = Number(legacyMeta.version || 0);
           const legacyEditor = legacyMeta.lastEditorUid || null;
           const legacyUpdate = legacyMeta.lastUpdate || new Date().toISOString();
@@ -328,6 +331,14 @@ export const GuildProvider = ({ children, initialData }) => {
               lastUpdate: legacyUpdate
             }, { merge: true }));
           }
+          if (!battlelogSnap.exists()) {
+            seedOps.push(setDoc(battlelogMetaRef, {
+              weeklyAssignments: {},
+              version: legacyVersion,
+              lastEditorUid: legacyEditor,
+              lastUpdate: legacyUpdate
+            }, { merge: true }));
+          }
           if (seedOps.length > 0) {
             await Promise.all(seedOps);
           }
@@ -340,7 +351,7 @@ export const GuildProvider = ({ children, initialData }) => {
         let metadataReadyCount = 0;
         const markMetadataReady = () => {
           metadataReadyCount += 1;
-          if (metadataReadyCount >= 3 && !metaLoaded) {
+          if (metadataReadyCount >= 4 && !metaLoaded) {
             metaLoaded = true;
             checkReady();
           }
@@ -516,6 +527,25 @@ export const GuildProvider = ({ children, initialData }) => {
           markMetadataReady();
         });
         unsubs.push(unsubDiscordMeta);
+
+        const unsubBattlelogMeta = onSnapshot(battlelogMetaRef, (snap) => {
+          const data = snap.exists() ? snap.data() : {};
+          const nextVersion = Number(data.version || 0);
+          emitExternalUpdate("battlelog", nextVersion, data.lastEditorUid, "Battlelog Scheduler");
+          metadataVersions.current.battlelog = nextVersion;
+          const nextCfg = {
+            weeklyAssignments: data.weeklyAssignments || {},
+            rotationPoolMemberIds: Array.isArray(data.rotationPoolMemberIds) ? data.rotationPoolMemberIds : [],
+            lastEditorUid: data.lastEditorUid || null,
+            lastUpdate: data.lastUpdate || null
+          };
+          if (JSON.stringify(nextCfg) !== JSON.stringify(prevData.current.battlelogConfig)) {
+            setBattlelogConfig(nextCfg);
+            prevData.current.battlelogConfig = { ...nextCfg, weeklyAssignments: { ...(nextCfg.weeklyAssignments || {}) } };
+          }
+          markMetadataReady();
+        });
+        unsubs.push(unsubBattlelogMeta);
         }
 
         const notifQuery = myMemberId
@@ -807,7 +837,9 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(resourceCategories) !== JSON.stringify(prevData.current.resourceCategories);
         const hasMetadataDiscordChanges =
           JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig);
-        const hasAnyMetadataChanges = hasMetadataPartiesChanges || hasMetadataAuctionChanges || hasMetadataDiscordChanges;
+        const hasMetadataBattlelogChanges =
+          JSON.stringify(battlelogConfig) !== JSON.stringify(prevData.current.battlelogConfig);
+        const hasAnyMetadataChanges = hasMetadataPartiesChanges || hasMetadataAuctionChanges || hasMetadataDiscordChanges || hasMetadataBattlelogChanges;
 
         if (
           JSON.stringify(members) !== JSON.stringify(prevData.current.members) ||
@@ -970,6 +1002,22 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.discordConfig = { ...discordConfig };
           wroteMetadata = true;
         }
+        if (hasMetadataBattlelogChanges) {
+          const nextVersion = await runMetadataSave("battlelog", Number(metadataVersions.current.battlelog || 0), {
+            weeklyAssignments: battlelogConfig?.weeklyAssignments || {},
+            rotationPoolMemberIds: Array.isArray(battlelogConfig?.rotationPoolMemberIds) ? battlelogConfig.rotationPoolMemberIds : [],
+            lastUpdate: new Date().toISOString(),
+            lastEditorUid: currentUser?.uid || null
+          });
+          metadataVersions.current.battlelog = nextVersion;
+          prevData.current.battlelogConfig = {
+            weeklyAssignments: { ...(battlelogConfig?.weeklyAssignments || {}) },
+            rotationPoolMemberIds: Array.isArray(battlelogConfig?.rotationPoolMemberIds) ? [...battlelogConfig.rotationPoolMemberIds] : [],
+            lastEditorUid: battlelogConfig?.lastEditorUid || null,
+            lastUpdate: battlelogConfig?.lastUpdate || null
+          };
+          wroteMetadata = true;
+        }
 
         if (changesCount > 0 || wroteMetadata) {
           prevData.current.pendingSync = false;
@@ -994,7 +1042,7 @@ export const GuildProvider = ({ children, initialData }) => {
     const debounceMs = burstCount >= 5 ? 2200 : burstCount >= 3 ? 1600 : 1000;
     const timeout = setTimeout(saveData, debounceMs);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
+  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, battlelogConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
 
   useEffect(() => {
     if (loading) return;
@@ -1668,6 +1716,7 @@ export const GuildProvider = ({ children, initialData }) => {
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, submitJoinRequest, submitReactivationRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
+    battlelogConfig, setBattlelogConfig,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
     resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill
