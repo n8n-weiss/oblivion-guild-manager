@@ -106,13 +106,16 @@ function LoginPage() {
           }
         }
       } catch (innerErr) {
-        console.error("Auto-setup failed:", innerErr);
+        console.error("Auto-setup fallback failed:", innerErr);
+        if (innerErr.code === 'permission-denied') {
+          setError("Portal Link Error: Security rules are blocking automatic account verification. Please ask an Officer to check your account status in User Management.");
+        } else {
+          setError("Invalid email or password. If you just applied, please wait for an Officer to approve your request.");
+        }
+      } finally {
+        setLoading(false);
+        setAuthNotice("");
       }
-      setError("Invalid email or password. If you just applied, please wait for an Officer to approve your request.");
-    } finally {
-      setLoading(false);
-      setAuthNotice("");
-    }
   };
 
 

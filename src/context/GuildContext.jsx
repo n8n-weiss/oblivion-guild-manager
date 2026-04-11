@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, auth } from '../firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { db, auth, firebaseConfig } from '../firebase';
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
 const migrateMentions = (cat, defaultType = "none") => {
@@ -1517,6 +1518,34 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!r) return;
       const cleanDiscord = (r.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const portalEmail = cleanDiscord ? `${cleanDiscord}@oblivion.com` : "";
+      const password = (r.uid || "").toUpperCase().startsWith("OBL") ? r.uid.toUpperCase() : `OBL${r.uid.toUpperCase()}`;
+
+      // Automatic Account Creation
+      let secondaryApp = null;
+      try {
+        const appName = `approval-${Date.now()}`;
+        secondaryApp = initializeApp(firebaseConfig, appName);
+        const secondaryAuth = getAuth(secondaryApp);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, portalEmail, password);
+        
+        // Create userroles document linked to this auth user
+        await setDoc(doc(db, "userroles", cred.user.uid), {
+          role: "member",
+          memberId: r.uid,
+          email: portalEmail,
+          displayName: r.ign,
+          createdAt: new Date().toISOString()
+        });
+      } catch (authErr) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          console.log("Account already exists for this email, skipping auth creation.");
+        } else {
+          console.error("Failed to create auth account during approval:", authErr);
+        }
+      } finally {
+        if (secondaryApp) await deleteApp(secondaryApp);
+      }
+
       const existingMember = members.find(m => (m.memberId || "").toLowerCase() === (r.uid || "").toLowerCase());
       const newMember = {
         ...(existingMember || {}),
