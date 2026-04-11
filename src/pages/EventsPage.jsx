@@ -146,13 +146,14 @@ function EventsPage() {
     const newAtt = members
       .filter(m => (m.status || "active") !== "left")
       .map(m => {
-      const hasAbsence = absences.find(a => a.memberId === m.memberId && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
-      return { memberId: m.memberId, eventId, status: hasAbsence ? "absent" : "present" };
+      const mId = (m.memberId || "").trim();
+      const hasAbsence = absences.find(a => (a.memberId || "").trim().toLowerCase() === mId.toLowerCase() && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
+      return { memberId: mId, eventId, status: hasAbsence ? "absent" : "present" };
     });
 
     setAttendance(prev => {
-      const existingIds = new Set(prev.filter(a => a.eventId === eventId).map(a => (a.memberId || "").toLowerCase()));
-      const dedupedNew = newAtt.filter(a => !existingIds.has((a.memberId || "").toLowerCase()));
+      const existingIds = new Set(prev.filter(a => a.eventId === eventId).map(a => (a.memberId || "").trim().toLowerCase()));
+      const dedupedNew = newAtt.filter(a => !existingIds.has((a.memberId || "").trim().toLowerCase()));
       return [...prev, ...dedupedNew];
     });
     showToast("Event created with attendance loaded", "success");
@@ -312,11 +313,11 @@ function EventsPage() {
     const ev = events.find(e => e.eventId === eventId);
     
     setAttendance(prev => {
-      const exists = prev.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId);
+      const exists = prev.some(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
       if (exists) {
-        return prev.map(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a);
+        return prev.map(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a);
       }
-      return [...prev, { memberId, eventId, status: newStatus }];
+      return [...prev, { memberId: memberId.trim(), eventId, status: newStatus }];
     });
 
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
@@ -329,7 +330,7 @@ function EventsPage() {
     setPerformance(prev => {
       const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
       if (exists) return prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
-      return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0, ...edits }];
+      return [...prev, { memberId: memberId.trim(), eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0, ...edits }];
     });
     const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);

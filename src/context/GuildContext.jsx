@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { db, auth, firebaseConfig } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId, deleteField } from 'firebase/firestore';
 import { onAuthStateChanged, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 
@@ -891,7 +891,8 @@ export const GuildProvider = ({ children, initialData }) => {
           const grouped = {};
           attendance.forEach(a => {
             if (!grouped[a.eventId]) grouped[a.eventId] = {};
-            grouped[a.eventId][a.memberId] = a.status;
+            const cleanMid = (a.memberId || "").trim();
+            if (cleanMid) grouped[a.eventId][cleanMid] = a.status;
           });
           Object.keys(grouped).forEach(eid => {
             batch.set(doc(db, "attendance", eid), { eventId: eid, members: grouped[eid] });
@@ -907,7 +908,8 @@ export const GuildProvider = ({ children, initialData }) => {
           const grouped = {};
           performance.forEach(p => {
             if (!grouped[p.eventId]) grouped[p.eventId] = {};
-            grouped[p.eventId][p.memberId] = p;
+            const cleanMid = (p.memberId || "").trim();
+            if (cleanMid) grouped[p.eventId][cleanMid] = { ...p, memberId: cleanMid };
           });
           Object.keys(grouped).forEach(eid => {
             batch.set(doc(db, "performance", eid), { eventId: eid, members: grouped[eid] });
@@ -923,7 +925,8 @@ export const GuildProvider = ({ children, initialData }) => {
           const grouped = {};
           eoRatings.forEach(r => {
             if (!grouped[r.eventId]) grouped[r.eventId] = {};
-            grouped[r.eventId][r.memberId] = r.rating;
+            const cleanMid = (r.memberId || "").trim();
+            if (cleanMid) grouped[r.eventId][cleanMid] = r.rating;
           });
           Object.keys(grouped).forEach(eid => {
             batch.set(doc(db, "eoRatings", eid), { eventId: eid, ratings: grouped[eid] });
@@ -1729,30 +1732,64 @@ export const GuildProvider = ({ children, initialData }) => {
     const batch = writeBatch(db);
     let count = 0;
     
+    // Scan all event-based collections where member participation is stored as map keys
+    const collections = [
+      { name: "attendance", dataKey: "members" },
+      { name: "attendanceBuckets", dataKey: "members" },
+      { name: "performance", dataKey: "members" },
+      { name: "performanceBuckets", dataKey: "members" },
+      { name: "eoRatings", dataKey: "ratings" },
+      { name: "eoRatingsBuckets", dataKey: "ratings" }
+    ];
+
     try {
-      // 1. Attendance
-      const attQuery = query(collection(db, "attendance"), where("memberId", "==", oldId));
-      const attSnap = await getDocs(attQuery);
-      attSnap.forEach(d => {
-        batch.update(d.ref, { memberId: newId });
-        count++;
+      for (const colInfo of collections) {
+        const snap = await getDocs(collection(db, colInfo.name));
+        snap.forEach(d => {
+          const data = d.data();
+          const map = data[colInfo.dataKey] || {};
+          
+          const targetKey = Object.keys(map).find(k => k.trim().toLowerCase() === oldId.trim().toLowerCase());
+          
+          if (targetKey) {
+            const val = map[targetKey];
+            batch.update(d.ref, {
+              [`${colInfo.dataKey}.${newId}`]: val,
+              [`${colInfo.dataKey}.${targetKey}`]: deleteField()
+            });
+            count++;
+          }
+        });
+      }
+
+      // Step 2: Update individual account mappings (userroles)
+      const urSnap = await getDocs(collection(db, "userroles"));
+      urSnap.forEach(d => {
+        const data = d.data();
+        if ((data.memberId || "").trim().toLowerCase() === oldId.trim().toLowerCase()) {
+          batch.update(d.ref, { memberId: newId });
+          count++;
+        }
       });
-      
-      // 2. Performance
-      const perfQuery = query(collection(db, "performance"), where("memberId", "==", oldId));
-      const perfSnap = await getDocs(perfQuery);
-      perfSnap.forEach(d => {
-        batch.update(d.ref, { memberId: newId });
-        count++;
-      });
-      
-      // 3. EO Ratings
-      const eoQuery = query(collection(db, "eoRatings"), where("memberId", "==", oldId));
-      const eoSnap = await getDocs(eoQuery);
-      eoSnap.forEach(d => {
-        batch.update(d.ref, { memberId: newId });
-        count++;
-      });
+
+      // Step 3: Update centralized user registry (guildusers/list)
+      const listRef = doc(db, "guildusers", "list");
+      const listSnap = await getDoc(listRef);
+      if (listSnap.exists()) {
+        const usersArr = listSnap.data().users || [];
+        let listChanged = false;
+        const updatedUsers = usersArr.map(u => {
+          if ((u.memberId || "").trim().toLowerCase() === oldId.trim().toLowerCase()) {
+            count++;
+            listChanged = true;
+            return { ...u, memberId: newId };
+          }
+          return u;
+        });
+        if (listChanged) {
+          batch.update(listRef, { users: updatedUsers });
+        }
+      }
       
       if (count > 0) {
         await batch.commit();
