@@ -90,7 +90,8 @@ function EventsPage() {
   const [form, setForm] = useState({
     eventType: "Guild League",
     eventDate: new Date().toISOString().split("T")[0],
-    auditDueOffsetHours: 2
+    eventTime: "20:55",
+    auditDueOffsetHours: 12
   });
   const [perfEdits, setPerfEdits] = useState({});
   const getNextAuditor = React.useCallback(() => {
@@ -114,8 +115,8 @@ function EventsPage() {
     const eventId = `EVT${Date.now()}`;
     const assignedAuditor = getNextAuditor();
     const assignmentSource = "auto_duo";
-    const dueBase = new Date(`${form.eventDate}T00:00:00`);
-    const dueAt = new Date(dueBase.getTime() + Number(form.auditDueOffsetHours || 2) * 60 * 60 * 1000);
+    const eventStart = new Date(`${form.eventDate}T${form.eventTime}:00`);
+    const dueAt = new Date(eventStart.getTime() + Number(form.auditDueOffsetHours || 12) * 60 * 60 * 1000);
     const newEvent = {
       eventId,
       ...form,
@@ -179,8 +180,13 @@ function EventsPage() {
         if (!audit) return false;
         if (audit.status === "submitted") return false;
         if (audit.reminderSentAt) return false;
-        const due = new Date(audit.dueAt || `${ev.eventDate}T23:00:00`).getTime();
-        return Number.isFinite(due) && due <= now;
+        let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
+        const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
+        // If due date was incorrectly saved as same-day (legacy/2AM bug), shift to next day
+        if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) {
+          dueTime += 24 * 60 * 60 * 1000;
+        }
+        return Number.isFinite(dueTime) && dueTime <= now;
       })
       .slice(0, 3);
     if (!overduePending.length) return;
@@ -190,8 +196,12 @@ function EventsPage() {
         if (!audit) return false;
         if (audit.status === "submitted") return false;
         if (!audit.reminderSentAt || audit.escalatedAt) return false;
-        const due = new Date(audit.dueAt || `${ev.eventDate}T23:00:00`).getTime();
-        return Number.isFinite(due) && (now - due) >= escalationHours * 60 * 60 * 1000;
+        let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
+        const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
+        if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) {
+          dueTime += 24 * 60 * 60 * 1000;
+        }
+        return Number.isFinite(dueTime) && (now - dueTime) >= escalationHours * 60 * 60 * 1000;
       })
       .slice(0, 3);
     const run = async () => {
@@ -204,9 +214,14 @@ function EventsPage() {
             "Battlelog audit is due. Assigned officer, please submit your audit logs.",
             0xF0C040,
             [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate} ${ev.eventTime || ""}`, inline: false },
               { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true },
-              { name: "Due", value: new Date(ev.battlelogAudit?.dueAt || `${ev.eventDate}T23:00:00`).toLocaleString(), inline: true }
+              { name: "Due", value: (() => {
+                  let d = ev.battlelogAudit?.dueAt ? new Date(ev.battlelogAudit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
+                  const s = new Date(`${ev.eventDate}T00:00:00`).getTime();
+                  if (d <= s + 23 * 60 * 60 * 1000 && !ev.eventTime) d += 24 * 60 * 60 * 1000;
+                  return new Date(d).toLocaleString();
+              })(), inline: true }
             ],
             null,
             "battlelog_reminder",
@@ -442,6 +457,19 @@ function EventsPage() {
     }
   };
 
+  const getAuditStatus = (ev) => {
+    if (!ev?.battlelogAudit) return null;
+    if (ev.battlelogAudit.status === "submitted") return "submitted";
+    let status = ev.battlelogAudit.status || "pending";
+    if (status === "overdue" && ev.battlelogAudit.dueAt) {
+      let d = new Date(ev.battlelogAudit.dueAt).getTime();
+      const s = new Date(`${ev.eventDate}T00:00:00`).getTime();
+      if (d <= s + 23 * 60 * 60 * 1000 && !ev.eventTime) d += 24 * 60 * 60 * 1000;
+      if (d > Date.now()) status = "pending";
+    }
+    return status;
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -491,11 +519,11 @@ function EventsPage() {
                               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                                 {ev.battlelogAudit?.escalatedAt ? (
                                   <span className="badge badge-atrisk" style={{ fontSize: 9 }}>Escalated</span>
-                                ) : ev.battlelogAudit?.status === "submitted" ? (
+                                ) : getAuditStatus(ev) === "submitted" ? (
                                   <span className="badge badge-active" style={{ fontSize: 9 }}>Audit Done</span>
-                                ) : ev.battlelogAudit?.status ? (
+                                ) : getAuditStatus(ev) ? (
                                   <span className="badge badge-casual" style={{ fontSize: 9 }}>
-                                    {ev.battlelogAudit.status === "overdue" ? "Audit Overdue" : "Audit Pending"}
+                                    {getAuditStatus(ev) === "overdue" ? "Audit Overdue" : "Audit Pending"}
                                   </span>
                                 ) : null}
                               </div>
@@ -535,8 +563,8 @@ function EventsPage() {
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
                     <span className="text-xs text-muted">{evtAtt.filter(a => a.status === "present").length}/{evtAtt.length} present</span>
-                    <span className={`badge ${selectedEvent.battlelogAudit?.status === "submitted" ? "badge-active" : selectedEvent.battlelogAudit?.status === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
-                      Audit: {selectedEvent.battlelogAudit?.status || "pending"}
+                    <span className={`badge ${getAuditStatus(selectedEvent) === "submitted" ? "badge-active" : getAuditStatus(selectedEvent) === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
+                      Audit: {getAuditStatus(selectedEvent) || "pending"}
                     </span>
                     {digestAlreadyPosted && (
                       <span className={`badge ${digestIsUpdated ? "badge-casual" : "badge-active"}`} style={{ fontSize: 9 }}>
@@ -559,7 +587,13 @@ function EventsPage() {
               <div className="table-wrap">
                 <div className="text-xs text-muted" style={{ marginBottom: 16 }}>
                   Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>{" "}
-                  • Due: <strong>{selectedEvent.battlelogAudit?.dueAt ? new Date(selectedEvent.battlelogAudit.dueAt).toLocaleString() : "N/A"}</strong>
+                  • Due: <strong>{(() => {
+                    if (!selectedEvent.battlelogAudit?.dueAt) return "N/A";
+                    let d = new Date(selectedEvent.battlelogAudit.dueAt).getTime();
+                    const s = new Date(`${selectedEvent.eventDate}T00:00:00`).getTime();
+                    if (d <= s + 23 * 60 * 60 * 1000 && !selectedEvent.eventTime) d += 24 * 60 * 60 * 1000;
+                    return new Date(d).toLocaleString();
+                  })()}</strong>
                 </div>
                 <table>
                   <thead><tr>
@@ -724,14 +758,18 @@ function EventsPage() {
               <input type="date" className="form-input" value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="form-label">Audit Due (hours after event date start)</label>
+              <label className="form-label">Event Time</label>
+              <input type="time" className="form-input" value={form.eventTime} onChange={e => setForm(f => ({ ...f, eventTime: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Audit Due (hours after event starts)</label>
               <input
                 type="number"
-                min={1}
-                max={24}
+                min={0}
+                max={48}
                 className="form-input"
                 value={form.auditDueOffsetHours}
-                onChange={e => setForm(f => ({ ...f, auditDueOffsetHours: Math.max(1, Math.min(24, Number(e.target.value || 2))) }))}
+                onChange={e => setForm(f => ({ ...f, auditDueOffsetHours: Math.max(0, Math.min(48, Number(e.target.value || 0))) }))}
               />
             </div>
           </div>
