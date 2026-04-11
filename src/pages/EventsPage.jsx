@@ -36,7 +36,14 @@ function EventsPage() {
   }, [officerPool]);
   const duoOfficerPool = React.useMemo(() => {
     const basePool = fixedDuoOfficerPool.length ? fixedDuoOfficerPool : officerPool;
-    return basePool.slice(0, 2);
+    const pool = basePool.slice(0, 2);
+    // Hardcode Discord IDs for rotational pings
+    return pool.map(o => {
+      const ign = (o.ign || "").trim().toLowerCase();
+      if (ign === "gildartsss") return { ...o, discordId: "630443485891395606" };
+      if (ign === "cobzydr") return { ...o, discordId: "1390527637016809573" };
+      return o;
+    });
   }, [fixedDuoOfficerPool, officerPool]);
   const rotationKey = "battlelog_duo_rotation_idx_v1";
   const escalationHours = 6;
@@ -123,9 +130,11 @@ function EventsPage() {
       battlelogAudit: {
         assignedMemberId: assignedAuditor?.memberId || null,
         assignedIgn: assignedAuditor?.ign || "Unassigned",
+        assignedDiscordId: assignedAuditor?.discordId || null,
         status: "pending",
         dueAt: dueAt.toISOString(),
         reminderSentAt: null,
+        postEventReminderSentAt: null,
         submittedAt: null,
         submittedBy: null,
         assignmentSource
@@ -174,100 +183,119 @@ function EventsPage() {
   React.useEffect(() => {
     if (!currentUser) return;
     const now = Date.now();
-    const overduePending = events
-      .filter(ev => {
-        const audit = ev.battlelogAudit;
-        if (!audit) return false;
-        if (audit.status === "submitted") return false;
-        if (audit.reminderSentAt) return false;
-        let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
-        const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
-        // If due date was incorrectly saved as same-day (legacy/2AM bug), shift to next day
-        if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) {
-          dueTime += 24 * 60 * 60 * 1000;
-        }
-        return Number.isFinite(dueTime) && dueTime <= now;
-      })
-      .slice(0, 3);
-    if (!overduePending.length) return;
-    const escalationCandidates = events
-      .filter(ev => {
-        const audit = ev.battlelogAudit;
-        if (!audit) return false;
-        if (audit.status === "submitted") return false;
-        if (!audit.reminderSentAt || audit.escalatedAt) return false;
-        let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
-        const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
-        if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) {
-          dueTime += 24 * 60 * 60 * 1000;
-        }
-        return Number.isFinite(dueTime) && (now - dueTime) >= escalationHours * 60 * 60 * 1000;
-      })
-      .slice(0, 3);
-    const run = async () => {
-      for (const ev of overduePending) {
-        if (reminderInFlight.current.has(ev.eventId)) continue;
-        reminderInFlight.current.add(ev.eventId);
+
+    // 1. Post-Event "Soft" Reminders (55 minutes after start)
+    const postEventReminders = events.filter(ev => {
+      const audit = ev.battlelogAudit;
+      if (!audit || audit.status === "submitted" || audit.postEventReminderSentAt) return false;
+      const eventStart = new Date(`${ev.eventDate}T${ev.eventTime || "20:55"}:00`).getTime();
+      const triggerTime = eventStart + (55 * 60 * 1000); // 25m event + 30m buffer
+      return Number.isFinite(triggerTime) && now >= triggerTime;
+    }).slice(0, 3);
+
+    // 2. Overdue "Hard" Reminders (After dueAt)
+    const overduePending = events.filter(ev => {
+      const audit = ev.battlelogAudit;
+      if (!audit || audit.status === "submitted" || audit.reminderSentAt) return false;
+      let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
+      const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
+      if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) dueTime += 24 * 60 * 60 * 1000;
+      return Number.isFinite(dueTime) && dueTime <= now;
+    }).slice(0, 3);
+
+    // 3. Escalations (X hours after dueAt)
+    const escalationCandidates = events.filter(ev => {
+      const audit = ev.battlelogAudit;
+      if (!audit || audit.status === "submitted" || !audit.reminderSentAt || audit.escalatedAt) return false;
+      let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
+      const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
+      if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) dueTime += 24 * 60 * 60 * 1000;
+      return Number.isFinite(dueTime) && (now - dueTime) >= escalationHours * 60 * 60 * 1000;
+    }).slice(0, 3);
+
+    const runReminders = async () => {
+      // Process Soft Reminders
+      for (const ev of postEventReminders) {
+        if (reminderInFlight.current.has(ev.eventId + "_soft")) continue;
+        reminderInFlight.current.add(ev.eventId + "_soft");
         try {
           await sendDiscordEmbed(
-            "📘 Battlelog Reminder",
-            "Battlelog audit is due. Assigned officer, please submit your audit logs.",
-            0xF0C040,
+            "🔔 Battlelog Soft Reminder",
+            "The event has ended. Please remember to audit the battlelogs when you have the chance.",
+            0x6382E6,
             [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate} ${ev.eventTime || ""}`, inline: false },
-              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true },
-              { name: "Due", value: (() => {
-                  let d = ev.battlelogAudit?.dueAt ? new Date(ev.battlelogAudit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
-                  const s = new Date(`${ev.eventDate}T00:00:00`).getTime();
-                  if (d <= s + 23 * 60 * 60 * 1000 && !ev.eventTime) d += 24 * 60 * 60 * 1000;
-                  return new Date(d).toLocaleString();
-              })(), inline: true }
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
+              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true }
             ],
             null,
             "battlelog_reminder",
             "battlelog_reminder",
-            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" }
+            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
+            ev.battlelogAudit?.assignedDiscordId
+          );
+          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
+            ...x,
+            battlelogAudit: { ...(x.battlelogAudit || {}), postEventReminderSentAt: new Date().toISOString() }
+          } : x));
+        } catch (err) { console.error("Soft reminder failed:", err); }
+        finally { reminderInFlight.current.delete(ev.eventId + "_soft"); }
+      }
+
+      // Process Hard Reminders
+      for (const ev of overduePending) {
+        if (reminderInFlight.current.has(ev.eventId + "_hard")) continue;
+        reminderInFlight.current.add(ev.eventId + "_hard");
+        try {
+          await sendDiscordEmbed(
+            "📘 Battlelog Overdue Alert",
+            "Battlelog audit is now overdue. Please submit as soon as possible.",
+            0xF0C040,
+            [
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
+              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true }
+            ],
+            null,
+            "battlelog_reminder",
+            "battlelog_reminder",
+            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
+            ev.battlelogAudit?.assignedDiscordId
           );
           setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
             ...x,
             battlelogAudit: { ...(x.battlelogAudit || {}), reminderSentAt: new Date().toISOString(), status: "overdue" }
           } : x));
-        } catch (err) {
-          console.error("Battlelog reminder failed:", err);
-        } finally {
-          reminderInFlight.current.delete(ev.eventId);
-        }
+        } catch (err) { console.error("Hard reminder failed:", err); }
+        finally { reminderInFlight.current.delete(ev.eventId + "_hard"); }
       }
+
+      // Process Escalations
       for (const ev of escalationCandidates) {
-        if (reminderInFlight.current.has(ev.eventId)) continue;
-        reminderInFlight.current.add(ev.eventId);
+        if (reminderInFlight.current.has(ev.eventId + "_esc")) continue;
+        reminderInFlight.current.add(ev.eventId + "_esc");
         try {
           await sendDiscordEmbed(
             "⏰ Battlelog Escalation",
             `Battlelog is still pending ${escalationHours}+ hours after due time.`,
             0xE05050,
             [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
-              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true },
-              { name: "Action", value: "Officer follow-up required", inline: true }
+              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false }
             ],
             null,
             "battlelog_reminder",
             "battlelog_reminder",
-            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" }
+            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
+            ev.battlelogAudit?.assignedDiscordId
           );
           setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
             ...x,
-            battlelogAudit: { ...(x.battlelogAudit || {}), escalatedAt: new Date().toISOString(), status: "overdue" }
+            battlelogAudit: { ...(x.battlelogAudit || {}), escalatedAt: new Date().toISOString() }
           } : x));
-        } catch (err) {
-          console.error("Battlelog escalation failed:", err);
-        } finally {
-          reminderInFlight.current.delete(ev.eventId);
-        }
+        } catch (err) { console.error("Escalation failed:", err); }
+        finally { reminderInFlight.current.delete(ev.eventId + "_esc"); }
       }
     };
-    run();
+
+    runReminders();
   }, [events, sendDiscordEmbed, setEvents, currentUser]);
 
   const toggleAtt = (memberId, eventId) => {
