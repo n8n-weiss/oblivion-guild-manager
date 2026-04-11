@@ -363,10 +363,11 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
 
 function AuctionBuilder() {
   const {
-    members, auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
-    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig
+    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig,
+    memberLootStats, auctionWishlist,
+    members, auctionSessions, setAuctionSessions
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -1536,8 +1537,29 @@ function AuctionBuilder() {
               >
                 {miniAvatar(m, members.indexOf(m))}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: 0.5 }}>{m.ign}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 500 }}>{m.role}</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: 0.5 }}>{m.ign}</div>
+                    {(() => {
+                      const wishEntry = auctionWishlist.find(b => b.id === m.memberId);
+                      const albumWish = wishEntry?.bids?.find(bi => bi.type === "Card Album");
+                      const manualCount = albumWish?.currentCount;
+                      
+                      const albums = manualCount !== undefined ? manualCount : (memberLootStats[m.memberId]?.cardAlbums || 0);
+                      const progress = albums % 10;
+                      if (progress === 0 && albums === 0) return null;
+                      return (
+                        <span title={`${progress}/10 Card Progress (${albums} total)`} style={{ fontSize: 9, fontWeight: 900, color: progress >= 9 ? "var(--red)" : "var(--accent)", background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: 4 }}>
+                          {progress}/10
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 500 }}>{m.role}</div>
+                    {auctionWishlist.find(b => b.id === m.memberId)?.bids?.length > 0 && (
+                      <span title="Has active Loot Wishlist" style={{ fontSize: 10 }}>⭐</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -1751,6 +1773,19 @@ function AuctionBuilder() {
               >
                 <Icon name="shield" size={14} /> TRACKER
               </button>
+              <button 
+                onClick={() => setSidebarTab("wishlist")}
+                style={{ 
+                  flex: 1, padding: "10px", borderRadius: 10, fontSize: 10, fontWeight: 900, letterSpacing: 1.5, cursor: "pointer", border: "none", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  background: sidebarTab === "wishlist" ? "var(--red)" : "transparent",
+                  color: sidebarTab === "wishlist" ? "white" : "var(--text-muted)",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: sidebarTab === "wishlist" ? "0 4px 15px rgba(224,80,80,0.3)" : "none",
+                  transform: sidebarTab === "wishlist" ? "scale(1.02)" : "scale(1)"
+                }}
+              >
+                <Icon name="star" size={14} /> WISHLIST
+              </button>
             </div>
 
             {/* 1. Resource Map Tab */}
@@ -1778,6 +1813,58 @@ function AuctionBuilder() {
                 setMapFocusMode={setMapFocusMode}
               />
             </React.Profiler>
+
+            {/* 2. Wishlist Tab */}
+            {sidebarTab === "wishlist" && (
+              <div className="card custom-scrollbar animate-fade-in" style={{ flex: 1, padding: 14, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column" }}>
+                <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <Icon name="star" size={14} color="var(--gold)" /> Active Loot Wishlist
+                </div>
+                <div className="flex flex-col gap-2">
+                  {auctionWishlist.filter(b => (b.bids || []).length > 0).length === 0 && (
+                    <div className="text-center p-6 text-muted text-xs">No active wishlist items from members.</div>
+                  )}
+                  {auctionWishlist.filter(b => (b.bids || []).length > 0).map(wishEntry => {
+                    const m = members.find(mx => mx.memberId === wishEntry.id);
+                    if (!m) return null;
+                    return (
+                      <div key={wishEntry.id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10 }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <MemberAvatar ign={m.ign} size={24} />
+                          <div style={{ fontSize: 12, fontWeight: 800 }}>{m.ign}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(wishEntry.bids || []).map((b, bi) => {
+                            const isAlbum = b.type === "Card Album";
+                            const manualCount = b.currentCount;
+                            const cardWins = manualCount !== undefined ? manualCount : (memberLootStats[wishEntry.id]?.cardAlbums || 0);
+                            const need = isAlbum ? (10 - (cardWins % 10)) : 0;
+                            
+                            return (
+                              <div key={bi} style={{ 
+                                fontSize: 10, fontWeight: 900, padding: "4px 10px", borderRadius: 6,
+                                background: isAlbum ? "rgba(240,192,64,0.15)" : "rgba(99,130,230,0.15)",
+                                color: isAlbum ? "var(--gold)" : "var(--accent)",
+                                border: `1px solid ${isAlbum ? "rgba(240,192,64,0.3)" : "rgba(99,130,230,0.3)"}`,
+                                display: "flex", flexDirection: "column", gap: 2
+                              }}>
+                                <div style={{ fontSize: 9, opacity: 0.8 }}>{b.type.toUpperCase()}</div>
+                                {isAlbum && (
+                                  <div style={{ display: "flex", gap: 8, marginTop: 1 }}>
+                                    <span style={{ color: "white" }}>HAVE: {cardWins}</span>
+                                    <span style={{ color: "var(--red)" }}>NEED: {need}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
  
             {/* 2. Global World Master Tracker Tab */}
             {sidebarTab === "tracker" && (

@@ -135,7 +135,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     notifications, markNotifRead,
     requests, submitRequest,
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
-    auctionSessions, migrateMemberData
+    auctionSessions, migrateMemberData,
+    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata
   } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -999,6 +1000,145 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="card mb-4" style={{ overflow: "hidden" }}>
+            <div className="card-title">⭐ Loot Wishlist</div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 20, marginTop: 10 }}>
+              
+              {/* Card Album Progress */}
+              <div style={{ 
+                background: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.05)",
+                display: "flex", flexDirection: "column", gap: 12
+              }}>
+                <div className="flex justify-between items-center">
+                  <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 13, color: "var(--accent)" }}>🎴 Card Album Collection</div>
+                  <div className="badge badge-casual" style={{ fontSize: 10 }}>10 WINS = 1 CARD</div>
+                </div>
+                
+                {(() => {
+                  const wishEntry = auctionWishlist.find(b => b.id === member.memberId);
+                  const albumWish = wishEntry?.bids?.find(bi => bi.type === "Card Album");
+                  const manualCount = albumWish?.currentCount;
+                  
+                  // Use manual count if provided, otherwise fallback to session-derived stats
+                  const cardWins = manualCount !== undefined ? manualCount : (memberLootStats[member.memberId]?.cardAlbums || 0);
+                  const progress = cardWins % 10;
+                  const totalCards = Math.floor(cardWins / 10);
+                  return (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                           <div style={{ fontSize: 24, fontWeight: 900, color: "white", textShadow: "0 0 15px var(--accent-glow)" }}>
+                             {progress}<span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}> / 10</span>
+                           </div>
+                           <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: -2 }}>ALBUMS HELD</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                           <div style={{ fontSize: 16, fontWeight: 900, color: "var(--gold)" }}>🏆 {totalCards}</div>
+                           <div style={{ fontSize: 9, color: "var(--text-muted)", letterSpacing: 1, textTransform: "uppercase" }}>Completed Cards</div>
+                        </div>
+                      </div>
+                      
+                      <div style={{ width: "100%", height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 5, overflow: "hidden", position: "relative" }}>
+                        <div style={{ 
+                          width: `${progress * 10}%`, height: "100%", 
+                          background: `linear-gradient(90deg, var(--accent), var(--accent-glow))`,
+                          boxShadow: "0 0 10px var(--accent-glow)",
+                          transition: "width 0.5s cubic-bezier(0.4, 0, 0.2, 1)"
+                        }} />
+                        {progress >= 9 && <div className="animate-pulse" style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.1)" }} />}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+                        {progress >= 9 ? "🔥 Almost there! One more win to complete your card." : `You need ${10 - progress} more wins to complete your next card.`}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <button 
+                          className="btn btn-ghost btn-sm"
+                          style={{ flex: 1, fontSize: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}
+                          onClick={() => {
+                             const val = prompt("Enter your current total Card Album wins:", cardWins);
+                             if (val !== null) {
+                                const num = parseInt(val);
+                                if (!isNaN(num)) updateWishlistMetadata(member.memberId, "Card Album", { currentCount: num });
+                             }
+                          }}
+                        >
+                          Input your current Album Card count
+                        </button>
+                        <button 
+                           className={`btn btn-sm ${albumWish ? "btn-danger" : "btn-primary"}`}
+                           style={{ flex: 1.2, fontSize: 10 }}
+                           onClick={() => {
+                             if (albumWish) removeWishlistRequest(member.memberId, "Card Album");
+                             else submitWishlistRequest(member.memberId, "Card Album");
+                           }}
+                        >
+                           {albumWish ? "Remove Wishlist" : "⭐ Add to Wishlist"}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Feather Progress & Bidding */}
+              <div style={{ 
+                background: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.05)",
+                display: "flex", flexDirection: "column", gap: 12
+              }}>
+                <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 13, color: "var(--gold)" }}>🪶 L&D Feather Progress</div>
+                
+                <div className="flex items-center justify-between">
+                  <div style={{ fontSize: 24, fontWeight: 900, color: "white" }}>
+                    {memberLootStats[member.memberId]?.feathers || 0}
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginLeft: 4 }}>WINS</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "2px 6px", borderRadius: 4 }}>
+                    LIFETIME
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-auto">
+                   <button 
+                      className={`btn btn-sm ${auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark") ? "btn-danger" : "btn-casual"}`}
+                      style={{ fontSize: 11, width: "100%" }}
+                      onClick={() => {
+                        const active = auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark");
+                        if (active) removeWishlistRequest(member.memberId, "Light & Dark");
+                        else submitWishlistRequest(member.memberId, "Light & Dark");
+                      }}
+                   >
+                      {auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark") ? "❌ Remove from Wishlist" : "⭐ Add to Wishlist"}
+                   </button>
+                   {auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark") && (
+                     <div className="animate-pulse" style={{ fontSize: 9, color: "var(--green)", textAlign: "center", fontWeight: 800 }}>
+                        ✨ WISHLIST ACTIVE FOR NEXT AUCTION
+                     </div>
+                   )}
+                </div>
+              </div>
+
+            </div>
+            
+            <div style={{ padding: "0 20px 20px" }}>
+               <div className="glass-card" style={{ padding: 14, border: "1px dashed rgba(240,192,64,0.3)", background: "rgba(240,192,64,0.05)", borderRadius: 12 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                     <div style={{ marginTop: 2, padding: 8, background: "rgba(240,192,64,0.1)", borderRadius: 8 }}>
+                        <Icon name="info" size={16} color="var(--gold)" />
+                     </div>
+                     <div>
+                        <div style={{ fontWeight: 800, fontSize: 12, color: "var(--gold)", marginBottom: 4, letterSpacing: 1, fontFamily: "Cinzel, serif" }}>AUCTION GUIDELINES & POLICY</div>
+                        <div style={{ fontSize: 10, color: "var(--text-secondary)", lineHeight: 1.6, opacity: 0.9 }}>
+                           Wishlist items prioritize your visibility to officers but do not guarantee an immediate slot. 
+                           Loot distribution follows a <strong>rotational distribution system</strong> to ensure fairness across all qualified guild members.
+                           Please update your <strong>In-Game Count</strong> regularly to keep your progress accurate.
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
           </div>
 
           {/* Participation Heatmap */}

@@ -68,7 +68,6 @@ export const NAV_ITEMS = [
   { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },
   { id: "party", label: "Party Builder", icon: "party" },
   { id: "import", label: "Import CSV", icon: "save" },
-  { id: "report", label: "Weekly Report", icon: "report" },
   { id: "auction", label: "Auction Builder", icon: "trophy" },
   { id: "requests", label: "Requests", icon: "edit" },
   { id: "users", label: "User Management", icon: "users" },

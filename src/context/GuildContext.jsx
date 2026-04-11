@@ -67,6 +67,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [auctionWishlist, setAuctionWishlist] = useState([]);
   const [discordConfig, setDiscordConfig] = useState({ 
     webhookUrl: "", 
     masterRoleId: "", 
@@ -581,10 +582,18 @@ export const GuildProvider = ({ children, initialData }) => {
             }
           );
           unsubs.push(unsubJoinReqs);
-        } else {
-          setRequests([]);
           setJoinRequests([]);
         }
+
+        // Loot Wishlist Listener
+        const unsubAuctionWishlist = onSnapshot(
+          collection(db, "auction_bids"),
+          (snap) => {
+            const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+            setAuctionWishlist(docs);
+          }
+        );
+        unsubs.push(unsubAuctionWishlist);
 
       } catch (err) {
         console.error("Listener setup error:", err);
@@ -1804,6 +1813,88 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  // Aggregate Member Loot Stats (derive from session data)
+  const memberLootStats = React.useMemo(() => {
+    const stats = {};
+    auctionSessions.forEach(s => {
+      if (!s.cells) return;
+      Object.entries(s.cells).forEach(([key, tags]) => {
+        if (!tags || tags.length === 0) return;
+        
+        let col = s.columns?.find(c => key.endsWith(`_${c.id}`));
+        if (!col) col = s.columns?.find(c => key.endsWith(`_${c.name}`));
+        if (!col) return;
+
+        const mIdFromKey = key.substring(0, key.length - (col.id || col.name).length - 1).trim().toLowerCase();
+        const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mIdFromKey);
+        if (!member) return;
+
+        const mId = member.memberId;
+        if (!stats[mId]) stats[mId] = { cardAlbums: 0, feathers: 0 };
+
+        tags.forEach(tag => {
+          if (tag.startsWith("!")) return; // Skip outbids
+          if (col.name === "Card Album") {
+            stats[mId].cardAlbums += 1;
+          } else if (col.name === "Light & Dark") {
+            stats[mId].feathers += 1;
+          }
+        });
+      });
+    });
+    return stats;
+  }, [auctionSessions, members]);
+
+  const submitWishlistRequest = async (memberId, resourceType, metadata = {}) => {
+    try {
+      const bidRef = doc(db, "auction_bids", memberId);
+      const snap = await getDoc(bidRef);
+      const data = snap.exists() ? snap.data() : { bids: [] };
+      
+      const newBid = {
+        type: resourceType,
+        ts: Date.now(),
+        status: "pending",
+        ...metadata
+      };
+
+      const updatedBids = [...(data.bids || []).filter(b => b.type !== resourceType), newBid];
+      await setDoc(bidRef, { memberId, bids: updatedBids });
+      return true;
+    } catch (err) {
+      console.error("Wishlist submission failed:", err);
+      return false;
+    }
+  };
+
+  const updateWishlistMetadata = async (memberId, resourceType, metadata) => {
+    try {
+      const bidRef = doc(db, "auction_bids", memberId);
+      const snap = await getDoc(bidRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const updatedBids = (data.bids || []).map(b => 
+        b.type === resourceType ? { ...b, ...metadata } : b
+      );
+      await setDoc(bidRef, { memberId, bids: updatedBids });
+    } catch (err) {
+      console.error("Wishlist metadata update failed:", err);
+    }
+  };
+
+  const removeWishlistRequest = async (memberId, resourceType) => {
+    try {
+      const bidRef = doc(db, "auction_bids", memberId);
+      const snap = await getDoc(bidRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const updatedBids = (data.bids || []).filter(b => b.type !== resourceType);
+      await setDoc(bidRef, { memberId, bids: updatedBids });
+    } catch (err) {
+      console.error("Wishlist removal failed:", err);
+    }
+  };
+
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
@@ -1828,7 +1919,8 @@ export const GuildProvider = ({ children, initialData }) => {
     battlelogConfig, setBattlelogConfig,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
-    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill
+    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill,
+    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata
 
   };
 

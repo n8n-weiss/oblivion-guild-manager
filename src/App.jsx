@@ -45,7 +45,6 @@ const AbsencesPage = lazyWithRetry(() => import("./pages/AbsencesPage"), "absenc
 const LeaderboardPage = lazyWithRetry(() => import("./pages/LeaderboardPage"), "leaderboard");
 const PartyBuilder = lazyWithRetry(() => import("./pages/PartyBuilder"), "party");
 const MemberProfilePage = lazyWithRetry(() => import("./pages/MemberProfilePage"), "member-profile");
-const WeeklyReportPage = lazyWithRetry(() => import("./pages/WeeklyReportPage"), "report");
 const AuctionBuilder = lazyWithRetry(() => import("./pages/AuctionBuilder"), "auction");
 const ImportPage = lazyWithRetry(() => import("./pages/ImportPage"), "import");
 const AuditLogPage = lazyWithRetry(() => import("./pages/AuditLogPage"), "auditlog");
@@ -62,7 +61,6 @@ const pagePrefetchers = {
   leaderboard: () => import("./pages/LeaderboardPage"),
   party: () => import("./pages/PartyBuilder"),
   import: () => import("./pages/ImportPage"),
-  report: () => import("./pages/WeeklyReportPage"),
   auction: () => import("./pages/AuctionBuilder"),
   users: () => import("./pages/UserManagementPage"),
   auditlog: () => import("./pages/AuditLogPage"),
@@ -238,7 +236,7 @@ export default function App() {
       }
       if (awaitingGo) {
         const key = e.key.toLowerCase();
-        const map = { m: "members", e: "events", a: "auction", l: "leaderboard", d: "dashboard", p: "party", r: "report", i: "import" };
+        const map = { m: "members", e: "events", a: "auction", l: "leaderboard", d: "dashboard", p: "party", i: "import" };
         if (map[key]) {
           e.preventDefault();
           setPage(map[key]);
