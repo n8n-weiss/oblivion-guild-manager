@@ -135,7 +135,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     notifications, markNotifRead,
     requests, submitRequest,
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
-    auctionSessions
+    auctionSessions, migrateMemberData
   } = useGuild();
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -205,8 +205,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
   const isAccessDenied = isMember && member.memberId !== myMemberId;
 
-  const memberIdx = members.findIndex(m => m.memberId === member.memberId);
-  const mId = (member.memberId || "").toLowerCase();
+  const memberIdx = members.findIndex(m => (m.memberId || "").trim() === (member.memberId || "").trim());
+  const mId = (member.memberId || "").trim().toLowerCase();
   const activeMembers = React.useMemo(
     () => members.filter(m => (m.status || "active") === "active"),
     [members]
@@ -217,17 +217,17 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   );
   const attendanceIndex = React.useMemo(() => {
     const map = new Map();
-    attendance.forEach(a => map.set(`${(a.memberId || "").toLowerCase()}__${a.eventId}`, a));
+    attendance.forEach(a => map.set(`${(a.memberId || "").trim().toLowerCase()}__${a.eventId}`, a));
     return map;
   }, [attendance]);
   const performanceIndex = React.useMemo(() => {
     const map = new Map();
-    performance.forEach(p => map.set(`${(p.memberId || "").toLowerCase()}__${p.eventId}`, p));
+    performance.forEach(p => map.set(`${(p.memberId || "").trim().toLowerCase()}__${p.eventId}`, p));
     return map;
   }, [performance]);
   const eoRatingsIndex = React.useMemo(() => {
     const map = new Map();
-    eoRatings.forEach(r => map.set(`${(r.memberId || "").toLowerCase()}__${r.eventId}`, r));
+    eoRatings.forEach(r => map.set(`${(r.memberId || "").trim().toLowerCase()}__${r.eventId}`, r));
     return map;
   }, [eoRatings]);
   const memberEvents = React.useMemo(() => {
@@ -548,6 +548,19 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     if (success) setShowRequestModal(false);
   };
 
+  const handleRepairHistory = async () => {
+    const oldId = window.prompt(`🛠️ REPAIR DATA LINK\n\nEnter the PREVIOUS Member ID (UID) for ${member.ign} to restore their scores and attendance:`);
+    if (!oldId) return;
+    
+    if (window.confirm(`CONFIRM MIGRATION:\n\nMigrate all past records from ${oldId} to ${member.memberId}?\n\nThis will re-link all attendance and score data for ${member.ign}.`)) {
+      const result = await migrateMemberData(oldId.trim(), (member.memberId || "").trim());
+      if (result.success) {
+        // Reload to let GuildContext fetch the updated documents
+        setTimeout(() => window.location.reload(), 2000);
+      }
+    }
+  };
+
   if (isAccessDenied) {
     return (
       <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -760,9 +773,14 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             </div>
             <div className="flex gap-2 items-center">
               {isArchitect && (
-                <button className="btn btn-sm" style={{ background: "rgba(240,192,64,0.1)", color: "var(--gold)", border: "1px solid var(--gold)" }} onClick={toggleDonator}>
-                  {member.isDonator ? "Revoke Patron" : "Grant Patron 🌟"}
-                </button>
+                <div className="flex gap-2">
+                  <button className="btn btn-sm" style={{ background: "rgba(240,192,64,0.1)", color: "var(--gold)", border: "1px solid var(--gold)" }} onClick={toggleDonator}>
+                    {member.isDonator ? "Revoke Patron" : "Grant Patron 🌟"}
+                  </button>
+                  <button className="btn btn-sm" style={{ background: "rgba(99,130,230,0.1)", color: "var(--accent)", border: "1px solid var(--accent)" }} onClick={handleRepairHistory}>
+                    🛠️ Repair History
+                  </button>
+                </div>
               )}
               {isOwnProfile && (
                 <div className="flex gap-2">

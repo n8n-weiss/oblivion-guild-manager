@@ -299,8 +299,8 @@ function EventsPage() {
   }, [events, sendDiscordEmbed, setEvents, currentUser]);
 
   const toggleAtt = (memberId, eventId) => {
-    const mId = (memberId || "").toLowerCase();
-    const current = attendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === eventId);
+    const mId = (memberId || "").trim().toLowerCase();
+    const current = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
     
     // Cycle: present -> absent -> loa -> present
     let newStatus = "absent";
@@ -324,14 +324,14 @@ function EventsPage() {
 
   const savePerformance = (memberId, eventId) => {
     const key = `${memberId}_${eventId}`;
-    const mId = (memberId || "").toLowerCase();
+    const mId = (memberId || "").trim().toLowerCase();
     const edits = perfEdits[key] || {};
     setPerformance(prev => {
-      const exists = prev.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId);
-      if (exists) return prev.map(p => (p.memberId || "").toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
+      const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
+      if (exists) return prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
       return [...prev, { memberId, eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0, ...edits }];
     });
-    const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
+    const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
     const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
@@ -341,16 +341,16 @@ function EventsPage() {
   const evt = selectedEvent;
   const evtAtt = evt ? attendance.filter(a => a.eventId === evt.eventId) : [];
   const evtMembers = evt ? members.filter(m => {
-    const mId = (m.memberId || "").toLowerCase();
-    const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").toLowerCase() === mId);
+    const mId = (m.memberId || "").trim().toLowerCase();
+    const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").trim().toLowerCase() === mId);
     const isActive = (m.status || "active") === "active";
     return hasAtt || isActive;
   }).map(m => {
-    const mId = (m.memberId || "").toLowerCase();
+    const mId = (m.memberId || "").trim().toLowerCase();
     return {
       ...m,
-      att: evtAtt.find(a => (a.memberId || "").toLowerCase() === mId),
-      perf: performance.find(p => (p.memberId || "").toLowerCase() === mId && p.eventId === evt.eventId)
+      att: evtAtt.find(a => (a.memberId || "").trim().toLowerCase() === mId),
+      perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId)
     };
   }) : [];
   const leaderboardSnapshot = React.useMemo(

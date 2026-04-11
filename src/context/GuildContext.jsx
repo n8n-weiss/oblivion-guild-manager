@@ -1724,6 +1724,49 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const migrateMemberData = async (oldId, newId) => {
+    if (!oldId || !newId) return { success: false, message: "Invalid IDs provided." };
+    const batch = writeBatch(db);
+    let count = 0;
+    
+    try {
+      // 1. Attendance
+      const attQuery = query(collection(db, "attendance"), where("memberId", "==", oldId));
+      const attSnap = await getDocs(attQuery);
+      attSnap.forEach(d => {
+        batch.update(d.ref, { memberId: newId });
+        count++;
+      });
+      
+      // 2. Performance
+      const perfQuery = query(collection(db, "performance"), where("memberId", "==", oldId));
+      const perfSnap = await getDocs(perfQuery);
+      perfSnap.forEach(d => {
+        batch.update(d.ref, { memberId: newId });
+        count++;
+      });
+      
+      // 3. EO Ratings
+      const eoQuery = query(collection(db, "eoRatings"), where("memberId", "==", oldId));
+      const eoSnap = await getDocs(eoQuery);
+      eoSnap.forEach(d => {
+        batch.update(d.ref, { memberId: newId });
+        count++;
+      });
+      
+      if (count > 0) {
+        await batch.commit();
+        showToast(`Migrated ${count} records!`, "success");
+        return { success: true, message: `Successfully migrated ${count} records from ${oldId} to ${newId}.` };
+      }
+      return { success: false, message: "No records found for the old UID." };
+    } catch (err) {
+      console.error("Migration failed:", err);
+      showToast("Migration failed", "error");
+      return { success: false, message: err.message };
+    }
+  };
+
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
@@ -1742,7 +1785,7 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
     notifications, sendNotification, markNotifRead,
-    requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
+    requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests, migrateMemberData,
     joinRequests, submitJoinRequest, submitReactivationRequest, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     battlelogConfig, setBattlelogConfig,

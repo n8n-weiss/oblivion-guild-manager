@@ -116,6 +116,7 @@ function LoginPage() {
         setLoading(false);
         setAuthNotice("");
       }
+    }
   };
 
 
