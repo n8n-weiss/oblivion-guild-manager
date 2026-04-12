@@ -93,9 +93,15 @@ function EventsPage() {
 
   React.useEffect(() => {
     if (monthKeys.length > 0 && Object.keys(expandedMonths).length === 0) {
-      setExpandedMonths({ [monthKeys[0]]: true });
+      const latestMonth = monthKeys[0];
+      setExpandedMonths({ [latestMonth]: true });
+      
+      const weeks = Object.keys(groupedEvents[latestMonth]);
+      if (weeks.length > 0) {
+        setExpandedWeeks({ [weeks[0]]: true });
+      }
     }
-  }, [monthKeys, expandedMonths]);
+  }, [monthKeys, groupedEvents, expandedMonths]);
 
   const toggleMonth = (month) => {
     setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] }));
@@ -565,23 +571,25 @@ function EventsPage() {
                     <div className="flex flex-col gap-1" style={{ paddingLeft: 8, borderLeft: "1px solid rgba(99,130,230,0.15)", marginLeft: 8, animation: "fade-in 0.2s" }}>
                       {weekKeys.map(weekKey => {
                         const weekEvents = weekGroups[weekKey];
-                        const isWeekExpanded = expandedWeeks[weekKey] !== false; // Active by default or state
+                        const isWeekExpanded = !!expandedWeeks[weekKey];
                         return (
                           <div key={weekKey} style={{ marginBottom: 4 }}>
-                            <div 
-                              onClick={() => toggleWeek(weekKey)}
+                            <button
+                              className="btn btn-ghost btn-sm"
                               style={{ 
-                                display: "flex", alignItems: "center", justifySpace: "between", cursor: "pointer", 
-                                padding: "4px 8px", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, 
-                                opacity: 0.8, letterSpacing: 0.5 
-                              }}>
-                              <span style={{ marginRight: 6, fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
-                              {weekKey.toUpperCase()}
-                              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 8 }} />
-                            </div>
+                                width: "100%", justifyContent: "flex-start", fontSize: 10, padding: "6px 10px", 
+                                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", 
+                                borderRadius: 6, gap: 8, letterSpacing: 0.5, color: isWeekExpanded ? "var(--text-primary)" : "var(--text-muted)"
+                              }}
+                              onClick={() => toggleWeek(weekKey)}
+                            >
+                              <span style={{ color: isWeekExpanded ? "var(--accent)" : "rgba(255,255,255,0.2)", fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
+                              <span style={{ fontWeight: 800 }}>{weekKey.toUpperCase()}</span>
+                              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.03)", marginLeft: 2 }} />
+                            </button>
                             
                             {isWeekExpanded && (
-                              <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s" }}>
+                              <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s", paddingLeft: 4 }}>
                                 {weekEvents.map(ev => {
                                   const evAtt = attendance.filter(a => a.eventId === ev.eventId);
                                   const present = evAtt.filter(a => (a.status || "present") === "present").length;
