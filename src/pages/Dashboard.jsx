@@ -145,7 +145,7 @@ function Dashboard() {
         type: ev.eventType === "Guild League" ? "⚔️" : "🏰"
       };
     });
-  }, [events, attendance]);
+  }, [events, attendance, activeMembers]);
 
   return (
     <div>

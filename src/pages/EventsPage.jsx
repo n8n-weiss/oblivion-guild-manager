@@ -727,7 +727,7 @@ function EventsPage() {
                           )}
                           {selectedEvent.eventType === "Emperium Overrun" && (
                             <td>
-                              {m.att?.status === "present" ? (
+                              {(m.att?.status || "present") === "present" ? (
                                 <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
                                   {[1, 2, 3, 4, 5].map(star => {
                                     const currentRating = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
@@ -735,6 +735,17 @@ function EventsPage() {
                                       <span key={star}
                                         onClick={() => {
                                           const newRating = star === currentRating ? 0 : star;
+                                          // Auto-persistence: ensure attendance record exists if rating is being saved
+                                          if (!m.att) {
+                                            setAttendance(prev => {
+                                              if (prev.find(a => (a.memberId || "").toLowerCase() === (m.memberId || "").toLowerCase() && a.eventId === selectedEvent.eventId)) return prev;
+                                              return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, status: "present" }];
+                                            });
+                                          } else if (m.att.status !== "present") {
+                                            // Optional: Force back to present if somehow rated while being absent
+                                            setAttendance(prev => prev.map(a => (a.memberId || "").toLowerCase() === (m.memberId || "").toLowerCase() && a.eventId === selectedEvent.eventId ? { ...a, status: "present" } : a));
+                                          }
+
                                           setEoRatings(prev => {
                                             const exists = prev.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId);
                                             if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? { ...r, rating: newRating } : r);
@@ -756,7 +767,9 @@ function EventsPage() {
                                   })()}
                                 </div>
                               ) : (
-                                <span className="text-xs text-muted">— absent</span>
+                                <span className="text-xs text-muted" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  <span style={{ color: "var(--red)" }}>❌</span> absent
+                                </span>
                               )}
                             </td>
                           )}

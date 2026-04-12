@@ -1258,7 +1258,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
               {memberEvents.map(ev => {
-                const isPresent = ev.att?.status === "present";
+                const isPresent = (ev.att?.status || "present") === "present";
                 const isGL = ev.eventType === "Guild League";
                 const isEO = ev.eventType === "Emperium Overrun";
                 const barColor = isPresent ? (isGL ? theme.color : "var(--gold)") : "var(--red)";
@@ -1278,7 +1278,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                       </div>
                       <div style={{ flex: 1 }}>
                         <span style={{ fontWeight: 700, fontSize: 12, color: isPresent ? "var(--green)" : "var(--red)" }}>
-                          {isPresent ? "✅ Present" : "❌ Absent"}
+                          {isPresent ? "✅ Present" : (ev.att?.status === "loa" ? "🛌 LOA" : "❌ Absent")}
                         </span>
                         {isGL && isPresent && (
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
