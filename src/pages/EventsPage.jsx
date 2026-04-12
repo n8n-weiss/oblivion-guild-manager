@@ -54,25 +54,42 @@ function EventsPage() {
   const [postingDigest, setPostingDigest] = useState(false);
   const [finalizingDigest, setFinalizingDigest] = useState(false);
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [expandedWeeks, setExpandedWeeks] = useState({});
 
   const groupedEvents = React.useMemo(() => {
     const groups = {};
     events.slice().reverse().forEach(ev => {
       if (!ev.eventDate) return;
       const dateObj = new Date(ev.eventDate);
-      if (!isNaN(dateObj)) {
-        const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-        if (!groups[monthYear]) groups[monthYear] = [];
-        groups[monthYear].push(ev);
-      } else {
-        if (!groups["Unknown Date"]) groups["Unknown Date"] = [];
-        groups["Unknown Date"].push(ev);
+      if (isNaN(dateObj)) {
+        if (!groups["Unknown Date"]) groups["Unknown Date"] = { "Events": [] };
+        if (!groups["Unknown Date"]["Events"]) groups["Unknown Date"]["Events"] = [];
+        groups["Unknown Date"]["Events"].push(ev);
+        return;
       }
+
+      const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      if (!groups[monthYear]) groups[monthYear] = {};
+      
+      // Weekly grouping
+      const dom = dateObj.getDate();
+      const weekNum = Math.ceil(dom / 7);
+      const startDay = (weekNum - 1) * 7 + 1;
+      const endDay = Math.min(new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate(), weekNum * 7);
+      const mName = dateObj.toLocaleDateString("en-US", { month: "short" });
+      const weekKey = `Week ${weekNum} • ${mName} ${startDay} – ${mName} ${endDay}`;
+      
+      if (!groups[monthYear][weekKey]) groups[monthYear][weekKey] = [];
+      groups[monthYear][weekKey].push(ev);
     });
     return groups;
   }, [events]);
 
   const monthKeys = React.useMemo(() => Object.keys(groupedEvents), [groupedEvents]);
+
+  const toggleWeek = (weekKey) => {
+    setExpandedWeeks(prev => ({ ...prev, [weekKey]: !prev[weekKey] }));
+  };
 
   React.useEffect(() => {
     if (monthKeys.length > 0 && Object.keys(expandedMonths).length === 0) {
@@ -523,61 +540,87 @@ function EventsPage() {
           <div className="flex flex-col gap-2">
             {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
             {monthKeys.map(month => {
-              const monthEvents = groupedEvents[month];
-              const isExpanded = !!expandedMonths[month];
+              const weekGroups = groupedEvents[month];
+              const isMonthExpanded = !!expandedMonths[month];
+              const weekKeys = Object.keys(weekGroups);
+              
               return (
-                <div key={month} style={{ marginBottom: 4 }}>
+                <div key={month} style={{ marginBottom: 6 }}>
                   <button
                     className="btn btn-ghost btn-sm"
-                    style={{ width: "100%", justifyContent: "space-between", fontSize: 11, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: isExpanded ? 8 : 0 }}
+                    style={{ 
+                      width: "100%", justifyContent: "space-between", fontSize: 11, padding: "10px 12px", 
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", 
+                      marginBottom: isMonthExpanded ? 8 : 0, borderRadius: 8
+                    }}
                     onClick={() => toggleMonth(month)}
                   >
-                    <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{isExpanded ? "▼" : "▶"} {month.toUpperCase()}</span>
-                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{monthEvents.length}</span>
+                    <span style={{ fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ color: "var(--accent)", fontSize: 10 }}>{isMonthExpanded ? "▼" : "▶"}</span> {month.toUpperCase()}
+                    </span>
+                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{Object.values(weekGroups).flat().length}</span>
                   </button>
-                  {isExpanded && (
-                    <div className="flex flex-col gap-2" style={{ animation: "fade-in 0.2s" }}>
-                      {monthEvents.map(ev => {
-                        const evAtt = attendance.filter(a => a.eventId === ev.eventId);
-                        const present = evAtt.filter(a => a.status === "present").length;
-                        const isActive = selectedEvent?.eventId === ev.eventId;
+
+                  {isMonthExpanded && (
+                    <div className="flex flex-col gap-1" style={{ paddingLeft: 8, borderLeft: "1px solid rgba(99,130,230,0.15)", marginLeft: 8, animation: "fade-in 0.2s" }}>
+                      {weekKeys.map(weekKey => {
+                        const weekEvents = weekGroups[weekKey];
+                        const isWeekExpanded = expandedWeeks[weekKey] !== false; // Active by default or state
                         return (
-                          <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
-                            className="card" style={{ cursor: "pointer", padding: "14px 16px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none" }}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-cinzel" style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 700 }}>{ev.eventDate}</span>
-                              <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 9 }}>
-                                {ev.eventType === "Guild League" ? "GL" : "EO"}
-                              </span>
+                          <div key={weekKey} style={{ marginBottom: 4 }}>
+                            <div 
+                              onClick={() => toggleWeek(weekKey)}
+                              style={{ 
+                                display: "flex", alignItems: "center", justifySpace: "between", cursor: "pointer", 
+                                padding: "4px 8px", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, 
+                                opacity: 0.8, letterSpacing: 0.5 
+                              }}>
+                              <span style={{ marginRight: 6, fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
+                              {weekKey.toUpperCase()}
+                              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 8 }} />
                             </div>
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-muted">{present}/{evAtt.length} present</div>
-                              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                {ev.battlelogAudit?.escalatedAt ? (
-                                  <span className="badge badge-atrisk" style={{ fontSize: 9 }}>Escalated</span>
-                                ) : getAuditStatus(ev) === "submitted" ? (
-                                  <span className="badge badge-active" style={{ fontSize: 9 }}>Audit Done</span>
-                                ) : getAuditStatus(ev) ? (
-                                  <span className="badge badge-casual" style={{ fontSize: 9 }}>
-                                    {getAuditStatus(ev) === "overdue" ? "Audit Overdue" : "Audit Pending"}
-                                  </span>
-                                ) : null}
+                            
+                            {isWeekExpanded && (
+                              <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s" }}>
+                                {weekEvents.map(ev => {
+                                  const evAtt = attendance.filter(a => a.eventId === ev.eventId);
+                                  const present = evAtt.filter(a => (a.status || "present") === "present").length;
+                                  const isActive = selectedEvent?.eventId === ev.eventId;
+                                  return (
+                                    <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
+                                      className="card" style={{ cursor: "pointer", padding: "12px 14px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none", background: isActive ? "rgba(99,130,230,0.03)" : undefined }}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="font-cinzel" style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 700 }}>{new Date(ev.eventDate).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })}</span>
+                                        <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 8, padding: "1px 6px" }}>
+                                          {ev.eventType === "Guild League" ? "GL" : "EO"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="text-[10px] text-muted">{present}/{evAtt.length} present</div>
+                                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                          {getAuditStatus(ev) === "submitted" && <span title="Audited" style={{ color: "var(--green)", fontSize: 10 }}>●</span>}
+                                          {getAuditStatus(ev) === "overdue" && <span title="Overdue" style={{ color: "var(--red)", fontSize: 10 }}>●</span>}
+                                        </div>
+                                      </div>
+                                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                                        {confirmDelete === ev.eventId ? (
+                                          <div className="flex gap-2 items-center">
+                                            <span className="text-xs text-muted">Delete?</span>
+                                            <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); deleteEvent(ev.eventId); }}>Yes</button>
+                                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }}>No</button>
+                                          </div>
+                                        ) : (
+                                          isAdmin ? <button className="btn btn-danger btn-sm" style={{ width: "100%", padding: "4px" }}
+                                            onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
+                                            <Icon name="trash" size={10} /> Delete
+                                          </button> : null
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            </div>
-                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-                              {confirmDelete === ev.eventId ? (
-                                <div className="flex gap-2 items-center">
-                                  <span className="text-xs text-muted">Delete?</span>
-                                  <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.eventId)}>Yes</button>
-                                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>No</button>
-                                </div>
-                              ) : (
-                                isAdmin ? <button className="btn btn-danger btn-sm" style={{ width: "100%" }}
-                                  onClick={e => { e.stopPropagation(); setConfirmDelete(ev.eventId); }}>
-                                  <Icon name="trash" size={12} /> Delete
-                                </button> : null
-                              )}
-                            </div>
+                            )}
                           </div>
                         );
                       })}

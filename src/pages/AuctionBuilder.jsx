@@ -410,25 +410,42 @@ function AuctionBuilder() {
   const [mapFocusMode, setMapFocusMode] = useState(() => localStorage.getItem("auction_mapFocusMode") === "1");
 
   const [expandedSessionMonths, setExpandedSessionMonths] = useState({});
+  const [expandedSessionWeeks, setExpandedSessionWeeks] = useState({});
 
   const groupedSessions = React.useMemo(() => {
     const groups = {};
     auctionSessions.slice().reverse().forEach(s => {
       if (!s.date) return;
       const dateObj = new Date(s.date);
-      if (!isNaN(dateObj)) {
-        const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-        if (!groups[monthYear]) groups[monthYear] = [];
-        groups[monthYear].push(s);
-      } else {
-        if (!groups["Unknown Date"]) groups["Unknown Date"] = [];
-        groups["Unknown Date"].push(s);
+      if (isNaN(dateObj)) {
+        if (!groups["Unknown Date"]) groups["Unknown Date"] = { "Sessions": [] };
+        if (!groups["Unknown Date"]["Sessions"]) groups["Unknown Date"]["Sessions"] = [];
+        groups["Unknown Date"]["Sessions"].push(s);
+        return;
       }
+
+      const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      if (!groups[monthYear]) groups[monthYear] = {};
+      
+      // Weekly grouping
+      const dom = dateObj.getDate();
+      const weekNum = Math.ceil(dom / 7);
+      const startDay = (weekNum - 1) * 7 + 1;
+      const endDay = Math.min(new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate(), weekNum * 7);
+      const mName = dateObj.toLocaleDateString("en-US", { month: "short" });
+      const weekKey = `Week ${weekNum} • ${mName} ${startDay} – ${mName} ${endDay}`;
+      
+      if (!groups[monthYear][weekKey]) groups[monthYear][weekKey] = [];
+      groups[monthYear][weekKey].push(s);
     });
     return groups;
   }, [auctionSessions]);
 
   const sessionMonthKeys = React.useMemo(() => Object.keys(groupedSessions), [groupedSessions]);
+
+  const toggleSessionWeek = (weekKey) => {
+    setExpandedSessionWeeks(prev => ({ ...prev, [weekKey]: !prev[weekKey] }));
+  };
 
   React.useEffect(() => {
     if (sessionMonthKeys.length > 0 && Object.keys(expandedSessionMonths).length === 0) {
@@ -1255,37 +1272,70 @@ function AuctionBuilder() {
               />
             )}
             {sessionMonthKeys.map(month => {
-              const monthSessions = groupedSessions[month];
-              const isExpanded = !!expandedSessionMonths[month];
+              const weekGroups = groupedSessions[month];
+              const isMonthExpanded = !!expandedSessionMonths[month];
+              const weekKeys = Object.keys(weekGroups);
+              
               return (
-                <div key={month} style={{ marginBottom: 4 }}>
+                <div key={month} style={{ marginBottom: 6 }}>
                   <button
                     className="btn btn-ghost btn-sm"
-                    style={{ width: "100%", justifyContent: "space-between", fontSize: 11, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: isExpanded ? 8 : 0 }}
+                    style={{ 
+                      width: "100%", justifyContent: "space-between", fontSize: 11, padding: "10px 12px", 
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", 
+                      marginBottom: isMonthExpanded ? 8 : 0, borderRadius: 8
+                    }}
                     onClick={() => toggleSessionMonth(month)}
                   >
-                    <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{isExpanded ? "▼" : "▶"} {month.toUpperCase()}</span>
-                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{monthSessions.length}</span>
+                    <span style={{ fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ color: "var(--accent)", fontSize: 10 }}>{isMonthExpanded ? "▼" : "▶"}</span> {month.toUpperCase()}
+                    </span>
+                    <span className="badge badge-casual" style={{ fontSize: 9 }}>{Object.values(weekGroups).flat().length}</span>
                   </button>
-                  {isExpanded && (
-                    <div className="flex flex-col gap-2" style={{ animation: "fade-in 0.2s" }}>
-                      {monthSessions.map(s => (
-                        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer" }}
-                          onClick={() => { setActiveSession(s.id); setView("editor"); }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
-                            <div className="text-xs text-muted">{s.date} · {s.members.length} members · {s.columns.length} resources</div>
+
+                  {isMonthExpanded && (
+                    <div className="flex flex-col gap-1" style={{ paddingLeft: 8, borderLeft: "1px solid rgba(99,130,230,0.15)", marginLeft: 8, animation: "fade-in 0.2s" }}>
+                      {weekKeys.map(weekKey => {
+                        const weekSessions = weekGroups[weekKey];
+                        const isWeekExpanded = expandedSessionWeeks[weekKey] !== false; // Default expanded
+                        return (
+                          <div key={weekKey} style={{ marginBottom: 4 }}>
+                            <div 
+                              onClick={() => toggleSessionWeek(weekKey)}
+                              style={{ 
+                                display: "flex", alignItems: "center", justifySpace: "between", cursor: "pointer", 
+                                padding: "4px 8px", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, 
+                                opacity: 0.8, letterSpacing: 0.5 
+                              }}>
+                              <span style={{ marginRight: 6, fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
+                              {weekKey.toUpperCase()}
+                              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 8 }} />
+                            </div>
+                            
+                            {isWeekExpanded && (
+                              <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s" }}>
+                                {weekSessions.map(s => (
+                                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer", borderColor: activeSession === s.id ? "var(--accent)" : "var(--border)" }}
+                                    onClick={() => { setActiveSession(s.id); setView("editor"); }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                                      <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>{new Date(s.date).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })} · {s.members.length} members</div>
+                                    </div>
+                                    <ConfirmTwiceButton
+                                      className="btn btn-danger btn-sm btn-icon"
+                                      onClick={(e) => e.stopPropagation()}
+                                      onConfirm={() => deleteSession(s.id)}
+                                      icon={<Icon name="trash" size={12} />}
+                                      iconOnly
+                                      title="Delete session"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <ConfirmTwiceButton
-                            className="btn btn-danger btn-sm btn-icon"
-                            onClick={(e) => e.stopPropagation()}
-                            onConfirm={() => deleteSession(s.id)}
-                            icon={<Icon name="trash" size={12} />}
-                            iconOnly
-                            title="Delete session"
-                          />
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
