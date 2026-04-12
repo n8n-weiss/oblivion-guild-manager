@@ -98,6 +98,7 @@ function EventsPage() {
       
       const weeks = Object.keys(groupedEvents[latestMonth]);
       if (weeks.length > 0) {
+        // Expand ONLY the first week (latest) in the latest month
         setExpandedWeeks({ [weeks[0]]: true });
       }
     }
@@ -578,8 +579,10 @@ function EventsPage() {
                               className="btn btn-ghost btn-sm"
                               style={{ 
                                 width: "100%", justifyContent: "flex-start", fontSize: 10, padding: "6px 10px", 
-                                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", 
-                                borderRadius: 6, gap: 8, letterSpacing: 0.5, color: isWeekExpanded ? "var(--text-primary)" : "var(--text-muted)"
+                                background: isWeekExpanded ? "rgba(99,130,230,0.08)" : "rgba(255,255,255,0.02)", 
+                                border: "1px solid rgba(255,255,255,0.04)", 
+                                borderRadius: 6, gap: 8, letterSpacing: 0.5, color: isWeekExpanded ? "var(--text-primary)" : "var(--text-muted)",
+                                height: "auto"
                               }}
                               onClick={() => toggleWeek(weekKey)}
                             >

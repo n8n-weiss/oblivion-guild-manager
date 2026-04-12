@@ -72,50 +72,103 @@ function LoginPage() {
   }, [tab]);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) { setError("Please fill in all fields."); return; }
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password.trim()) { setError("Please fill in all fields."); return; }
+    
     setLoading(true);
     setError("");
     setAuthNotice("Authenticating guild credentials...");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      localStorage.setItem("last_login_uid_v1", email.trim().toLowerCase());
-    } catch {
-      // Fallback: Check if there's an approved join request that hasn't been "claimed" (created) yet
-      try {
-        const cleanPass = password.toUpperCase().startsWith("OBL") ? password.toUpperCase() : "OBL" + password;
-        const q = query(collection(db, "join_requests"), where("status", "==", "approved"), where("uid", "==", cleanPass));
-        const snap = await getDocs(q);
 
-        if (!snap.empty) {
-          const r = snap.docs[0].data();
-          const cleanDiscord = r.discord.toLowerCase().replace(/[^a-z0-9]/g, '');
+    try {
+      // 1. Primary Attempt: Standard sign-in
+      try {
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
+        localStorage.setItem("last_login_uid_v1", cleanEmail);
+        return; // Redirect happens in App.jsx via Context update
+      } catch (authErr) {
+        // If it's a "user not found" or "wrong password", try the fallback setup
+        if (authErr.code !== 'auth/user-not-found' && authErr.code !== 'auth/wrong-password' && authErr.code !== 'auth/invalid-credential') {
+          throw authErr;
+        }
+        
+        // 2. Fallback Attempt: Check Join Requests or Roster for auto-creation
+        const cleanPass = password.toUpperCase().trim();
+        const finalPass = cleanPass.startsWith("OBL") ? cleanPass : "OBL" + cleanPass;
+
+        // A. Check Join Requests first (New Applications)
+        const qJoin = query(collection(db, "join_requests"), where("status", "==", "approved"), where("uid", "==", finalPass));
+        const snapJoin = await getDocs(qJoin);
+        let matchFound = false;
+        let userData = null;
+
+        if (!snapJoin.empty) {
+          const r = snapJoin.docs[0].data();
+          const cleanDiscord = (r.discord || "").toLowerCase().replace(/[^a-z0-9]/g, '');
           const calculatedEmail = `${cleanDiscord}@oblivion.com`;
 
-          if (email.toLowerCase() === calculatedEmail) {
-            // Automatic creation and login
-            const cred = await createUserWithEmailAndPassword(auth, email, cleanPass);
-            await setDoc(doc(db, "userroles", cred.user.uid), {
-              role: "member",
-              memberId: cleanPass,
+          if (cleanEmail === calculatedEmail) {
+            matchFound = true;
+            userData = {
+              memberId: finalPass,
               email: calculatedEmail,
               displayName: r.ign,
-              createdAt: new Date()
-            });
-            localStorage.setItem("last_login_uid_v1", email.trim().toLowerCase());
-            return;
+              role: "member"
+            };
           }
         }
-      } catch (innerErr) {
-        console.error("Auto-setup fallback failed:", innerErr);
-        if (innerErr.code === 'permission-denied') {
-          setError("Portal Link Error: Security rules are blocking automatic account verification. Please ask an Officer to check your account status in User Management.");
-        } else {
-          setError("Invalid email or password. If you just applied, please wait for an Officer to approve your request.");
+
+        // B. Check Roster if no join request match (Legacy/Imported Members)
+        if (!matchFound) {
+          const qRoster = query(collection(db, "roster"), where("memberId", "==", finalPass));
+          const snapRoster = await getDocs(qRoster);
+          
+          if (!snapRoster.empty) {
+            const m = snapRoster.docs[0].data();
+            const cleanDiscord = (m.discord || m.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+            const calculatedEmail = `${cleanDiscord}@oblivion.com`;
+
+            if (cleanEmail === calculatedEmail) {
+              matchFound = true;
+              userData = {
+                memberId: finalPass,
+                email: calculatedEmail,
+                displayName: m.ign,
+                role: "member"
+              };
+            } else {
+              // Found the UID, but email mismatch. Show specific hint.
+              throw new Error(`Credential mismatch. For UID ${finalPass}, your portal email should be ${calculatedEmail}.`);
+            }
+          }
         }
-      } finally {
-        setLoading(false);
-        setAuthNotice("");
+
+        if (matchFound && userData) {
+          setAuthNotice("Setting up your portal account...");
+          const cred = await createUserWithEmailAndPassword(auth, cleanEmail, finalPass);
+          await setDoc(doc(db, "userroles", cred.user.uid), {
+            ...userData,
+            createdAt: new Date()
+          });
+          localStorage.setItem("last_login_uid_v1", cleanEmail);
+          return;
+        }
+
+        // 3. Final Fallback: If no match found at all
+        throw new Error("Invalid credentials. If you are a new member, please sign up first. If you are a legacy member, ensure you are using your OBL+UID as password.");
       }
+    } catch (err) {
+      console.error("Login sequence failed:", err);
+      if (err.code === 'permission-denied') {
+        setError("Portal Link Error: Security rules are blocking verification. Please contact an Officer.");
+      } else if (err.code === 'auth/network-request-failed') {
+        setError("Network error. Please check your connection.");
+      } else {
+        setError(err.message || "Sign in failed.");
+      }
+    } finally {
+      // This finally block ensures loading is cleared if we are still on this page
+      setLoading(false);
+      setAuthNotice("");
     }
   };
 
