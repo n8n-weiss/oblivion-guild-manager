@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
-import { computeScore, computeLeaderboard } from '../utils/scoring';
+import { computeLeaderboard } from '../utils/scoring';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -30,7 +30,12 @@ function renderAttendanceTooltip({ active, payload, label }) {
 }
 
 function Dashboard() {
-  const { members, events, attendance, performance, parties, onlineUsers = [] } = useGuild();
+  const { 
+    members, events, attendance, performance, onlineUsers = [], 
+    requests = [], joinRequests = [], absences = [], auctionWishlist = [], 
+    myMemberId, isOfficer 
+  } = useGuild();
+  
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
   
@@ -48,18 +53,6 @@ function Dashboard() {
 
   const totalExpected = activeMembers.length * events.length;
   const attRate = totalExpected ? Math.round((totalPresences / totalExpected) * 100) : 0;
-  const activeClassCount = lb.filter(m => m.classification === "Core" || m.classification === "Active").length;
-  const top5 = lb.slice(0, 5);
-
-  const avatarColors = ["#6382e6", "#e05c8a", "#40c97a", "#f0c040", "#a78bfa", "#38bdf8", "#fb923c", "#f472b6", "#34d399", "#fbbf24"];
-
-  // Role distribution
-  const dpsCount = activeMembers.filter(m => m.role === "DPS").length;
-  const supCount = activeMembers.filter(m => m.role === "Support").length;
-  const total = activeMembers.length || 1;
-
-  // Recent events for trend
-  const recentEvents = events.slice(-5);
 
   // Guild Level and XP Calculation
   const totalGuildScore = lb.reduce((sum, m) => sum + (m.totalScore || 0), 0);
@@ -68,13 +61,76 @@ function Dashboard() {
   const currentLevelXP = Math.pow(guildLevel, 2) * 10;
   const xpProgress = Math.min(100, Math.round(((totalGuildScore - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100));
 
-  // Activity Feed (Simulated based on recent data)
+  // --- OFFICER SPECIFIC METRICS ---
+  const pendingJoin = joinRequests.filter(r => r.status === "pending").length;
+  const pendingProfile = requests.filter(r => r.status === "pending").length;
+  const upcomingAbsences = absences.filter(a => new Date(a.date) >= new Date()).length;
+  const pendingAudits = events.filter(ev => ev.battlelogAudit && ev.battlelogAudit.status === "pending");
+
+  // --- ABSENCE WATCHLIST (At Risk) ---
+  const atRiskMembers = useMemo(() => {
+    const allAbsencesMap = {};
+    events.forEach(ev => {
+      const evAtt = attendance.filter(a => a.eventId === ev.eventId);
+      activeMembers.forEach(m => {
+        const a = evAtt.find(att => att.memberId === m.memberId);
+        if ((a?.status || "present") !== "present") {
+          allAbsencesMap[m.memberId] = (allAbsencesMap[m.memberId] || 0) + 1;
+        }
+      });
+    });
+    return Object.entries(allAbsencesMap)
+      .map(([memberId, count]) => {
+         const member = activeMembers.find(m => m.memberId === memberId);
+         return { memberId, ign: member?.ign || memberId, class: member?.class || "Unknown", count };
+      })
+      .filter(m => activeMembers.some(am => am.memberId === m.memberId))
+      .sort((a, b) => b.count - a.count);
+  }, [events, attendance, activeMembers]);
+
+  // --- MEMBER SPECIFIC METRICS ---
+  const myProfile = useMemo(() => activeMembers.find(m => m.memberId === myMemberId), [activeMembers, myMemberId]);
+  const myLbEntry = useMemo(() => lb.find(l => l.memberId === myMemberId), [lb, myMemberId]);
+  const myRankNum = useMemo(() => lb.findIndex(l => l.memberId === myMemberId) + 1, [lb, myMemberId]);
+
+  // --- LOOT WISHLIST RADAR ---
+  const wishlistRadar = useMemo(() => {
+     let cardAlbumCount = 0;
+     let ldCount = 0;
+     const albumMembers = [];
+     const ldMembers = [];
+     
+     auctionWishlist.forEach(entry => {
+       const member = activeMembers.find(m => m.memberId === entry.id);
+       if (!member) return;
+       const bids = entry.bids || [];
+       if (bids.some(b => b.type === "Card Album")) {
+         cardAlbumCount++;
+         albumMembers.push(member.ign);
+       }
+       if (bids.some(b => b.type === "Light & Dark")) {
+         ldCount++;
+         ldMembers.push(member.ign);
+       }
+     });
+     
+     return [
+       { type: "Card Album", icon: "🃏", count: cardAlbumCount, members: albumMembers },
+       { type: "Light & Dark", icon: "✨", count: ldCount, members: ldMembers }
+     ].filter(w => w.count > 0).sort((a,b) => b.count - a.count);
+  }, [auctionWishlist, activeMembers]);
+
+  // --- GUILD ACTIVITY FEED ---
+  const recentEvents = events.slice(-5);
   const activityFeed = useMemo(() => {
     const feed = [];
-    // Recent top performers
     recentEvents.forEach(ev => {
-      const evPerf = performance.filter(p => p.eventId === ev.eventId).sort((a, b) => b.totalScore - a.totalScore).slice(0, 2);
-      evPerf.forEach(p => {
+      const evPerf = performance
+        .filter(p => p.eventId === ev.eventId)
+        .map(p => ({ ...p, calculatedScore: (p.performancePoints || 0) + (p.ctfPoints || 0) }))
+        .sort((a, b) => b.calculatedScore - a.calculatedScore)
+        .slice(0, 3);
+      evPerf.forEach((p, idx) => {
         const pId = (p.memberId || "").toLowerCase();
         const member = activeMembers.find(m => (m.memberId || "").toLowerCase() === pId);
         if (member) {
@@ -82,53 +138,17 @@ function Dashboard() {
             id: `feed-${ev.eventId}-${p.memberId}`,
             type: "performance",
             member: member.ign,
-            text: `scored ${p.performancePoints + (p.ctfPoints || 0)} points in ${ev.eventType}`,
+            text: idx === 0 ? `MVP in ${ev.eventType} (+${p.calculatedScore} pts)` : `Top Performer in ${ev.eventType} (+${p.calculatedScore} pts)`,
             date: ev.eventDate,
-            icon: "🔥"
+            icon: idx === 0 ? "👑" : "🔥"
           });
         }
       });
     });
-    return feed.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+    return feed.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
   }, [recentEvents, performance, activeMembers]);
 
-  // Guild Composition Counts
-  const composition = {
-    Core: lb.filter(m => m.classification === "Core").length,
-    Active: lb.filter(m => m.classification === "Active").length,
-    Casual: lb.filter(m => m.classification === "Casual").length,
-    "At Risk": lb.filter(m => m.classification === "At Risk").length
-  };
-
-  // Guild Milestones
-  const milestones = [
-    { label: "Centurion Guild", desc: "Reach 100 total events", achieved: events.length >= 100, icon: "🏛️" },
-    { label: "Elite Roster", desc: "Have 20+ Core members", achieved: composition.Core >= 20, icon: "💎" },
-    { label: "Active Force", desc: "75%+ Avg Attendance", achieved: attRate >= 75, icon: "⚡" },
-    { label: "War Machine", desc: "1000+ Total Guild XP", achieved: totalGuildScore >= 1000, icon: "⚔️" }
-  ];
-
-  // Party Strength Calculation
-  const partyPerformance = useMemo(() => {
-    if (!parties || parties.length === 0) return [];
-    const PARTY_NAMES_FALLBACK = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
-    
-    return parties.map((pMembers, idx) => {
-      const totalStrength = pMembers.reduce((sum, pm) => {
-        const pmId = (pm.memberId || "").toLowerCase();
-        const lbEntry = lb.find(l => (l.memberId || "").toLowerCase() === pmId);
-        return sum + (lbEntry ? lbEntry.totalScore : 0);
-      }, 0);
-      const avgStrength = pMembers.length > 0 ? Math.round(totalStrength / pMembers.length) : 0;
-      return {
-        name: PARTY_NAMES_FALLBACK[idx] || `Team ${idx + 1}`,
-        total: totalStrength,
-        avg: avgStrength,
-        count: pMembers.length
-      };
-    }).sort((a, b) => b.total - a.total);
-  }, [parties, lb]);
-
+  // Chart Data
   const chartData = useMemo(() => {
     return events.slice(-10).map(ev => {
       const evAtt = attendance.filter(a => a.eventId === ev.eventId);
@@ -148,11 +168,12 @@ function Dashboard() {
   }, [events, attendance, activeMembers]);
 
   return (
-    <div>
-      <div className="page-header flex justify-between items-end">
+    <div className="animate-fade-in" style={{ paddingBottom: 40 }}>
+      {/* HEADER SECTION */}
+      <div className="page-header flex justify-between items-end" style={{ marginBottom: 24 }}>
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="page-title">📊 Dashboard</h1>
+            <h1 className="page-title" style={{ fontSize: 32, textShadow: "0 0 16px rgba(255,255,255,0.1)" }}>📊 Dashboard</h1>
             {onlineUsers.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(64, 201, 122, 0.1)", border: "1px solid rgba(64, 201, 122, 0.3)", padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, color: "var(--green)" }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 8px var(--green)" }}></span>
@@ -160,7 +181,7 @@ function Dashboard() {
               </div>
             )}
           </div>
-          <p className="page-subtitle">Guild overview & performance at a glance</p>
+          <p className="page-subtitle">Guild command center & performance at a glance</p>
         </div>
         <div style={{ textAlign: "right", minWidth: 200 }}>
           <div className="flex justify-between items-end mb-1" style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>
@@ -168,167 +189,207 @@ function Dashboard() {
             <span className="text-muted" style={{ fontWeight: 400 }}>{totalGuildScore} / {nextLevelXP} XP</span>
           </div>
           <div className="progress-bar-wrap" style={{ height: 6 }}>
-            <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "var(--gold)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
+            <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "linear-gradient(90deg, #d4af37, #f0c040)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
           </div>
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
-          <div className="stat-icon">⚔️</div>
-          <div className="stat-label">Active Members</div>
+      {/* CORE STATS GRID */}
+      <div className="stats-grid" style={{ marginBottom: 24 }}>
+        <div className="stat-card" style={{ "--stat-accent": "var(--accent)", background: "linear-gradient(145deg, rgba(99,130,230,0.05), rgba(0,0,0,0.2))" }}>
+          <div className="stat-icon" style={{ textShadow: "0 0 12px var(--accent)" }}>⚔️</div>
+          <div className="stat-label">Active Roster</div>
           <div className="stat-value" style={{ color: "var(--accent)" }}>{activeMembers.length}</div>
-          <div className="stat-change">Registered guild members</div>
-          <div className={`stat-trend ${members.length >= 10 ? "stat-trend-up" : "stat-trend-neutral"}`}>
-            {members.length >= 10 ? "▲" : "●"} {members.length >= 10 ? "Full roster" : "Recruiting"}
-          </div>
+          <div className="stat-change">Total mobilized units</div>
         </div>
-        <div className="stat-card" style={{ "--stat-accent": "var(--green)" }}>
-          <div className="stat-icon">🛡️</div>
-          <div className="stat-label">Reliable Members</div>
-          <div className="stat-value" style={{ color: "var(--green)" }}>{lb.filter(m => m.attStatus?.label === "Reliable").length}</div>
-          <div className="stat-change">80%+ attendance · {activeClassCount} high scorers</div>
-          <div className={`stat-trend ${lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length >= 0.5 ? "stat-trend-up" : "stat-trend-down"}`}>
-            {lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length >= 0.5 ? "▲" : "▼"} {activeMembers.length > 0 ? Math.round(lb.filter(m => m.attStatus?.label === "Reliable").length / activeMembers.length * 100) : 0}% of roster
-          </div>
-        </div>
-        <div className="stat-card" style={{ "--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)" }}>
+        <div className="stat-card" style={{ "--stat-accent": attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)", background: "linear-gradient(145deg, rgba(64,201,122,0.05), rgba(0,0,0,0.2))" }}>
           <div className="stat-icon">📋</div>
-          <div className="stat-label">Attendance Rate</div>
+          <div className="stat-label">Guild Attendance</div>
           <div className="stat-value" style={{ color: attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)" }}>{attRate}%</div>
-          <div className="stat-change">All events combined</div>
-          <div className={`stat-trend ${attRate >= 75 ? "stat-trend-up" : attRate >= 50 ? "stat-trend-neutral" : "stat-trend-down"}`}>
-            {attRate >= 75 ? "▲ Excellent" : attRate >= 50 ? "● Good" : "▼ Needs work"}
-          </div>
+          <div className="stat-change">Lifetime event average</div>
         </div>
-        <div className="stat-card" style={{ "--stat-accent": "var(--gold)" }}>
+        <div className="stat-card" style={{ "--stat-accent": "var(--gold)", background: "linear-gradient(145deg, rgba(240,192,64,0.05), rgba(0,0,0,0.2))" }}>
           <div className="stat-icon">🏆</div>
-          <div className="stat-label">Total Events</div>
+          <div className="stat-label">Total Operations</div>
           <div className="stat-value" style={{ color: "var(--gold)" }}>{events.length}</div>
-          <div className="stat-change">{events.filter(e => e.eventType === "Guild League").length} GL · {events.filter(e => e.eventType === "Emperium Overrun").length} EO</div>
-          <div className="stat-trend stat-trend-neutral">
-            ● This season
+          <div className="stat-change">Successful campaigns</div>
+        </div>
+      </div>
+
+      {/* SPLIT VIEW 1: ROLE BASED HUB & ABSENCE WATCHLIST */}
+      <div className="grid-2 mb-4">
+        {isOfficer ? (
+          <div className="card" style={{ border: "1px solid rgba(224,92,138,0.2)", background: "linear-gradient(180deg, rgba(224,92,138,0.05) 0%, rgba(0,0,0,0.2) 100%)" }}>
+            <div className="card-title text-accent2 flex items-center justify-between">
+              <span>🛡️ Officer Action Center</span>
+              <span style={{ fontSize: 10, background: "rgba(224,92,138,0.2)", padding: '2px 8px', borderRadius: 8, color: "var(--accent2)" }}>ADMIN</span>
+            </div>
+            <div className="flex flex-col gap-2 mt-3">
+              <div className="flex justify-between items-center p-2 rounded border border-white border-opacity-5" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>New Applications</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${pendingJoin > 0 ? "text-white" : "text-muted"}`} style={{ background: pendingJoin > 0 ? "var(--accent)" : "transparent" }}>{pendingJoin} Pending</span>
+              </div>
+              <div className="flex justify-between items-center p-2 rounded border border-white border-opacity-5" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>Profile Updates</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${pendingProfile > 0 ? "text-white" : "text-muted"}`} style={{ background: pendingProfile > 0 ? "var(--accent2)" : "transparent" }}>{pendingProfile} Unread</span>
+              </div>
+              <div className="flex justify-between items-center p-2 rounded border border-white border-opacity-5" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>Upcoming Absences</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${upcomingAbsences > 0 ? "text-black" : "text-muted"}`} style={{ background: upcomingAbsences > 0 ? "var(--gold)" : "transparent" }}>{upcomingAbsences} Filed</span>
+              </div>
+            </div>
+            {pendingAudits.length > 0 && (
+              <div className="mt-4 border-t border-white border-opacity-10 pt-3">
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Pending Event Audits</div>
+                <div className="flex flex-col gap-2 relative">
+                  {pendingAudits.slice(0, 3).map(ev => (
+                    <div key={ev.eventId} className="flex justify-between items-center" style={{ fontSize: 13 }}>
+                      <span className="text-white">{ev.eventDate} ({ev.eventType === "Guild League" ? "GL" : "EO"})</span>
+                      <span style={{ color: "var(--accent)" }}>Auditor: {ev.battlelogAudit.assignedIgn || "Unassigned"}</span>
+                    </div>
+                  ))}
+                  {pendingAudits.length > 3 && (
+                    <div className="text-xs text-muted text-right italic pt-1">...and {pendingAudits.length - 3} more</div>
+                  )}
+                </div>
+              </div>
+            )}
+            {(pendingJoin === 0 && pendingProfile === 0 && upcomingAbsences === 0 && pendingAudits.length === 0) && (
+               <div className="mt-4 text-xs text-center text-muted">All clear. No pending administrative actions.</div>
+            )}
+          </div>
+        ) : (
+          <div className="card" style={{ border: "1px solid rgba(99,130,230,0.2)", background: "linear-gradient(180deg, rgba(99,130,230,0.05) 0%, rgba(0,0,0,0.2) 100%)" }}>
+            <div className="card-title text-accent flex items-center justify-between">
+              <span>👤 My Guild Status</span>
+              <span style={{ fontSize: 10, background: "rgba(99,130,230,0.2)", padding: '2px 8px', borderRadius: 8, color: "var(--accent)" }}>MEMBER</span>
+            </div>
+            {myProfile ? (
+              <div className="mt-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <div style={{ width: 50, height: 50, borderRadius: 12, background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: "bold", boxShadow: "0 0 15px rgba(99,130,230,0.4)" }}>
+                    {myProfile.ign[0]}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: "bold", color: "white" }}>{myProfile.ign}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }}>{myProfile.class} | {myProfile.role}</div>
+                  </div>
+                </div>
+                <div className="grid-2 gap-3">
+                   <div style={{ background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase" }}>Guild Rank</div>
+                     <div style={{ fontFamily: "Cinzel,serif", fontSize: 24, color: "var(--gold)", fontWeight: "bold" }}>#{myRankNum}</div>
+                   </div>
+                   <div style={{ background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase" }}>Total Points</div>
+                     <div style={{ fontFamily: "Cinzel,serif", fontSize: 24, color: "var(--accent)", fontWeight: "bold" }}>{myLbEntry?.totalScore || 0}</div>
+                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 text-sm text-muted">No profile data found. Please link your account or wait for officer approval.</div>
+            )}
+          </div>
+        )}
+
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="card-title flex justify-between items-center">
+            <span>🚨 Absence Watchlist</span>
+            <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-muted)" }}>Lifetime</span>
+          </div>
+          <p className="text-xs text-muted mb-4">Members with the highest total absences across all operations.</p>
+          <div className="flex flex-col gap-3" style={{ maxHeight: "300px", overflowY: "auto", paddingRight: "4px" }}>
+            {atRiskMembers.length > 0 ? atRiskMembers.map((m, idx) => (
+               <div key={m.memberId} className="flex items-center justify-between p-2 rounded border border-white border-opacity-5" style={{ background: idx < 3 ? "rgba(224,80,80,0.05)" : "rgba(255,255,255,0.02)" }}>
+                  <div className="flex items-center gap-3">
+                     <div style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", color: idx < 3 ? "var(--red)" : "var(--text-muted)", fontSize: 12 }}>
+                       {idx + 1}
+                     </div>
+                     <div>
+                       <div style={{ fontSize: 14, fontWeight: "bold", color: "white" }}>{m.ign}</div>
+                       <div className="text-xs text-muted">{m.class}</div>
+                     </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                     <div style={{ fontSize: 14, fontWeight: "bold", color: "var(--red)", textShadow: idx < 3 ? "0 0 8px rgba(224,80,80,0.6)" : "none" }}>{m.count}</div>
+                     <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: 1, textTransform: "uppercase" }}>Missed</div>
+                  </div>
+               </div>
+            )) : (
+              <div className="text-center text-sm text-muted py-6">All active members have perfect attendance!</div>
+            )}
           </div>
         </div>
       </div>
 
+      {/* SPLIT VIEW 2: HIGHLIGHTS & LOOT */}
       <div className="grid-2 mb-4">
-        {/* Top 5 Players */}
         <div className="card">
-          <div className="card-title">🏆 Top Players</div>
-          {top5.map((p, i) => (
-            <div className="top-player" key={p.memberId}>
-              <div className="player-avatar" style={{ background: `${avatarColors[i % avatarColors.length]}22`, color: avatarColors[i % avatarColors.length] }}>
-                {p.ign[0]}
-              </div>
-              <div className="player-info">
-                <div className="player-ign">
-                  {i === 0 && <span className="text-gold">👑 </span>}
-                  {p.ign}
-                </div>
-                <div className="player-class">{p.class}</div>
-              </div>
-              <div>
-                <div className="player-score" style={{ color: avatarColors[i % avatarColors.length] }}>{p.totalScore}</div>
-                <div className="text-xs text-muted text-right">{p.attendancePct}% att</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Guild Composition */}
-        <div className="card">
-          <div className="card-title">🛡️ Guild Composition</div>
-          <p className="text-xs text-muted mb-4">Membership tier breakdown based on activity & score.</p>
-          <div className="flex flex-col gap-4">
-            {[
-              { label: "Core", count: composition.Core, color: "var(--gold)", icon: "👑" },
-              { label: "Active", count: composition.Active, color: "var(--green)", icon: "🔥" },
-              { label: "Casual", count: composition.Casual, color: "var(--accent)", icon: "🎮" },
-              { label: "At Risk", count: composition["At Risk"], color: "var(--red)", icon: "⚠️" }
-            ].map((tier) => (
-              <div key={tier.label} className="flex items-center gap-3">
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: `${tier.color}11`, border: `1px solid ${tier.color}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
-                  {tier.icon}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="flex justify-between items-end mb-1">
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>{tier.label}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: tier.color }}>{tier.count} <span className="text-xs text-muted" style={{ fontWeight: 400 }}>members</span></span>
-                  </div>
-                  <div className="progress-bar-wrap" style={{ height: 4 }}>
-                    <div className="progress-bar-fill" style={{ width: `${(tier.count / total) * 100}%`, background: tier.color }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-muted">Guild Health</span>
-              <span style={{ color: "var(--green)", fontWeight: 700 }}>{Math.round(((composition.Core + composition.Active) / total) * 100)}% Stable</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid-2 mb-4">
-        {/* Activity Feed */}
-        <div className="card">
-          <div className="card-title">📡 Guild Activity</div>
-          <div className="flex flex-col gap-3 mt-2">
+          <div className="card-title">📡 Guild Highlights</div>
+          <div className="flex flex-col gap-3 mt-4">
             {activityFeed.map(item => (
-              <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)" }}>
-                <div style={{ fontSize: 18 }}>{item.icon}</div>
+              <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "rgba(240,192,64,0.05)", border: "1px solid rgba(240,192,64,0.15)" }}>
+                <div style={{ fontSize: 20 }}>{item.icon}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "var(--text-primary)" }}>
-                    <span style={{ fontWeight: 700, color: "var(--accent)" }}>{item.member}</span> {item.text}
+                    <span style={{ fontWeight: 800, color: "var(--gold)" }}>{item.member}</span> {item.text}
                   </div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{item.date}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{item.date}</div>
                 </div>
               </div>
             ))}
-            {activityFeed.length === 0 && <div className="text-xs text-muted p-4 text-center">No recent activity detected.</div>}
+            {activityFeed.length === 0 && <div className="text-xs text-muted p-4 text-center">No recent MVP highlights.</div>}
           </div>
         </div>
 
-        {/* Guild Milestones */}
         <div className="card">
-          <div className="card-title">🏆 Guild Milestones</div>
-          <div className="grid-2 gap-3 mt-2">
-            {milestones.map(m => (
-              <div key={m.label} style={{ 
-                padding: "12px", borderRadius: 12, 
-                background: m.achieved ? "rgba(240,192,64,0.05)" : "rgba(255,255,255,0.02)",
-                border: `1px solid ${m.achieved ? "rgba(240,192,64,0.2)" : "rgba(255,255,255,0.05)"}`,
-                opacity: m.achieved ? 1 : 0.5,
-                position: "relative"
-              }}>
-                {m.achieved && <div style={{ position: "absolute", top: -5, right: -5, fontSize: 14 }}>✅</div>}
-                <div style={{ fontSize: 20, marginBottom: 4 }}>{m.icon}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: m.achieved ? "var(--gold)" : "var(--text-muted)" }}>{m.label}</div>
-                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.desc}</div>
-              </div>
-            ))}
+          <div className="card-title flex justify-between items-center">
+            <span>⭐ Active Loot Wishlist</span>
+            <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "2px 6px", borderRadius: 4 }}>Live Radar</span>
+          </div>
+          <div className="text-xs text-muted mt-1 mb-4">Items currently requested by members on their active wishlist.</div>
+          
+          <div className="flex flex-col gap-3">
+             {wishlistRadar.length > 0 ? wishlistRadar.map(w => (
+                <div key={w.type} className="p-3 rounded border border-white border-opacity-5" style={{ background: "rgba(0,0,0,0.2)" }}>
+                   <div className="flex justify-between items-end mb-2">
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontSize: 18 }}>{w.icon}</span>
+                        <span style={{ fontSize: 14, fontWeight: "bold", color: "var(--gold)" }}>{w.type}</span>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontSize: 16, fontWeight: "bold", color: "var(--text-primary)" }}>{w.count}</span>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 4, textTransform: "uppercase" }}>Demand</span>
+                      </div>
+                   </div>
+                   <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4, wordWrap: "break-word" }}>
+                     <span className="text-muted">Requested by: </span> {w.members.join(", ")}
+                   </div>
+                </div>
+             )) : (
+                <div className="text-center text-sm text-muted py-6">No items currently on wishlist.</div>
+             )}
           </div>
         </div>
       </div>
 
-      <div className="card mb-4">
+      {/* ATTENDANCE TREND */}
+      <div className="card mb-4" style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div className="card-title">📈 Guild Attendance Trend</div>
-        <div style={{ minHeight: 220, width: "100%", marginTop: 20 }}>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <div className="text-xs text-muted mt-1 mb-4">Tracking operation participation across the last 10 events.</div>
+        <div style={{ flex: 1, minHeight: 250, width: "100%", marginLeft: -20, marginRight: -20 }}>
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
               <XAxis
                 dataKey="date"
-                axisLine={false}
+                axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
                 tickLine={false}
                 tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 dy={10}
@@ -338,8 +399,9 @@ function Dashboard() {
                 tickLine={false}
                 tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 domain={[0, 100]}
+                dx={-10}
               />
-              <Tooltip content={renderAttendanceTooltip} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+              <Tooltip content={renderAttendanceTooltip} cursor={{ stroke: "var(--accent)", strokeWidth: 1, strokeDasharray: "4 4" }} />
               <Area
                 type="monotone"
                 dataKey="attendance"
@@ -348,234 +410,10 @@ function Dashboard() {
                 fillOpacity={1}
                 fill="url(#colorAtt)"
                 animationDuration={1500}
+                activeDot={{ r: 6, fill: "var(--accent)", stroke: "#fff", strokeWidth: 2, boxShadow: "0 0 10px var(--accent)" }}
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-        <div className="text-xs text-muted mt-2">Attendance trend across last 10 guild events.</div>
-      </div>
-
-      <div className="grid-2">
-        {/* Role Distribution + Class Breakdown */}
-        <div className="card">
-          <div className="card-title">📖 Role Distribution</div>
-          <div className="flex items-center gap-6" style={{ marginTop: 12 }}>
-            <div style={{ position: "relative" }}>
-              <svg width="120" height="120" viewBox="0 0 120 120" style={{ filter: "drop-shadow(0 0 10px rgba(99,130,230,0.2))" }}>
-                <circle cx="60" cy="60" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="14" />
-                <circle cx="60" cy="60" r="45" fill="none" stroke="var(--accent2)" strokeWidth="14"
-                  strokeDasharray={`${(dpsCount / total) * 282.7} 282.7`} strokeDashoffset="0"
-                  transform="rotate(-90 60 60)" strokeLinecap="round" />
-                <circle cx="60" cy="60" r="45" fill="none" stroke="var(--accent)" strokeWidth="14"
-                  strokeDasharray={`${(supCount / total) * 282.7} 282.7`} strokeDashoffset={`${-(dpsCount / total) * 282.7}`}
-                  transform="rotate(-90 60 60)" strokeLinecap="round" />
-                <text x="60" y="58" textAnchor="middle" fill="var(--text-primary)" style={{ fontFamily: "Cinzel,serif", fontSize: 16, fontWeight: 700 }}>{total}</text>
-                <text x="60" y="72" textAnchor="middle" fill="var(--text-muted)" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 1 }}>Total</text>
-              </svg>
-            </div>
-            <div className="flex flex-col gap-4" style={{ flex: 1 }}>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent2)", boxShadow: "0 0 8px var(--accent2)" }} />
-                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>DPS Units</span>
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{dpsCount} <span className="text-xs text-muted">({Math.round(dpsCount / total * 100)}%)</span></span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />
-                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Supports</span>
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{supCount} <span className="text-xs text-muted">({Math.round(supCount / total * 100)}%)</span></span>
-              </div>
-            </div>
-          </div>
-
-          {/* Class Breakdown */}
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>🎭 Class Breakdown</div>
-            {(() => {
-              const ALL_CLASSES = [
-                { name: "Lord Knight", role: "DPS" },
-                { name: "Assassin Cross", role: "DPS" },
-                { name: "Sniper", role: "DPS" },
-                { name: "High Wizard", role: "DPS" },
-                { name: "Stalker", role: "DPS" },
-                { name: "Mastersmith (Whitesmith)", role: "DPS" },
-                { name: "Champion", role: "DPS" },
-                { name: "High Priest", role: "Support" },
-                { name: "Paladin", role: "Support" },
-                { name: "Scholar (Professor)", role: "Support" },
-                { name: "Biochemist (Creator)", role: "Support" },
-                { name: "Minstrel (Clown)", role: "Support" },
-                { name: "Gypsy", role: "Support" },
-                { name: "Summoner", role: "Support" },
-              ];
-              const classCounts = ALL_CLASSES.map(c => ({
-                ...c,
-                count: activeMembers.filter(m => m.class === c.name).length
-              })).filter(c => c.count > 0);
-              const maxCount = Math.max(...classCounts.map(c => c.count), 1);
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  {classCounts.length === 0 && (
-                    <div className="text-xs text-muted">No class data yet.</div>
-                  )}
-                  {classCounts.map(c => (
-                    <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: c.role === "DPS" ? "var(--accent2)" : "var(--accent)", flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, color: "var(--text-secondary)", width: 130, flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-                      <div style={{ flex: 1, height: 6, background: "rgba(99,130,230,0.08)", borderRadius: 3, overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%",
-                          width: `${(c.count / maxCount) * 100}%`,
-                          background: c.role === "DPS" ? "var(--accent2)" : "var(--accent)",
-                          borderRadius: 3,
-                          transition: "width 0.5s ease",
-                          boxShadow: c.role === "DPS" ? "0 0 6px rgba(224,92,138,0.4)" : "0 0 6px rgba(99,130,230,0.4)"
-                        }} />
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", minWidth: 16, textAlign: "right" }}>{c.count}</span>
-                    </div>
-                  ))}
-                  {classCounts.length > 0 && (
-                    <div style={{ marginTop: 6, display: "flex", gap: 12 }}>
-                      <span style={{ fontSize: 11, color: "var(--accent2)" }}>● DPS classes</span>
-                      <span style={{ fontSize: 11, color: "var(--accent)" }}>● Support classes</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* Recent Events */}
-        <div className="card">
-          <div className="card-title">📅 Recent Events</div>
-          <div style={{ marginTop: 8 }}>
-            {events.slice(-5).reverse().map(ev => {
-              const evAtt = attendance.filter(a => a.eventId === ev.eventId);
-              const present = activeMembers.filter(m => {
-                const a = evAtt.find(att => att.memberId === m.memberId);
-                return (a?.status || "present") === "present";
-              }).length;
-              const absent = activeMembers.length - present;
-              const pct = activeMembers.length ? Math.round((present / activeMembers.length) * 100) : 0;
-              const isGL = ev.eventType === "Guild League";
-              const barColor = pct >= 75 ? "var(--green)" : pct >= 50 ? "var(--gold)" : "var(--red)";
-              const barGlow = pct >= 75 ? "rgba(64,201,122,0.5)" : pct >= 50 ? "rgba(240,192,64,0.5)" : "rgba(224,80,80,0.5)";
-
-              // top scorer for this event
-              const evPerf = performance.filter(p => p.eventId === ev.eventId);
-              let topScorer = null;
-              let topScore = -Infinity;
-              evPerf.forEach(p => {
-                const pId = (p.memberId || "").toLowerCase();
-                const member = activeMembers.find(m => (m.memberId || "").toLowerCase() === pId);
-                const att = evAtt.find(a => (a.memberId || "").toLowerCase() === pId);
-                const s = computeScore({ event: ev, att, perf: p });
-                if (s > topScore) { topScore = s; topScorer = member; }
-              });
-
-              return (
-                <div key={ev.eventId} style={{ padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-                  {/* Header row */}
-                  <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                    <div className="flex items-center gap-3">
-                      <div style={{
-                        width: 38, height: 38, borderRadius: 8,
-                        background: isGL ? "rgba(240,192,64,0.12)" : "rgba(99,130,230,0.12)",
-                        border: `1px solid ${isGL ? "rgba(240,192,64,0.3)" : "rgba(99,130,230,0.3)"}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 18, flexShrink: 0
-                      }}>
-                        {isGL ? "⚔️" : "🏰"}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{ev.eventDate}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{ev.eventType}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {/* Attendance count badge */}
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontFamily: "Cinzel,serif", fontSize: 20, fontWeight: 700, color: barColor, lineHeight: 1 }}>{present}</div>
-                        <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: 1 }}>/ {evAtt.length}</div>
-                      </div>
-                      {/* Pct badge */}
-                      <div style={{
-                        padding: "4px 12px", borderRadius: 20,
-                        background: pct >= 75 ? "rgba(64,201,122,0.15)" : pct >= 50 ? "rgba(240,192,64,0.15)" : "rgba(224,80,80,0.15)",
-                        border: `1px solid ${barColor}44`,
-                        color: barColor, fontSize: 14, fontWeight: 700, fontFamily: "Cinzel,serif"
-                      }}>{pct}%</div>
-                    </div>
-                  </div>
-
-                  {/* Progress bar — thicker with glow */}
-                  <div style={{ height: 10, background: "rgba(99,130,230,0.08)", borderRadius: 5, overflow: "hidden", marginBottom: 8 }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${pct}%`,
-                      borderRadius: 5,
-                      background: barColor,
-                      boxShadow: `0 0 10px ${barGlow}`,
-                      transition: "width 0.6s ease"
-                    }} />
-                  </div>
-
-                  {/* Bottom row — absent count + top scorer */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span style={{ fontSize: 12, color: "var(--green)" }}>✓ {present} present</span>
-                      <span style={{ fontSize: 12, color: "var(--red)" }}>✕ {absent} absent</span>
-                    </div>
-                    {topScorer && (
-                      <div className="flex items-center gap-2">
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Top:</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>⭐ {topScorer.ign}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>+{topScore}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {events.length === 0 && <div className="text-muted text-sm" style={{ padding: "16px 0" }}>No events yet.</div>}
-          </div>
-        </div>
-      </div>
-      <div className="grid-2" style={{ marginTop: 20 }}>
-        {/* Party Performance Comparison */}
-        <div className="card">
-          <div className="card-title">🛡️ Party Strength Comparison</div>
-          <div className="flex flex-col gap-4" style={{ marginTop: 12 }}>
-            {partyPerformance.map((pp, i) => {
-              const maxPartyScore = Math.max(...partyPerformance.map(p => p.total), 1);
-              const barPct = (pp.total / maxPartyScore) * 100;
-              return (
-                <div key={i}>
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{pp.name}</span>
-                      <span className="text-xs text-muted">({pp.count} members)</span>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>{pp.total} <span style={{ fontWeight: 400, opacity: 0.6 }}>(avg {pp.avg})</span></span>
-                  </div>
-                  <div className="progress-bar-wrap">
-                    <div className="progress-bar-fill" style={{ width: `${barPct}%`, background: `linear-gradient(90deg, var(--accent), var(--accent2))` }} />
-                  </div>
-                </div>
-              );
-            })}
-            {partyPerformance.length === 0 && (
-              <div className="empty-state">
-                <div className="empty-state-icon">🛡️</div>
-                <div className="empty-state-text">No parties built yet. Go to Party Builder to organize squads.</div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

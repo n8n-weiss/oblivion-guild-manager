@@ -1090,7 +1090,7 @@ export const GuildProvider = ({ children, initialData }) => {
     showToast("Notification sent", "success");
   };
 
-   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null) => {
+   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
      const catConfig = category ? discordConfig.notifications?.[category] : null;
 
      if (catConfig && !catConfig.enabled) {
@@ -1138,12 +1138,16 @@ export const GuildProvider = ({ children, initialData }) => {
       
       // Build dynamic content string
       const mentionParts = [];
-      if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
-      if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
-      if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
-      if (catMentions.member && memberMentionId) {
-        const cleanId = memberMentionId.replace(/[^0-9]/g, "");
-        if (cleanId && cleanId.length >= 15) mentionParts.push(`<@${cleanId}>`);
+      if (overridePing) {
+         mentionParts.push(overridePing);
+      } else {
+         if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
+         if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
+         if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
+         if (catMentions.member && memberMentionId) {
+           const cleanId = memberMentionId.replace(/[^0-9]/g, "");
+           if (cleanId && cleanId.length >= 15) mentionParts.push(`<@${cleanId}>`);
+         }
       }
       content = mentionParts.join(" ");
 

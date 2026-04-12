@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
-import { computeLeaderboard } from '../utils/scoring';
+import { computeLeaderboard, computeScore } from '../utils/scoring';
 
 function LeaderboardPage({ onViewProfile }) {
   const ALERT_RULES = {
@@ -11,7 +11,8 @@ function LeaderboardPage({ onViewProfile }) {
     needsReviewDropDelta: 2,
     noShowStreak: 2
   };
-  const { members, events, attendance, performance, eoRatings } = useGuild();
+  const { members, events, attendance, performance, eoRatings, isOfficer, showToast, sendDiscordEmbed, discordConfig } = useGuild();
+  const [postingDigest, setPostingDigest] = useState(false);
   const LEADERBOARD_PRESETS_KEY = "leaderboard_view_presets_v1";
   const LEADERBOARD_TABLE_UI_KEY = "leaderboard_table_ui_v1";
   const LEADERBOARD_RANK_SNAPSHOT_KEY = "leaderboard_rank_snapshots_v1";
@@ -232,13 +233,120 @@ function LeaderboardPage({ onViewProfile }) {
      return `${m.attendancePct}% att`;
   };
 
+  const postWeeklyDigest = async () => {
+    setPostingDigest(true);
+    try {
+      // Re-compute raw leaderboard so we have all metrics agnostic of the current UI tab
+      const rawLb = computeLeaderboard(
+        activeMembers,
+        scopedData.scopedEvents,
+        scopedData.scopedAttendance,
+        scopedData.scopedPerformance,
+        scopedData.scopedEoRatings
+      );
+
+      const topCombat = [...rawLb].sort((a, b) => b.totalScore - a.totalScore).slice(0, 10);
+      const topSupport = [...rawLb].filter(m => {
+        const role = (m.role || "").toLowerCase();
+        return role.includes("support") || role.includes("utility");
+      }).sort((a, b) => b.supportIndex - a.supportIndex).slice(0, 10);
+      const topAttendance = [...rawLb].sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore).slice(0, 10);
+
+      // Algorithmic Outliers (Most Improved this week)
+      // Calculate by comparing the most recent Guild League event against their historical average.
+      const glEvents = scopedData.scopedEvents.filter(e => e.eventType === "Guild League");
+      const latestEvent = glEvents[0];
+      const previousEvents = glEvents.slice(1);
+      
+      let movers = [];
+      if (latestEvent && previousEvents.length > 0) {
+        const topCombatIds = new Set(topCombat.map(c => (c.memberId || "").toLowerCase()));
+        const topSupportIds = new Set(topSupport.map(s => (s.memberId || "").toLowerCase()));
+
+        movers = activeMembers.map(m => {
+          const mId = (m.memberId || "").toLowerCase();
+          
+          let histScoreAgg = 0;
+          let histCount = 0;
+          previousEvents.forEach(ev => {
+             const att = scopedData.scopedAttendance.find(a => a.eventId === ev.eventId && (a.memberId || "").toLowerCase() === mId);
+             const perf = scopedData.scopedPerformance.find(p => p.eventId === ev.eventId && (p.memberId || "").toLowerCase() === mId);
+             if (att?.status === "present") {
+                histScoreAgg += computeScore({ event: ev, att, perf });
+                histCount++;
+             }
+          });
+          const histAvg = histCount > 0 ? histScoreAgg / histCount : 0;
+          
+          const latestAtt = scopedData.scopedAttendance.find(a => a.eventId === latestEvent.eventId && (a.memberId || "").toLowerCase() === mId);
+          const latestPerf = scopedData.scopedPerformance.find(p => p.eventId === latestEvent.eventId && (p.memberId || "").toLowerCase() === mId);
+          const latestScore = latestAtt?.status === "present" ? computeScore({ event: latestEvent, att: latestAtt, perf: latestPerf }) : 0;
+          
+          const delta = latestScore - histAvg;
+          return { ...m, delta: Math.round(delta), latestScore, histAvg };
+        }).filter(m => {
+           const idUrl = String(m.memberId || "").toLowerCase();
+           return m.delta >= 5 && m.latestScore > 0 && !topCombatIds.has(idUrl) && !topSupportIds.has(idUrl) && m.histAvg < 75;
+        }).sort((a, b) => b.delta - a.delta).slice(0, 10);
+      }
+
+      const formatRow = (list, valFn) => {
+        if (list.length === 0) return "_No data available_";
+        return list.map((m, i) => `**Rank ${i + 1}** — ${m.ign}\n╰ ${valFn(m)}`).join("\n\n");
+      };
+
+      const pingOverride = discordConfig?.oblivionRoleId ? `<@&${discordConfig.oblivionRoleId}>` : "@everyone";
+
+      await sendDiscordEmbed(
+        `🏆  __**OBLIVION WEEKLY GUILD HONORS**__  🏆`,
+        `Celebrating the extraordinary dedication and progress of our Vanguards!\n\u200B`,
+        0xF0C040,
+        [
+          { name: "⚔️  TOP 10 COMBAT (Overall)", value: formatRow(topCombat, m => `**${m.totalScore} pts** (${m.totalKills || 0} kills | ${m.totalPP || 0} pp)`), inline: false },
+          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "✨  TOP 10 SUPPORT / UTILITY", value: formatRow(topSupport, m => `**${m.supportIndex} SPI** (${m.totalAssists || 0} ast | ${m.totalPP || 0} pp)`), inline: false },
+          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "🛡️  TOP 10 ATTENDANCE", value: formatRow(topAttendance, m => `**${m.attendancePct}%** Attendance Rate`), inline: false },
+          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "🚀  MOST IMPROVED MEMBERS", value: movers.length > 0 ? formatRow(movers, m => `**+${m.delta} pts** above personal average`) : "_No significant rank movement detected._", inline: false },
+          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "📅  DETAILS", value: `**Scope:** ${periodScope === "all" ? "All-Time" : periodScope === "30d" ? "Last 30 Days" : "Last 8 Events"}\n**Date Filter:** ${filter}`, inline: false }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "leaderboard",
+        "weekly_digest",
+        { scope: periodScope },
+        null,
+        pingOverride
+      );
+      showToast("Unified Discord Digest Posted successfully!", "success");
+    } catch (err) {
+      console.error("Digest Error:", err);
+      showToast("Failed to post discord digest", "error");
+    } finally {
+      setPostingDigest(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="page-title">🏆 Leaderboard</h1>
-            <p className="page-subtitle">Rankings based on scoring formula — auto-computed</p>
+            <div className="flex items-center gap-3">
+              <h1 className="page-title" style={{ marginBottom: 0 }}>🏆 Leaderboard</h1>
+              {isOfficer && (
+                <button
+                  className="btn btn-sm"
+                  style={{ background: "rgba(99,130,230,0.15)", color: "var(--accent)", border: "1px solid rgba(99,130,230,0.3)" }}
+                  onClick={postWeeklyDigest}
+                  disabled={postingDigest}
+                >
+                  <Icon name="brand-discord" size={14} /> {postingDigest ? "Posting..." : "Post Digest"}
+                </button>
+              )}
+            </div>
+            <p className="page-subtitle" style={{ marginTop: 4 }}>Rankings based on scoring formula — auto-computed</p>
           </div>
           <div className="show-on-mobile">
             <div className="flex gap-2 quick-summary-bar" style={{ margin: "16px 0 0", padding: "4px 0", overflowX: "auto", flexWrap: "nowrap" }}>

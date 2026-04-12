@@ -28,6 +28,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     let tempConsecutive = 0;
     let totalKills = 0;
     let totalAssists = 0;
+    let totalPP = 0;
 
     const mId = (member.memberId || "").toLowerCase();
 
@@ -64,6 +65,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
         totalScore += computeScore({ event, att, perf });
         totalKills += perf?.kills ?? 0;
         totalAssists += perf?.assists ?? 0;
+        totalPP += perf?.performancePoints ?? 0;
       }
     });
 
@@ -83,10 +85,10 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     const avgEoRating = memberEoRatings.length > 0 ? Math.round((totalEoScore / memberEoRatings.length) * 10) / 10 : 0;
 
     // Support Performance Index (SPI)
-    // Formula: (Attendance * 0.5) + (Assists * 5) + (EO Rating * 10)
-    const supportIndex = Math.round((attendancePct * 0.5) + (totalAssists * 5) + (avgEoRating * 10));
+    // Formula: (Attendance * 0.5) + (Assists * 5) + (EO Rating * 10) + (Performance Points * 2)
+    const supportIndex = Math.round((attendancePct * 0.5) + (totalPP * 2) + (totalAssists * 5) + (avgEoRating * 10));
 
-    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists };
+    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists, totalPP };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }
