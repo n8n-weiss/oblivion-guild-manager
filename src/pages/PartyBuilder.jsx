@@ -28,7 +28,10 @@ function PartyBuilder() {
     if (sourceMode === "all") return activeMembers;
     const eventId = sourceMode.replace("event:", "");
     const presentIds = new Set(
-      attendance.filter(a => a.eventId === eventId && a.status === "present").map(a => a.memberId)
+      activeMembers.filter(m => {
+        const a = attendance.find(att => att.eventId === eventId && att.memberId === m.memberId);
+        return (a?.status || "present") === "present";
+      }).map(m => m.memberId)
     );
     return members.filter(m => presentIds.has(m.memberId));
   }, [sourceMode, activeMembers, members, attendance]);
@@ -272,7 +275,10 @@ function PartyBuilder() {
                 }}>
                 <option value="all">Active Members ({activeMembers.length})</option>
                 {events.map(ev => {
-                  const count = attendance.filter(a => a.eventId === ev.eventId && a.status === "present").length;
+                  const count = activeMembers.filter(m => {
+                    const a = attendance.find(att => att.eventId === ev.eventId && att.memberId === m.memberId);
+                    return (a?.status || "present") === "present";
+                  }).length;
                   return (
                     <option key={ev.eventId} value={`event:${ev.eventId}`}>
                       {ev.eventDate} — {ev.eventType === "Guild League" ? "GL" : "EO"} ({count} present)

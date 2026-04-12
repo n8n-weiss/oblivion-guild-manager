@@ -265,9 +265,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const myPendingRequest = requests.find(r => r.memberId === member.memberId && r.status === "pending");
   
   const totalGLScore = React.useMemo(() => glEvents.reduce((sum, e) => sum + e.score, 0), [glEvents]);
-  const presentCount = React.useMemo(() => memberEvents.filter(e => e.att?.status === "present").length, [memberEvents]);
+  const presentCount = React.useMemo(() => memberEvents.filter(e => (e.att?.status || "present") === "present").length, [memberEvents]);
   const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
-  const presentGLCount = React.useMemo(() => glEvents.filter(e => e.att?.status === "present").length, [glEvents]);
+  const presentGLCount = React.useMemo(() => glEvents.filter(e => (e.att?.status || "present") === "present").length, [glEvents]);
   const avgGL = presentGLCount > 0 ? Math.round((totalGLScore / presentGLCount) * 10) / 10 : 0;
   const eoRatingsList = React.useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
   const avgEoRating = eoRatingsList.length > 0
@@ -287,7 +287,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const guildAvgGL = activeMembers.length > 0 ? Math.round(guildTotalGL / activeMembers.length) : 0;
 
   // 2. Trend Logic (Last 3 vs Previous)
-  const glScores = glEvents.filter(e => e.att?.status === "present").map(e => e.score);
+  const glScores = glEvents.filter(e => (e.att?.status || "present") === "present").map(e => e.score);
   const currentAvg = glScores.slice(0, 3).reduce((a, b) => a + b, 0) / Math.max(1, Math.min(3, glScores.length));
   const prevAvg = glScores.slice(3, 6).length > 0 ? glScores.slice(3, 6).reduce((a, b) => a + b, 0) / glScores.slice(3, 6).length : currentAvg;
   const glTrend = currentAvg > prevAvg ? "up" : currentAvg < prevAvg ? "down" : "stable";
@@ -298,7 +298,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     
     // Shield of Reliability: 100% attendance in last 4 guild events (GL or EO)
     const last4 = memberEvents.slice(0, 4);
-    if (last4.length === 4 && last4.every(e => e.att?.status === "present")) {
+    if (last4.length === 4 && last4.every(e => (e.att?.status || "present") === "present")) {
       list.push({ id: "reliability", icon: "🛡️", label: "Reliability Shield", desc: "Solid as a rock. 100% attendance in the last 4 major operations.", color: "#4db8ff" });
     }
 
@@ -320,7 +320,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       const scores = activeMembers.map(m => {
         const att = glAtt.find(a => a.memberId === m.memberId);
         const perf = glPerf.find(p => p.memberId === m.memberId);
-        return { memberId: m.memberId, score: att?.status === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0 };
+        return { memberId: m.memberId, score: (att?.status || "present") === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0 };
       });
       const topScore = Math.max(...scores.map(s => s.score));
       if (topScore > 0 && scores.find(s => s.memberId === member.memberId)?.score === topScore) {
@@ -423,13 +423,13 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   };
 
   // 8. Performance Summary
-  const attendedGLEvents = glEvents.filter(e => e.att?.status === "present");
+  const attendedGLEvents = glEvents.filter(e => (e.att?.status || "present") === "present");
   const bestEvent = attendedGLEvents.reduce((best, e) => (!best || e.score > best.score ? e : best), null);
   const worstEvent = attendedGLEvents.reduce((worst, e) => (!worst || e.score < worst.score ? e : worst), null);
   // Win streak: consecutive events attended (most recent first)
   let winStreak = 0;
   for (const ev of memberEvents) {
-    if (ev.att?.status === "present") winStreak++;
+    if ((ev.att?.status || "present") === "present") winStreak++;
     else break;
   }
   const toggleCollapse = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -468,7 +468,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       const ev = eventsByDate.get(dateStr);
       let status = "no-event";
       if (ev) {
-        if (ev.att?.status === "present") {
+        if ((ev.att?.status || "present") === "present") {
           status = ev.eventType === "Guild League" ? "present-gl" : "present-eo";
         } else {
           status = "absent";
@@ -507,7 +507,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       fullDate: ev.eventDate,
       score: ev.eventType === "Guild League" ? ev.score : null,
       rating: ev.eventType === "Emperium Overrun" ? ev.eoRating?.rating : null,
-      present: ev.att?.status === "present",
+      present: (ev.att?.status || "present") === "present",
       type: ev.eventType
     }));
   }, [memberEvents]);

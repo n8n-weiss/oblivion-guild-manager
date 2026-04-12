@@ -327,6 +327,13 @@ function EventsPage() {
     const key = `${memberId}_${eventId}`;
     const mId = (memberId || "").trim().toLowerCase();
     const edits = perfEdits[key] || {};
+    
+    // Ensure attendance record exists if it was missing (default to present)
+    const currentAtt = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
+    if (!currentAtt) {
+      setAttendance(prev => [...prev, { memberId: memberId.trim(), eventId, status: "present" }]);
+    }
+
     setPerformance(prev => {
       const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
       if (exists) return prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
@@ -663,19 +670,19 @@ function EventsPage() {
                                 <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={ctf1}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={ctf2}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={ctf3}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <span style={{
@@ -690,19 +697,19 @@ function EventsPage() {
                                 <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={kills}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={assists}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <input type="number" className="form-input" style={{ width: 64, padding: "4px 8px", fontSize: 13 }} min={0}
                                   value={pp}
                                   onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))}
-                                  disabled={m.att?.status !== "present"} />
+                                  disabled={(m.att?.status || "present") !== "present"} />
                               </td>
                               <td>
                                 <span style={{

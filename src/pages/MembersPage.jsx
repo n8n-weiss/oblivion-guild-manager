@@ -180,7 +180,7 @@ function MembersPage({ onViewProfile }) {
       .filter(e => e.att)
       .sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate));
 
-    if (mEvents.slice(0, 4).length === 4 && mEvents.slice(0, 4).every(e => e.att?.status === "present")) list.push("🛡️");
+    if (mEvents.slice(0, 4).length === 4 && mEvents.slice(0, 4).every(e => (e.att?.status || "present") === "present")) list.push("🛡️");
     if (mEvents.some(e => e.eventType === "Guild League" && ((e.perf?.ctfPoints || 0) + (e.perf?.performancePoints || 0)) >= 30)) list.push("⚔️");
     const mRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === id);
     if (mRatings.some(r => r.rating === 5)) list.push("🌟");

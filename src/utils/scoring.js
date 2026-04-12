@@ -1,5 +1,6 @@
 export function computeScore({ event, att, perf }) {
-  const isPresent = att?.status === "present";
+  const status = att?.status || "present";
+  const isPresent = status === "present";
   if (event.eventType === "Emperium Overrun") return 0;
   if (!isPresent) return 0;
   const ctf1 = perf?.ctf1 ?? perf?.ctfPoints ?? 0;
@@ -46,10 +47,11 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     eligibleEvents.forEach((event) => {
       const att = attendance.find((a) => (a.memberId || "").toLowerCase() === mId && a.eventId === event.eventId);
       const perf = performance.find((p) => (p.memberId || "").toLowerCase() === mId && p.eventId === event.eventId);
-      if (att?.status === "present") {
+      const status = att?.status || "present";
+      if (status === "present") {
         presentCount++;
         tempConsecutive = 0;
-      } else if (att?.status === "loa") {
+      } else if (status === "loa") {
         absentCount++;
         tempConsecutive = 0; // Excused absence resets the streak
       } else {

@@ -99,7 +99,10 @@ function LeaderboardPage({ onViewProfile }) {
   const eoLb = useMemo(() => activeMembers.map(member => {
     const mId = (member.memberId || "").toLowerCase();
     const memberRatings = scopedData.scopedEoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
-    const eoPresent = eoEvents.filter(ev => scopedData.scopedAttendance.find(a => (a.memberId || "").toLowerCase() === mId && a.eventId === ev.eventId && a.status === "present")).length;
+    const eoPresent = eoEvents.filter(ev => {
+      const a = scopedData.scopedAttendance.find(att => (att.memberId || "").toLowerCase() === mId && att.eventId === ev.eventId);
+      return (a?.status || "present") === "present";
+    }).length;
     const totalEoScore = memberRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
     const avgRating = memberRatings.length > 0 ? Math.round((totalEoScore / memberRatings.length) * 10) / 10 : 0;
     return { ...member, totalEoScore, eoPresent, eoTotal: eoEvents.length, avgRating };

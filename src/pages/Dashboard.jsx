@@ -33,8 +33,20 @@ function Dashboard() {
   const { members, events, attendance, performance, parties, onlineUsers = [] } = useGuild();
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
-  const totalPresences = attendance.filter(a => a.status === "present").length;
-  const totalExpected = attendance.length;
+  
+  // Total presences considering missing records as present for active members
+  const totalPresences = useMemo(() => {
+    let count = 0;
+    events.forEach(ev => {
+      activeMembers.forEach(m => {
+        const att = attendance.find(a => a.eventId === ev.eventId && a.memberId === m.memberId);
+        if ((att?.status || "present") === "present") count++;
+      });
+    });
+    return count;
+  }, [events, activeMembers, attendance]);
+
+  const totalExpected = activeMembers.length * events.length;
   const attRate = totalExpected ? Math.round((totalPresences / totalExpected) * 100) : 0;
   const activeClassCount = lb.filter(m => m.classification === "Core" || m.classification === "Active").length;
   const top5 = lb.slice(0, 5);
@@ -120,8 +132,11 @@ function Dashboard() {
   const chartData = useMemo(() => {
     return events.slice(-10).map(ev => {
       const evAtt = attendance.filter(a => a.eventId === ev.eventId);
-      const present = evAtt.filter(a => a.status === "present").length;
-      const pct = evAtt.length ? Math.round((present / evAtt.length) * 100) : 0;
+      const present = activeMembers.filter(m => {
+        const a = evAtt.find(att => att.memberId === m.memberId);
+        return (a?.status || "present") === "present";
+      }).length;
+      const pct = activeMembers.length ? Math.round((present / activeMembers.length) * 100) : 0;
       return {
         date: ev.eventDate,
         attendance: pct,
@@ -441,9 +456,12 @@ function Dashboard() {
           <div style={{ marginTop: 8 }}>
             {events.slice(-5).reverse().map(ev => {
               const evAtt = attendance.filter(a => a.eventId === ev.eventId);
-              const present = evAtt.filter(a => a.status === "present").length;
-              const absent = evAtt.length - present;
-              const pct = evAtt.length ? Math.round((present / evAtt.length) * 100) : 0;
+              const present = activeMembers.filter(m => {
+                const a = evAtt.find(att => att.memberId === m.memberId);
+                return (a?.status || "present") === "present";
+              }).length;
+              const absent = activeMembers.length - present;
+              const pct = activeMembers.length ? Math.round((present / activeMembers.length) * 100) : 0;
               const isGL = ev.eventType === "Guild League";
               const barColor = pct >= 75 ? "var(--green)" : pct >= 50 ? "var(--gold)" : "var(--red)";
               const barGlow = pct >= 75 ? "rgba(64,201,122,0.5)" : pct >= 50 ? "rgba(240,192,64,0.5)" : "rgba(224,80,80,0.5)";
