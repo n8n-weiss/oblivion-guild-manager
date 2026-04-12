@@ -1579,21 +1579,23 @@ export const GuildProvider = ({ children, initialData }) => {
         activatedAt: new Date().toISOString(),
         accountEmail: portalEmail
       });
-      sendDiscordEmbed(
-        "🎉 New Member Joined!",
-        `Welcome **${r.ign}** to our Guild Portal!`,
-        0x40C97A,
-        [
-          { name: "IGN", value: r.ign, inline: true },
-          { name: "Job Class", value: r.jobClass, inline: true },
-          { name: "Role", value: r.role, inline: true }
-        ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "welcome",
-        "welcome",
-        { ign: r.ign, class: r.jobClass, role: r.role },
-        r.discord
-      );
+      if (r.requestType !== "reactivation") {
+        sendDiscordEmbed(
+          "🎉 New Member Joined!",
+          `Welcome **${r.ign}** to our Guild Portal!`,
+          0x40C97A,
+          [
+            { name: "IGN", value: r.ign, inline: true },
+            { name: "Job Class", value: r.jobClass, inline: true },
+            { name: "Role", value: r.role, inline: true }
+          ],
+          "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+          "welcome",
+          "welcome",
+          { ign: r.ign, class: r.jobClass, role: r.role },
+          r.discord
+        );
+      }
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
       return true;
     } catch(err) {
