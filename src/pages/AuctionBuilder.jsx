@@ -417,12 +417,11 @@ function AuctionBuilder() {
 
   const groupedSessions = React.useMemo(() => {
     const groups = {};
-    auctionSessions.slice().reverse().forEach(s => {
+    auctionSessions.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(s => {
       if (!s.date) return;
       const dateObj = new Date(s.date);
       if (isNaN(dateObj)) {
         if (!groups["Unknown Date"]) groups["Unknown Date"] = { "Sessions": [] };
-        if (!groups["Unknown Date"]["Sessions"]) groups["Unknown Date"]["Sessions"] = [];
         groups["Unknown Date"]["Sessions"].push(s);
         return;
       }
@@ -430,13 +429,18 @@ function AuctionBuilder() {
       const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
       if (!groups[monthYear]) groups[monthYear] = {};
       
-      // Weekly grouping
-      const dom = dateObj.getDate();
-      const weekNum = Math.ceil(dom / 7);
-      const startDay = (weekNum - 1) * 7 + 1;
-      const endDay = Math.min(new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate(), weekNum * 7);
-      const mName = dateObj.toLocaleDateString("en-US", { month: "short" });
-      const weekKey = `Week ${weekNum} • ${mName} ${startDay} – ${mName} ${endDay}`;
+      // Weekly grouping (Monday start)
+      const d = new Date(dateObj);
+      const day = d.getDay(); // 0-Sun, 1-Mon, ... 6-Sat
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      
+      const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const sunStr = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const weekKey = `${monStr} – ${sunStr}`;
       
       if (!groups[monthYear][weekKey]) groups[monthYear][weekKey] = [];
       groups[monthYear][weekKey].push(s);
@@ -1258,9 +1262,18 @@ function AuctionBuilder() {
     );
   };
 
-  // ── SESSIONS LIST VIEW
-  if (view === "sessions") return (
-    <div>
+  const filteredHistory = lootHistory.filter(h => {
+    const matchSearch = h.ign.toLowerCase().includes(historySearch.toLowerCase()) || h.sessionName.toLowerCase().includes(historySearch.toLowerCase());
+    const matchFilter = historyFilter === "all" || (historyFilter === "wins" && !h.isOutbid) || (historyFilter === "outbids" && h.isOutbid);
+    return matchSearch && matchFilter;
+  });
+
+  // ── RENDER
+  return (
+    <>
+      {/* SESSIONS LIST VIEW */}
+      {view === "sessions" && (
+        <div>
       <div className="page-header">
         <h1 className="page-title">📜 Auction Builder</h1>
         <p className="page-subtitle">Distribute resources per member per session</p>
@@ -1401,19 +1414,12 @@ function AuctionBuilder() {
           </div>
         </div>
       </div>
-    </div>
-  );
+        </div>
+      )}
 
-  // ── HISTORY VIEW
-  if (view === "history") {
-    const filtered = lootHistory.filter(h => {
-      const matchSearch = h.ign.toLowerCase().includes(historySearch.toLowerCase()) || h.sessionName.toLowerCase().includes(historySearch.toLowerCase());
-      const matchFilter = historyFilter === "all" || (historyFilter === "wins" && !h.isOutbid) || (historyFilter === "outbids" && h.isOutbid);
-      return matchSearch && matchFilter;
-    });
-
-    return (
-      <div>
+      {/* HISTORY VIEW */}
+      {view === "history" && (
+        <div>
         <div className="page-header sticky-actions">
           <button className="btn btn-ghost mb-3" onClick={() => setView("sessions")}><Icon name="arrow-left" size={14} /> Back to Sessions</button>
           <h1 className="page-title">📊 Loot History Summary</h1>
@@ -1448,8 +1454,8 @@ function AuctionBuilder() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No matching history found</td></tr>}
-                {filtered.map(h => {
+                {filteredHistory.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No matching history found</td></tr>}
+                {filteredHistory.map(h => {
                   const tc = tagColor(h.tag);
                   return (
                     <tr key={h.id} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1480,15 +1486,11 @@ function AuctionBuilder() {
           </div>
         </div>
       </div>
-    );
-  }
+      )}
 
-  // ── EDITOR VIEW
-  if (!session) return null;
-
-  return (
-    <>
-    <div>
+      {/* EDITOR VIEW */}
+      {view === "editor" && session ? (
+        <div>
       <div className="page-header sticky-actions">
         <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 12 }}>
           <div className="flex items-center gap-3">
@@ -2086,7 +2088,18 @@ function AuctionBuilder() {
           </div>
         )}
       </div>
-    </div>
+        </div>
+      ) : view === "editor" && !session ? (
+        <div className="page-header">
+          <button className="btn btn-ghost mb-3" onClick={() => setView("sessions")}><Icon name="arrow-left" size={14} /> Back to Sessions</button>
+          <StatePanel
+            icon="⚠️"
+            title="Session not found"
+            description="The session you are looking for does not exist or has been deleted."
+          />
+        </div>
+      ) : null}
+
     {pendingAuctionConflict && (
       <Modal
         title="Resolve Auction Conflict"

@@ -58,12 +58,11 @@ function EventsPage() {
 
   const groupedEvents = React.useMemo(() => {
     const groups = {};
-    events.slice().reverse().forEach(ev => {
+    events.slice().sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate)).forEach(ev => {
       if (!ev.eventDate) return;
       const dateObj = new Date(ev.eventDate);
       if (isNaN(dateObj)) {
         if (!groups["Unknown Date"]) groups["Unknown Date"] = { "Events": [] };
-        if (!groups["Unknown Date"]["Events"]) groups["Unknown Date"]["Events"] = [];
         groups["Unknown Date"]["Events"].push(ev);
         return;
       }
@@ -71,13 +70,18 @@ function EventsPage() {
       const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
       if (!groups[monthYear]) groups[monthYear] = {};
       
-      // Weekly grouping
-      const dom = dateObj.getDate();
-      const weekNum = Math.ceil(dom / 7);
-      const startDay = (weekNum - 1) * 7 + 1;
-      const endDay = Math.min(new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate(), weekNum * 7);
-      const mName = dateObj.toLocaleDateString("en-US", { month: "short" });
-      const weekKey = `Week ${weekNum} • ${mName} ${startDay} – ${mName} ${endDay}`;
+      // Weekly grouping (Monday start)
+      const d = new Date(dateObj);
+      const day = d.getDay(); // 0-Sun, 1-Mon, ... 6-Sat
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      
+      const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const sunStr = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const weekKey = `${monStr} – ${sunStr}`;
       
       if (!groups[monthYear][weekKey]) groups[monthYear][weekKey] = [];
       groups[monthYear][weekKey].push(ev);
