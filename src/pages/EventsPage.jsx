@@ -120,10 +120,12 @@ function EventsPage() {
   };
   const [form, setForm] = useState({
     eventType: "Guild League",
-    eventDate: new Date().toISOString().split("T")[0],
+    eventDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD in local time
     eventTime: "20:55",
     auditDueOffsetHours: 12
   });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editEventId, setEditEventId] = useState(null);
   const [perfEdits, setPerfEdits] = useState({});
   const getNextAuditor = React.useCallback(() => {
     if (!duoOfficerPool.length) return null;
@@ -142,67 +144,125 @@ function EventsPage() {
     return auditor;
   }, [duoOfficerPool]);
 
-  const createEvent = async () => {
-    const eventId = `EVT${Date.now()}`;
-    const assignedAuditor = getNextAuditor();
-    const assignmentSource = "auto_duo";
-    const eventStart = new Date(`${form.eventDate}T${form.eventTime}:00`);
-    const dueAt = new Date(eventStart.getTime() + Number(form.auditDueOffsetHours || 12) * 60 * 60 * 1000);
-    const newEvent = {
-      eventId,
-      ...form,
-      battlelogAudit: {
-        assignedMemberId: assignedAuditor?.memberId || null,
-        assignedIgn: assignedAuditor?.ign || "Unassigned",
-        assignedDiscordId: assignedAuditor?.discordId || null,
-        status: "pending",
-        dueAt: dueAt.toISOString(),
-        reminderSentAt: null,
-        postEventReminderSentAt: null,
-        submittedAt: null,
-        submittedBy: null,
-        assignmentSource
+  const handleSaveEvent = async () => {
+    if (isEditing) {
+      const updatedEvents = events.map(ev => {
+        if (ev.eventId === editEventId) {
+          const eventStart = new Date(`${form.eventDate}T${form.eventTime}:00`);
+          const dueAt = new Date(eventStart.getTime() + Number(form.auditDueOffsetHours || 12) * 60 * 60 * 1000);
+          return {
+            ...ev,
+            ...form,
+            battlelogAudit: {
+              ...(ev.battlelogAudit || {}),
+              dueAt: dueAt.toISOString()
+            }
+          };
+        }
+        return ev;
+      });
+      setEvents(updatedEvents);
+      showToast("Event updated", "success");
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_update", `Updated ${form.eventType} event — ${form.eventDate}`);
+      
+      // Optional: Update selectedEvent if it's the one we edited
+      if (selectedEvent?.eventId === editEventId) {
+        setSelectedEvent(prev => ({
+          ...prev,
+          ...form,
+          battlelogAudit: {
+            ...(prev.battlelogAudit || {}),
+            dueAt: new Date(new Date(`${form.eventDate}T${form.eventTime}:00`).getTime() + Number(form.auditDueOffsetHours || 12) * 60 * 60 * 1000).toISOString()
+          }
+        }));
       }
-    };
-    setEvents(prev => [...prev, newEvent]);
+    } else {
+      const eventId = `EVT${Date.now()}`;
+      const assignedAuditor = getNextAuditor();
+      const assignmentSource = "auto_duo";
+      const eventStart = new Date(`${form.eventDate}T${form.eventTime}:00`);
+      const dueAt = new Date(eventStart.getTime() + Number(form.auditDueOffsetHours || 12) * 60 * 60 * 1000);
+      const newEvent = {
+        eventId,
+        ...form,
+        battlelogAudit: {
+          assignedMemberId: assignedAuditor?.memberId || null,
+          assignedIgn: assignedAuditor?.ign || "Unassigned",
+          assignedDiscordId: assignedAuditor?.discordId || null,
+          status: "pending",
+          dueAt: dueAt.toISOString(),
+          reminderSentAt: null,
+          postEventReminderSentAt: null,
+          submittedAt: null,
+          submittedBy: null,
+          assignmentSource
+        }
+      };
+      setEvents(prev => [...prev, newEvent]);
 
-    // auto-load active members with absence-aware attendance
-    const newAtt = members
-      .filter(m => (m.status || "active") !== "left")
-      .map(m => {
-      const mId = (m.memberId || "").trim();
-      const hasAbsence = absences.find(a => (a.memberId || "").trim().toLowerCase() === mId.toLowerCase() && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
-      return { memberId: mId, eventId, status: hasAbsence ? "absent" : "present" };
-    });
+      // auto-load active members with absence-aware attendance
+      const newAtt = members
+        .filter(m => (m.status || "active") !== "left")
+        .map(m => {
+        const mId = (m.memberId || "").trim();
+        const hasAbsence = absences.find(a => (a.memberId || "").trim().toLowerCase() === mId.toLowerCase() && (!a.eventType || a.eventType === form.eventType) && a.eventDate === form.eventDate);
+        return { memberId: mId, eventId, status: hasAbsence ? "absent" : "present" };
+      });
 
-    setAttendance(prev => {
-      const existingIds = new Set(prev.filter(a => a.eventId === eventId).map(a => (a.memberId || "").trim().toLowerCase()));
-      const dedupedNew = newAtt.filter(a => !existingIds.has((a.memberId || "").trim().toLowerCase()));
-      return [...prev, ...dedupedNew];
-    });
-    showToast("Event created with attendance loaded", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
-    
-    // Discord Notification
-    await sendDiscordEmbed(
-      "📅 New Event Scheduled",
-      `A new guild event has been scheduled! Please check your attendance.`,
-      0x6382E6, // Blue
-      [
-        { name: "Event Type", value: form.eventType, inline: true },
-        { name: "Date", value: form.eventDate, inline: true },
-        { name: "Event Time", value: discordConfig?.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time", inline: false },
-        { name: "Battlelog Auditor", value: assignedAuditor?.ign || "Not assigned", inline: true },
-        { name: "Assignment", value: assignmentSource, inline: true },
-        { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
-      ],
-      "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-      "events",
-      "event_created",
-      { type: form.eventType, date: form.eventDate }
-    );
-
+      setAttendance(prev => {
+        const existingIds = new Set(prev.filter(a => a.eventId === eventId).map(a => (a.memberId || "").trim().toLowerCase()));
+        const dedupedNew = newAtt.filter(a => !existingIds.has((a.memberId || "").trim().toLowerCase()));
+        return [...prev, ...dedupedNew];
+      });
+      showToast("Event created with attendance loaded", "success");
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
+      
+      // Discord Notification
+      await sendDiscordEmbed(
+        "📅 New Event Scheduled",
+        `A new guild event has been scheduled! Please check your attendance.`,
+        0x6382E6, // Blue
+        [
+          { name: "Event Type", value: form.eventType, inline: true },
+          { name: "Date", value: form.eventDate, inline: true },
+          { name: "Event Time", value: discordConfig?.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time", inline: false },
+          { name: "Battlelog Auditor", value: assignedAuditor?.ign || "Not assigned", inline: true },
+          { name: "Assignment", value: assignmentSource, inline: true },
+          { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
+        ],
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "events",
+        "event_created",
+        { type: form.eventType, date: form.eventDate }
+      );
+    }
     setShowModal(false);
+    setIsEditing(false);
+    setEditEventId(null);
+  };
+
+  const handleEditClick = (ev) => {
+    setForm({
+      eventType: ev.eventType,
+      eventDate: ev.eventDate,
+      eventTime: ev.eventTime || "20:55",
+      auditDueOffsetHours: ev.auditDueOffsetHours || 12
+    });
+    setIsEditing(true);
+    setEditEventId(ev.eventId);
+    setShowModal(true);
+  };
+
+  const handleNewClick = () => {
+    setForm({
+      eventType: "Guild League",
+      eventDate: new Date().toLocaleDateString('en-CA'),
+      eventTime: "20:55",
+      auditDueOffsetHours: 12
+    });
+    setIsEditing(false);
+    setEditEventId(null);
+    setShowModal(true);
   };
 
   React.useEffect(() => {
@@ -542,7 +602,7 @@ function EventsPage() {
         <div style={{ width: 280, flexShrink: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}><Icon name="plus" size={12} /> New</button>
+            <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>
           </div>
           <div className="flex flex-col gap-2">
             {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
@@ -664,6 +724,9 @@ function EventsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
+                    <Icon name="edit" size={12} /> Edit Event
+                  </button>
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
                     <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize, Submit Audit & Post Top 10"}
                   </button>
@@ -846,8 +909,8 @@ function EventsPage() {
       </div>
 
       {showModal && (
-        <Modal title="Create New Event" onClose={() => setShowModal(false)}
-          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={createEvent}><Icon name="plus" size={14} /> Create Event</button></>}>
+        <Modal title={isEditing ? "Edit Event" : "Create New Event"} onClose={() => setShowModal(false)}
+          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleSaveEvent}>{isEditing ? <><Icon name="save" size={14} /> Save Changes</> : <><Icon name="plus" size={14} /> Create Event</>}</button></>}>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Event Type</label>

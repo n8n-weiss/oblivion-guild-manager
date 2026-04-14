@@ -257,6 +257,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
           </div>
         </div>
       </div>
+
     </div>
   );
 }, (prev, next) => {
@@ -375,7 +376,9 @@ function AuctionBuilder() {
   const [showNewTemplate, setShowNewTemplate] = useState(false);
   const [showHistoryGuide, setShowHistoryGuide] = useState(true);
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
-  const [newSessionForm, setNewSessionForm] = useState({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
+  const [newSessionForm, setNewSessionForm] = useState({ name: "", date: new Date().toLocaleDateString('en-CA'), templateId: "" });
+  const [isEditingSession, setIsEditingSession] = useState(false);
+  const [editSessionId, setEditSessionId] = useState(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [editingCell, setEditingCell] = useState(null); // { memberId, colId }
   const [editingColId, setEditingColId] = useState(null);
@@ -692,28 +695,60 @@ function AuctionBuilder() {
     await sendPreviewToDiscord(lastDiscordAttempt);
   };
 
-  const createSession = () => {
+  const handleSaveSession = () => {
     if (!newSessionForm.name.trim()) { showToast("Enter session name", "error"); return; }
-    const template = auctionTemplates.find(t => t.id === newSessionForm.templateId);
-    const columns = template ? template.columns : [
-      { id: `col_${Date.now()}_1`, name: "Resource 1" },
-      { id: `col_${Date.now()}_2`, name: "Resource 2" },
-    ];
-    const newSession = {
-      id: `AUC_${Date.now()}`,
-      name: newSessionForm.name,
-      date: newSessionForm.date,
-      columns,
-      members: [],
-      cells: {}, // { memberId_colId: ["Pg1","Rw2"] }
-    };
-    setAuctionSessions(prev => [...prev, newSession]);
-    setActiveSession(newSession.id);
-    setView("editor");
+    
+    if (isEditingSession) {
+      setAuctionSessions(prev => prev.map(s => {
+        if (s.id === editSessionId) {
+          return { ...s, name: newSessionForm.name, date: newSessionForm.date };
+        }
+        return s;
+      }));
+      showToast("Session updated!", "success");
+    } else {
+      const template = auctionTemplates.find(t => t.id === newSessionForm.templateId);
+      const columns = template ? template.columns : [
+        { id: `col_${Date.now()}_1`, name: "Resource 1" },
+        { id: `col_${Date.now()}_2`, name: "Resource 2" },
+      ];
+      const newSession = {
+        id: `AUC_${Date.now()}`,
+        name: newSessionForm.name,
+        date: newSessionForm.date,
+        columns,
+        members: [],
+        cells: {}, 
+      };
+      setAuctionSessions(prev => [...prev, newSession]);
+      setActiveSession(newSession.id);
+      setView("editor");
+      showToast("Session created!", "success");
+    }
+    
     setShowNewSession(false);
-    setNewSessionForm({ name: "", date: new Date().toISOString().split("T")[0], templateId: "" });
+    setIsEditingSession(false);
+    setEditSessionId(null);
+    setNewSessionForm({ name: "", date: new Date().toLocaleDateString('en-CA'), templateId: "" });
     localStorage.removeItem(AUCTION_DRAFT_KEY);
-    showToast("Session created!", "success");
+  };
+
+  const handleEditSessionClick = (s) => {
+    setNewSessionForm({
+      name: s.name,
+      date: s.date,
+      templateId: "" // Not used for editing
+    });
+    setIsEditingSession(true);
+    setEditSessionId(s.id);
+    setShowNewSession(true);
+  };
+
+  const handleNewSessionClick = () => {
+    setNewSessionForm({ name: "", date: new Date().toLocaleDateString('en-CA'), templateId: "" });
+    setIsEditingSession(false);
+    setEditSessionId(null);
+    setShowNewSession(true);
   };
 
   const deleteSession = (id) => {
@@ -1241,34 +1276,8 @@ function AuctionBuilder() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <div className="card-title" style={{ marginBottom: 0 }}>Sessions</div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowNewSession(true)}><Icon name="plus" size={12} /> New Session</button>
+            <button className="btn btn-primary btn-sm" onClick={handleNewSessionClick}><Icon name="plus" size={12} /> New Session</button>
           </div>
-
-          {showNewSession && (
-            <div style={{ background: "rgba(99,130,230,0.05)", border: "1px solid var(--border)", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-              <div className="form-grid form-grid-2" style={{ marginBottom: 10 }}>
-                <div className="form-group">
-                  <label className="form-label">Session Name</label>
-                  <input className="form-input" placeholder="e.g. TSA GL Week 1" value={newSessionForm.name} onChange={e => setNewSessionForm(f => ({ ...f, name: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Date</label>
-                  <input type="date" className="form-input" value={newSessionForm.date} onChange={e => setNewSessionForm(f => ({ ...f, date: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group" style={{ marginBottom: 10 }}>
-                <label className="form-label">Template (optional)</label>
-                <select className="form-select" value={newSessionForm.templateId} onChange={e => setNewSessionForm(f => ({ ...f, templateId: e.target.value }))}>
-                  <option value="">No template (start fresh)</option>
-                  {auctionTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowNewSession(false)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" onClick={createSession}><Icon name="plus" size={12} /> Create</button>
-              </div>
-            </div>
-          )}
 
           <div className="flex flex-col gap-2">
             {auctionSessions.length === 0 && (
@@ -1332,14 +1341,20 @@ function AuctionBuilder() {
                                       <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
                                       <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>{new Date(s.date).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })} · {s.members.length} members</div>
                                     </div>
-                                    <ConfirmTwiceButton
-                                      className="btn btn-danger btn-sm btn-icon"
-                                      onClick={(e) => e.stopPropagation()}
-                                      onConfirm={() => deleteSession(s.id)}
-                                      icon={<Icon name="trash" size={12} />}
-                                      iconOnly
-                                      title="Delete session"
-                                    />
+                                      <button 
+                                        className="btn btn-ghost btn-sm btn-icon" 
+                                        onClick={(e) => { e.stopPropagation(); handleEditSessionClick(s); }}
+                                      >
+                                        <Icon name="edit" size={12} />
+                                      </button>
+                                      <ConfirmTwiceButton
+                                        className="btn btn-danger btn-sm btn-icon"
+                                        onClick={(e) => e.stopPropagation()}
+                                        onConfirm={() => deleteSession(s.id)}
+                                        icon={<Icon name="trash" size={12} />}
+                                        iconOnly
+                                        title="Delete session"
+                                      />
                                   </div>
                                 ))}
                               </div>
@@ -1479,7 +1494,16 @@ function AuctionBuilder() {
           <div className="flex items-center gap-3">
             <button className="btn btn-ghost" onClick={() => { setView("sessions"); setEditingCell(null); }}><Icon name="x" size={14} /> Back</button>
             <div>
-              <h1 className="page-title">📜 {session.name}</h1>
+              <div className="flex items-center gap-4">
+                <h1 className="page-title">📜 {session.name}</h1>
+                <button 
+                  className="btn btn-ghost btn-sm" 
+                  style={{ padding: "4px 8px", background: "rgba(255,255,255,0.05)", borderRadius: 6 }}
+                  onClick={() => handleEditSessionClick(session)}
+                >
+                  <Icon name="edit" size={12} /> Edit Details
+                </button>
+              </div>
               <p className="page-subtitle">{session.date} · {sessionMembers.length} members · {session.columns.length} resources</p>
             </div>
           </div>
@@ -2142,6 +2166,59 @@ function AuctionBuilder() {
               {discordPreview.message}
             </pre>
           </div>
+        </div>
+      </Modal>
+    )}
+    {showNewSession && (
+      <Modal 
+        title={isEditingSession ? "Edit Session Details" : "Create New Auction Session"} 
+        onClose={() => setShowNewSession(false)}
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setShowNewSession(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSaveSession}>
+              {isEditingSession ? (
+                <><Icon name="save" size={14} /> Save Changes</>
+              ) : (
+                <><Icon name="plus" size={14} /> Create Session</>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">Session Name</label>
+            <input 
+              className="form-input" 
+              placeholder="e.g. TSA GL Week 1" 
+              value={newSessionForm.name} 
+              onChange={e => setNewSessionForm(f => ({ ...f, name: e.target.value }))} 
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Date</label>
+            <input 
+              type="date" 
+              className="form-input" 
+              value={newSessionForm.date} 
+              onChange={e => setNewSessionForm(f => ({ ...f, date: e.target.value }))} 
+            />
+          </div>
+          {!isEditingSession && (
+            <div className="form-group">
+              <label className="form-label">Template (optional)</label>
+              <select 
+                className="form-select" 
+                value={newSessionForm.templateId} 
+                onChange={e => setNewSessionForm(f => ({ ...f, templateId: e.target.value }))}
+              >
+                <option value="">No template (start fresh)</option>
+                {auctionTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <p className="text-xs text-muted mt-1">Templates pre-fill the columns for you.</p>
+            </div>
+          )}
         </div>
       </Modal>
     )}
