@@ -11,7 +11,7 @@ function LeaderboardPage({ onViewProfile }) {
     needsReviewDropDelta: 2,
     noShowStreak: 2
   };
-  const { members, events, attendance, performance, eoRatings, isOfficer, showToast, sendDiscordEmbed, discordConfig } = useGuild();
+  const { members, events, attendance, performance, eoRatings, isOfficer, showToast, isMobile, sendDiscordEmbed, discordConfig } = useGuild();
   const [postingDigest, setPostingDigest] = useState(false);
   const LEADERBOARD_PRESETS_KEY = "leaderboard_view_presets_v1";
   const LEADERBOARD_TABLE_UI_KEY = "leaderboard_table_ui_v1";
@@ -348,7 +348,7 @@ function LeaderboardPage({ onViewProfile }) {
             </div>
             <p className="page-subtitle" style={{ marginTop: 4 }}>Rankings based on scoring formula — auto-computed</p>
           </div>
-          <div className="show-on-mobile">
+          <div className="hybrid-mobile-show">
             <div className="flex gap-2 quick-summary-bar" style={{ margin: "16px 0 0", padding: "4px 0", overflowX: "auto", flexWrap: "nowrap" }}>
               {[
                 { id: "Combat", label: "Combat", icon: "⚔️" },
@@ -384,7 +384,7 @@ function LeaderboardPage({ onViewProfile }) {
               ))}
             </div>
           </div>
-          <div className="hide-on-mobile">
+          <div className="hybrid-mobile-hide">
             <div className="flex gap-2" style={{ flexWrap: "wrap", justifyContent: "flex-end" }}>
               {[
                 { id: "Combat", label: "Combat", icon: "⚔️" },
@@ -457,21 +457,47 @@ function LeaderboardPage({ onViewProfile }) {
           </div>
         </div>
       )}
-      <div className="sticky-actions" style={{ marginBottom: 16 }}>
-        <div className="quick-summary-bar" style={{ padding: "8px 10px", borderRadius: 12 }}>
-          <div className="summary-item" style={{ minWidth: 120 }}>
-            <span className="summary-label">MODE</span>
-            <span className="summary-value">{lbMode === "eo" ? "EO Ratings" : lbMode}</span>
+      <div className="sticky-actions">
+        <div className="summary-bar-container">
+          {/* Mode indicator — accented card */}
+          <div className="summary-item" style={{
+            borderColor: "var(--accent)",
+            background: "rgba(99,130,230,0.08)",
+            border: "1px solid rgba(99,130,230,0.25)",
+            minWidth: 90,
+            flex: "0 0 auto"
+          }}>
+            <span className="summary-label">⚡ MODE</span>
+            <span className="summary-value" style={{ color: "var(--accent)", fontSize: 12 }}>
+              {lbMode === "eo" ? "EO" : lbMode}
+            </span>
           </div>
-          {overviewCards.map(card => (
-            <div key={card.label} className="summary-item" style={{ minWidth: 170, borderColor: card.tone }}>
-              <span className="summary-label">{card.label}</span>
-              <span className="summary-value" style={{ color: card.tone }}>{card.value}</span>
-            </div>
-          ))}
-          <div className="summary-item" style={{ minWidth: 160 }}>
-            <span className="summary-label">PERIOD</span>
-            <span className="summary-value">{periodScope === "all" ? "All-time" : periodScope === "30d" ? "Last 30d" : "Last 8 events"}</span>
+
+          {/* Dynamic overview cards with icons */}
+          {overviewCards.map(card => {
+            const iconMap = {
+              "Top DPS": "⚔️",
+              "Top Support": "✨",
+              "Best Attendance": "🛡️",
+              "EO Top": "🏰",
+              "Best Avg Rating": "⭐",
+              "Most EO Attendance": "✅",
+            };
+            const icon = iconMap[card.label] || "🏆";
+            return (
+              <div key={card.label} className="summary-item" style={{ borderColor: card.tone, minWidth: 110 }}>
+                <span className="summary-label">{icon} {card.label}</span>
+                <span className="summary-value" style={{ color: card.tone, fontSize: 12 }} title={card.value}>{card.value}</span>
+              </div>
+            );
+          })}
+
+          {/* Period */}
+          <div className="summary-item" style={{ flex: "0 0 auto", minWidth: 90 }}>
+            <span className="summary-label">🕐 PERIOD</span>
+            <span className="summary-value" style={{ fontSize: 11 }}>
+              {periodScope === "all" ? "All-time" : periodScope === "30d" ? "30 days" : "Last 8"}
+            </span>
           </div>
         </div>
       </div>
@@ -526,55 +552,37 @@ function LeaderboardPage({ onViewProfile }) {
 
       {showAdvanced && <>
       {/* Top 3 podium - DYNAMIC for all modes */}
-      <div className="flex gap-4 items-end justify-center animate-slide-up" style={{ maxWidth: 700, margin: "0 auto 32px" }}>
+      <div className="podium-container">
         {[podiumData[1], podiumData[0], podiumData[2]].map((m, idx) => {
-          if (!m) return <div key={idx} style={{ flex: 1 }} />;
-          // We mapped [1, 0, 2] which corresponds to 2nd, 1st, 3rd places visually.
+          if (!m) return <div key={idx} className="podium-rank-placeholder" />;
           const realRankMap = [2, 1, 3];
           const realRank = realRankMap[idx];
-          const rankIdx = realRank - 1; // 0 for 1st, 1 for 2nd, 2 for 3rd
+          const rankIdx = realRank - 1;
           
-          const podiumH = [160, 120, 95]; // 1st, 2nd, 3rd height
+          const podiumH = [160, 120, 95];
           const medals = ["🥇", "🥈", "🥉"];
           const labels = ["#1", "#2", "#3"];
           
           return (
-            <div key={m.memberId} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div style={{ fontSize: 28 }} className="animate-float">{medals[rankIdx]}</div>
-              <MemberAvatar ign={m.ign} index={rankIdx} size={46} />
-              <div style={{ fontWeight: 700, fontSize: 15, textAlign: "center", color: "var(--text-primary)", cursor: "pointer" }} onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>{m.class}</div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                <div style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 700, color: rankColors[rankIdx], textShadow: `0 0 12px ${rankColors[rankIdx]}66` }}>
+            <div key={m.memberId} className={`podium-rank rank-${realRank}`}>
+              <div className="podium-medal animate-float">{medals[rankIdx]}</div>
+              <MemberAvatar ign={m.ign} index={rankIdx} size={realRank === 1 ? (isMobile ? 60 : 70) : (isMobile ? 46 : 54)} />
+              <div className="podium-name" onClick={() => onViewProfile && onViewProfile(m)}>{m.ign}</div>
+              <div className="podium-subtitle">{m.class}</div>
+              <div className="podium-stats">
+                <div className="podium-value" style={{ color: rankColors[rankIdx], textShadow: `0 0 12px ${rankColors[rankIdx]}66` }}>
                   {getPodiumValue(m)}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{getPodiumSubtitle(m)}</div>
+                <div className="podium-subval">{getPodiumSubtitle(m)}</div>
               </div>
-              <div style={{
-                width: "100%", height: podiumH[rankIdx],
+              <div className="podium-pillar" style={{
+                height: isMobile ? (podiumH[rankIdx] * 0.7) : podiumH[rankIdx],
                 background: `${rankColors[rankIdx]}22`,
-                borderRadius: "10px 10px 0 0",
-                border: `2px solid ${rankColors[rankIdx]}`,
-                borderBottom: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
+                borderColor: rankColors[rankIdx],
                 boxShadow: `inset 0 0 30px ${rankColors[rankIdx]}22, 0 0 20px ${rankColors[rankIdx]}33`,
-                position: "relative",
-                overflow: "hidden",
-                transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
               }}>
-                <div style={{
-                  position: "absolute", bottom: 0, left: 0, right: 0,
-                  height: "60%",
-                  background: `linear-gradient(to top, ${rankColors[rankIdx]}44, transparent)`,
-                }} />
-                <span style={{
-                  fontFamily: "Cinzel,serif",
-                  fontSize: 48, fontWeight: 900,
-                  color: rankColors[rankIdx],
-                  opacity: 0.6,
-                  zIndex: 1,
-                  textShadow: `0 0 20px ${rankColors[rankIdx]}`,
-                }}>{labels[rankIdx]}</span>
+                <div className="podium-pillar-overlay" style={{ background: `linear-gradient(to top, ${rankColors[rankIdx]}44, transparent)` }} />
+                <span className="podium-label" style={{ color: rankColors[rankIdx], textShadow: `0 0 20px ${rankColors[rankIdx]}` }}>{labels[rankIdx]}</span>
               </div>
             </div>
           );
@@ -604,7 +612,7 @@ function LeaderboardPage({ onViewProfile }) {
       {/* Main Leaderboard Table */}
       {lbMode !== "eo" ? (
         <div className="card animate-fade-in" style={{ marginBottom: 16 }}>
-          <div className="show-on-mobile quick-summary-bar">
+          <div className="hybrid-mobile-show quick-summary-bar">
             <div className="summary-item">
               <span className="summary-label">RANK #1</span>
               <span className="summary-value" style={{ color: 'var(--gold)' }}>{lb[0]?.ign || "—"}</span>
@@ -629,7 +637,7 @@ function LeaderboardPage({ onViewProfile }) {
               ))}
             </div>
           </div>
-          <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hide-on-mobile`}>
+          <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hybrid-mobile-hide`}>
             <table>
               <thead><tr>
                 <th>#</th><th>Player</th><th>Role</th>
@@ -735,7 +743,7 @@ function LeaderboardPage({ onViewProfile }) {
           </div>
 
           {/* Mobile Card List */}
-          <div className="show-on-mobile">
+          <div className="hybrid-mobile-show">
             {filtered.map((m, i) => {
               const val = lbMode === "Combat" ? m.totalScore : 
                           lbMode === "Duty" ? `${m.attendancePct}%` : 
@@ -803,7 +811,7 @@ function LeaderboardPage({ onViewProfile }) {
               <div className="empty-state-text">No EO ratings yet — go to Events tab and rate members on EO events</div>
             </div>
           ) : (
-            <div className="table-wrap hide-on-mobile">
+            <div className="table-wrap hybrid-mobile-hide">
               <table>
                 <thead><tr>
                   <th>#</th><th>Player</th><th>Role</th><th>Total EO Score</th><th>Score Bar</th><th>EO Attended</th><th>Avg Rating</th>
@@ -862,7 +870,7 @@ function LeaderboardPage({ onViewProfile }) {
           
           {/* EO Mobile List */}
           {!eoLb.every(m => m.totalEoScore === 0) && (
-             <div className="show-on-mobile">
+             <div className="hybrid-mobile-show">
                {eoLb.map((m) => (
                  <div key={m.memberId} className="glass-card-mobile animate-fade-in" style={{ borderLeft: `3px solid ${m.eoRank <= 3 ? rankColors[m.eoRank - 1] : "var(--border)"}` }}>
                    <div className="flex items-center justify-between mb-3">

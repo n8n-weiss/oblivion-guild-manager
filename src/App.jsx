@@ -194,6 +194,78 @@ export default function App() {
     };
   }, [page, densityMode, highContrastMode, showCommandPalette, showNotifications]);
 
+  // ── Global Drag-to-Scroll + Shift+Wheel for all .table-responsive tables ──
+  React.useEffect(() => {
+    const setupEl = (el) => {
+      if (el._dragScroll) return; // already set up
+      el._dragScroll = true;
+
+      let isDown = false, startX = 0, scrollLeftStart = 0;
+
+      const onDown = (e) => {
+        // Only left mouse button; ignore clicks on buttons/inputs inside table
+        if (e.button !== 0) return;
+        if (['button','input','select','textarea','a'].includes(e.target?.tagName?.toLowerCase())) return;
+        isDown = true;
+        startX = e.clientX;
+        scrollLeftStart = el.scrollLeft;
+        el.style.cursor = 'grabbing';
+        el.style.userSelect = 'none';
+      };
+      const onUp = () => {
+        if (!isDown) return;
+        isDown = false;
+        el.style.cursor = '';
+        el.style.userSelect = '';
+      };
+      const onMove = (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        el.scrollLeft = scrollLeftStart - (e.clientX - startX);
+      };
+      // Shift + mousewheel = horizontal scroll
+      const onWheel = (e) => {
+        if (!e.shiftKey) return;
+        e.preventDefault();
+        el.scrollLeft += e.deltaY * 0.8;
+      };
+
+      el.addEventListener('mousedown', onDown);
+      el.addEventListener('mouseup', onUp);
+      el.addEventListener('mouseleave', onUp);
+      el.addEventListener('mousemove', onMove);
+      el.addEventListener('wheel', onWheel, { passive: false });
+
+      // Store cleanup fn
+      el._dragScrollCleanup = () => {
+        el.removeEventListener('mousedown', onDown);
+        el.removeEventListener('mouseup', onUp);
+        el.removeEventListener('mouseleave', onUp);
+        el.removeEventListener('mousemove', onMove);
+        el.removeEventListener('wheel', onWheel);
+      };
+    };
+
+    // Apply immediately to existing elements
+    document.querySelectorAll('.table-responsive').forEach(setupEl);
+
+    // Watch for React-mounted new tables
+    const observer = new MutationObserver(() => {
+      document.querySelectorAll('.table-responsive').forEach(setupEl);
+    });
+    observer.observe(document.body, { subtree: true, childList: true });
+
+    return () => {
+      observer.disconnect();
+      document.querySelectorAll('.table-responsive').forEach(el => {
+        el._dragScrollCleanup?.();
+        el._dragScroll = false;
+      });
+    };
+  }, []);
+
+
+
   React.useEffect(() => {
     let awaitingGo = false;
     let goTimeout = null;
@@ -427,7 +499,7 @@ export default function App() {
     <div className={`app-root density-${densityMode} ${highContrastMode ? "high-contrast" : ""}`}>
       <nav className="sidebar" style={{ opacity: 0.5 }}>
         <div className="sidebar-logo">
-          <div style={{ fontFamily: "Cinzel,serif", fontSize: 28, color: "var(--accent)" }}>OBLIVION</div>
+          <div className="font-cinzel" style={{ fontSize: 28, color: "var(--accent)" }}>OBLIVION</div>
         </div>
       </nav>
       <main className="main-content">
@@ -656,7 +728,7 @@ export default function App() {
       {/* Main Content Areas */}
       <main className="main-content">
         {isArchitect && (
-          <div style={{ position: "fixed", top: 10, right: 14, zIndex: 120, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div className="architect-diag-container hide-on-mobile">
             <button
               className="btn btn-ghost btn-sm"
               style={{ border: "1px solid rgba(255,255,255,0.2)", fontSize: 11 }}
@@ -665,9 +737,9 @@ export default function App() {
               {showDiag ? "Hide Diagnostics" : "Show Diagnostics"}
             </button>
             {showDiag && (
-              <div style={{ width: 300, padding: 10, borderRadius: 10, border: "1px solid rgba(99,130,230,0.35)", background: "rgba(10,12,18,0.92)", backdropFilter: "blur(8px)" }}>
+              <div className="architect-diag-panel">
                 <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", letterSpacing: 1, marginBottom: 8 }}>ARCHITECT DIAGNOSTICS</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+                <div className="diag-grid">
                   <div>Page: <strong>{page}</strong></div>
                   <div>Sync: <strong>{syncStatus}</strong></div>
                   <div>Unread: <strong>{unreadCount}</strong></div>
@@ -692,7 +764,7 @@ export default function App() {
           </div>
         )}
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
-        <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="status-bar">
           <span
             style={{
               display: "inline-flex",

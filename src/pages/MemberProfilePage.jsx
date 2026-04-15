@@ -576,13 +576,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   return (
     <div>
       {/* Sticky mini-bar header */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 50, marginBottom: 4,
-        background: "rgba(10,14,22,0.85)", backdropFilter: "blur(12px)",
-        borderBottom: `2px solid ${theme.color}44`,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: isMobile ? "8px 10px" : "10px 20px", gap: isMobile ? 10 : 16
-      }}>
+      <div className="profile-header-sticky">
         <div className="flex items-center gap-3">
           {onBack && !isOwnProfile && (
             <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="x" size={13} /> Back</button>
@@ -693,16 +687,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         </div>
       )}
 
-      {/* Portal Hero */}
-      <div style={{ perspective: 1200 }}>
+      <div className="portal-hero-wrapper">
         <MotionDiv
           className="portal-hero animate-fade-in" 
           style={{ 
-            borderColor: theme.color, marginBottom: 20,
-            rotateX, rotateY, transformStyle: "preserve-3d",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-            position: "relative",
-            overflow: "hidden"
+            borderColor: theme.color,
+            rotateX, rotateY, transformStyle: "preserve-3d"
           }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}

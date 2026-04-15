@@ -601,9 +601,9 @@ function EventsPage() {
         <p className="page-subtitle">Track Guild League and Emperium Overrun events</p>
       </div>
 
-      <div className="flex gap-4" style={{ flexWrap: "wrap" }}>
+      <div className="events-layout-container">
         {/* Event List */}
-        <div style={{ width: 280, flexShrink: 0 }}>
+        <div className="events-sidebar">
           <div className="flex items-center justify-between mb-3">
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
             <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>
@@ -708,13 +708,13 @@ function EventsPage() {
         </div>
 
         {/* Event Detail */}
-        <div style={{ flex: 1 }}>
+        <div className="events-detail">
           {selectedEvent ? (
             <div className="card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="section-header">
                 <div>
                   <div className="font-cinzel" style={{ fontSize: 16, fontWeight: 700 }}>{selectedEvent.eventDate}</div>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
                     <span className="text-xs text-muted">{evtAtt.filter(a => a.status === "present").length}/{evtAtt.length} present</span>
                     <span className={`badge ${getAuditStatus(selectedEvent) === "submitted" ? "badge-active" : getAuditStatus(selectedEvent) === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
@@ -727,21 +727,21 @@ function EventsPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
                     <Icon name="edit" size={12} /> Edit Event
                   </button>
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
-                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize, Submit Audit & Post Top 10"}
+                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize"}
                   </button>
                   {digestIsUpdated && (
                     <button className="btn btn-ghost btn-sm" onClick={() => postEventDigest("repost")} disabled={postingDigest || finalizingDigest}>
-                      <Icon name="refresh" size={12} /> {postingDigest ? "Posting..." : "Repost Updated"}
+                      <Icon name="refresh" size={12} /> {postingDigest ? "Posting..." : "Repost"}
                     </button>
                   )}
                 </div>
               </div>
-              <div className="table-wrap">
+              <div className="table-responsive">
                 <div className="text-xs text-muted" style={{ marginBottom: 16 }}>
                   Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>{" "}
                   • Due: <strong>{(() => {
@@ -752,9 +752,9 @@ function EventsPage() {
                     return new Date(d).toLocaleString();
                   })()}</strong>
                 </div>
-                <table>
+                <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                   <thead><tr>
-                    <th>Member</th><th>Class</th><th>Attendance</th>
+                    <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
                     {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>CTF Total</th><th>Kills</th><th>Assists</th><th>Perf Pts</th><th>Score</th><th></th></>}
                     {selectedEvent.eventType === "Emperium Overrun" && <th>EO Rating</th>}
                   </tr></thead>
@@ -772,7 +772,7 @@ function EventsPage() {
                       const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
                       return (
                         <tr key={m.memberId}>
-                          <td>
+                          <td className="sticky-col">
                             <div style={{ fontWeight: 700 }}>{m.ign}</div>
                             <div className="text-xs text-muted">{m.memberId}</div>
                           </td>

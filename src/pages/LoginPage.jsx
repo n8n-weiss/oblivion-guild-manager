@@ -318,7 +318,7 @@ function LoginPage() {
                 </div>
               )}
 
-              <div className="form-grid" style={{ gap: 16 }}>
+              <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label" style={{ color: "var(--text-secondary)" }}>Portal Email</label>
                   <input className="form-input" type="email" placeholder="yourdiscordusername@oblivion.com"
@@ -441,26 +441,25 @@ function LoginPage() {
                     <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, padding: "0 10px" }}>Fill in your details to apply for guild membership and unlock your portal.</div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 28 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div className="form-group" style={{ position: "relative", margin: 0 }}>
+                  <div className="form-grid-2" style={{ marginBottom: 28 }}>
+                    <div className="form-group" style={{ position: "relative" }}>
                         <label className="form-label" style={{ color: "var(--gold)", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>Discord Username</label>
                         <input className="form-input" placeholder="e.g. reaper" value={regDiscord} onChange={e => setRegDiscord(e.target.value)} style={{ background: "rgba(240, 192, 64, 0.05)", borderColor: "rgba(240,192,64,0.3)", padding: "12px 14px", fontSize: 14 }} />
                       </div>
-                      <div className="form-group" style={{ position: "relative", margin: 0 }}>
+                      <div className="form-group" style={{ position: "relative" }}>
                         <label className="form-label" style={{ color: "var(--gold)", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>In-Game Name</label>
                         <input className="form-input" placeholder="e.g. DarkReaper" value={regIgn} onChange={e => setRegIgn(e.target.value)} style={{ background: "rgba(240, 192, 64, 0.05)", borderColor: "rgba(240,192,64,0.3)", padding: "12px 14px", fontSize: 14 }} />
                       </div>
                     </div>
 
-                    <div className="form-group" style={{ position: "relative", margin: 0 }}>
+                    <div className="form-group" style={{ position: "relative" }}>
                       <label className="form-label" style={{ color: "var(--gold)", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>UID (6 numbers)</label>
                       <input className="form-input" placeholder="e.g. OBL+UID or OBL123456" value={regUid} onChange={e => handleUidChange(e.target.value)} style={{ background: "rgba(240, 192, 64, 0.05)", borderColor: "rgba(240,192,64,0.3)", padding: "12px 14px", fontSize: 14, letterSpacing: 2 }} />
                       <div style={{ position: "absolute", right: 14, top: 32, filter: "opacity(0.4) drop-shadow(0 0 4px var(--gold))" }}><Icon name="shield" size={14} /></div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div className="form-group" style={{ position: "relative", margin: 0 }}>
+                    <div className="form-grid-2">
+                      <div className="form-group" style={{ position: "relative" }}>
                         <label className="form-label" style={{ color: "var(--gold)", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>Job Class</label>
                         <select className="form-input" value={regClass} onChange={e => setRegClass(e.target.value)} style={{ background: "rgba(0, 0, 0, 0.6)", color: "#fff", borderColor: "rgba(240,192,64,0.3)", padding: "12px 14px", fontSize: 13 }}>
                           <option value="" style={{ background: "#222" }}>Select Class</option>
@@ -469,7 +468,7 @@ function LoginPage() {
                           )))}
                         </select>
                       </div>
-                      <div className="form-group" style={{ position: "relative", margin: 0 }}>
+                      <div className="form-group" style={{ position: "relative" }}>
                         <label className="form-label" style={{ color: "var(--gold)", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>Role</label>
                         <select className="form-input" value={regRole} onChange={e => setRegRole(e.target.value)} style={{ background: "rgba(0, 0, 0, 0.6)", color: "#fff", borderColor: "rgba(240,192,64,0.3)", padding: "12px 14px", fontSize: 13 }}>
                           <option value="DPS" style={{ background: "#222" }}>DPS</option>
@@ -487,7 +486,6 @@ function LoginPage() {
                         )}
                       </div>
                     )}
-                  </div>
 
                   <button className="btn w-full" style={{ position: "relative", overflow: "hidden", marginTop: 8, justifyContent: "center", padding: "12px", fontSize: 13, fontWeight: 700, letterSpacing: 1, background: "linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.5)", boxShadow: "0 4px 12px rgba(240,192,64,0.15)" }}
                     onClick={handleRegister} disabled={loading || !!duplicateRegistrationWarning}>

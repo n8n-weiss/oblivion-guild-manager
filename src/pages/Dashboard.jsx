@@ -170,12 +170,12 @@ function Dashboard() {
   return (
     <div className="animate-fade-in" style={{ paddingBottom: 40 }}>
       {/* HEADER SECTION */}
-      <div className="page-header flex justify-between items-end" style={{ marginBottom: 24 }}>
+      <div className="section-header">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="page-title" style={{ fontSize: 32, textShadow: "0 0 16px rgba(255,255,255,0.1)" }}>📊 Dashboard</h1>
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
+            <h1 className="page-title">📊 Dashboard</h1>
             {onlineUsers.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(64, 201, 122, 0.1)", border: "1px solid rgba(64, 201, 122, 0.3)", padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, color: "var(--green)" }}>
+              <div className="badge badge-active">
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 8px var(--green)" }}></span>
                 {onlineUsers.length} ONLINE
               </div>
@@ -183,7 +183,7 @@ function Dashboard() {
           </div>
           <p className="page-subtitle">Guild command center & performance at a glance</p>
         </div>
-        <div style={{ textAlign: "right", minWidth: 200 }}>
+        <div className="guild-xp-container">
           <div className="flex justify-between items-end mb-1" style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>
             <span>GUILD RANK: {guildLevel}</span>
             <span className="text-muted" style={{ fontWeight: 400 }}>{totalGuildScore} / {nextLevelXP} XP</span>
@@ -377,9 +377,9 @@ function Dashboard() {
       <div className="card mb-4" style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div className="card-title">📈 Guild Attendance Trend</div>
         <div className="text-xs text-muted mt-1 mb-4">Tracking operation participation across the last 10 events.</div>
-        <div style={{ flex: 1, minHeight: 250, width: "100%", marginLeft: -20, marginRight: -20 }}>
+        <div className="chart-container">
           <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />

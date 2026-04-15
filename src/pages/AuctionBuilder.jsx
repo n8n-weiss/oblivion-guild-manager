@@ -1441,8 +1441,8 @@ function AuctionBuilder() {
             </div>
           </div>
 
-          <div className="table-wrap">
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div className="table-responsive">
+            <table className="hybrid-mobile-hide" style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   <th style={{ padding: "12px 16px", textAlign: "left" }}>Date</th>
@@ -1483,6 +1483,33 @@ function AuctionBuilder() {
                 })}
               </tbody>
             </table>
+
+            {/* Mobile Card List for History */}
+            <div className="hybrid-mobile-show">
+              {filteredHistory.length === 0 && <div className="text-center p-8 text-muted">No matching history found</div>}
+              {filteredHistory.map(h => {
+                const tc = tagColor(h.tag);
+                return (
+                  <div key={h.id} className="glass-card-mobile animate-fade-in" style={{ borderLeft: `4px solid ${tc.border}` }}>
+                    <div className="flex justify-between items-start mb-2">
+                       <div>
+                         <div style={{ fontSize: 13, fontWeight: 700 }}>{h.ign}</div>
+                         <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{h.date} • {h.sessionName}</div>
+                       </div>
+                       <span className={`badge ${h.isOutbid ? "badge-loa" : "badge-active"}`} style={{ fontSize: 9 }}>
+                         {h.isOutbid ? "Outbid" : "Won"}
+                       </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                       <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{h.colName}</div>
+                       <span style={{ background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>
+                         {h.isOutbid ? h.tag.substring(1) : h.tag}
+                       </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -1551,7 +1578,7 @@ function AuctionBuilder() {
 
         {/* Member Pool */}
         {(!isMobile || mobileShowPool) && (
-        <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="auction-pool-sidebar">
           <div className="flex items-center justify-between">
             <div style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 700 }}>Member Pool</div>
             {pool.length > 0 && (
@@ -1672,13 +1699,13 @@ function AuctionBuilder() {
                 ← Drag members from the pool to add them
               </div>
             ) : (
-              <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--border)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <div className="table-responsive">
+                <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
                       <th style={{ padding: "12px 16px", textAlign: "left", fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: 160, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>Member</th>
                       {session.columns.map(col => (
-                        <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid rgba(255,255,255,0.1)", minWidth: 160 }}>
+                        <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid rgba(255,255,255,0.1)", minWidth: 200 }}>
                           {editingColId === col.id ? (
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, animation: "fade-in 0.2s" }}>
                               {availableCategories.map(rc => (
@@ -1766,7 +1793,7 @@ function AuctionBuilder() {
                         onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
                         onMouseLeave={e => e.currentTarget.style.background = rowIdx % 2 === 1 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.15)"}
                       >
-                        <td style={{ padding: "10px 16px" }}>
+                        <td className="sticky-col" style={{ padding: "10px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "grab" }}>
                             {miniAvatar(m, members.indexOf(m))}
                             <div>
@@ -1827,7 +1854,7 @@ function AuctionBuilder() {
 
         {/* Member History Guide Sidebar */}
         {showHistoryGuide && (!isMobile || mobileShowSidebar) && (
-          <div style={{ width: 330, flexShrink: 0, position: "sticky", top: 20, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="auction-guide-sidebar">
             
             {/* Sidebar Tab Switcher */}
             <div style={{ 

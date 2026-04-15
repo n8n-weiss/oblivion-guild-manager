@@ -266,7 +266,7 @@ function MembersPage({ onViewProfile }) {
 
       <div className="card">
         {/* Quick View Summary (Mobile Only) */}
-        <div className="show-on-mobile quick-summary-bar">
+        <div className="hybrid-mobile-show quick-summary-bar">
           <div className="summary-item">
             <span className="summary-label">TOTAL</span>
             <span className="summary-value" style={{ color: 'var(--accent)' }}>{members.length}</span>
@@ -286,13 +286,13 @@ function MembersPage({ onViewProfile }) {
         </div>
 
         <div className="section-header sticky-actions">
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap" style={{ flex: 1 }}>
             <div className="search-bar">
               <span className="search-icon"><Icon name="search" size={14} /></span>
               <input className="form-input" placeholder="Search IGN, ID, class…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <div className="flex gap-2">
-              <select className="form-select" style={{ width: "auto" }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <div className="flex gap-2 flex-wrap" style={{ flex: 1 }}>
+              <select className="form-select" style={{ minWidth: 100 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
                 <option>All</option><option>DPS</option><option>Support</option>
               </select>
               <div className="flex gap-1 p-1 bg-deepest rounded-lg border border-border">
@@ -302,7 +302,7 @@ function MembersPage({ onViewProfile }) {
             </div>
           </div>
           {isOfficer && (
-            <button className="btn btn-primary" onClick={openAdd} style={{ width: "100%", maxWidth: "none" }}><Icon name="plus" size={14} /> Add Member</button>
+            <button className="btn btn-primary" onClick={openAdd}><Icon name="plus" size={14} /> Add Member</button>
           )}
         </div>
         <div className="flex gap-2 mb-3" style={{ flexWrap: "wrap", alignItems: "center" }}>
@@ -366,7 +366,7 @@ function MembersPage({ onViewProfile }) {
           />
         ) : (
           <>
-            <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hide-on-mobile`}>
+            <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hybrid-mobile-hide`}>
             <table>
               <thead>
                 <tr>
@@ -479,7 +479,7 @@ function MembersPage({ onViewProfile }) {
           </div>
 
           {/* Mobile Card List */}
-          <div className="show-on-mobile">
+          <div className="hybrid-mobile-show">
             {filtered.map((m) => {
               const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
               const idx = members.indexOf(m);
