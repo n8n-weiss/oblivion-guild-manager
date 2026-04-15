@@ -603,7 +603,8 @@ function EventsPage() {
 
       <div className="events-layout-container">
         {/* Event List */}
-        <div className="events-sidebar">
+        {!selectedEvent && (
+          <div className="events-sidebar">
           <div className="flex items-center justify-between mb-3">
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
             <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>
@@ -706,6 +707,7 @@ function EventsPage() {
             })}
           </div>
         </div>
+        )}
 
         {/* Event Detail */}
         <div className="events-detail">
@@ -713,6 +715,13 @@ function EventsPage() {
             <div className="card">
               <div className="section-header">
                 <div>
+                  <button 
+                    className="btn btn-ghost btn-sm" 
+                    style={{ marginBottom: 12, paddingLeft: 0, opacity: 0.8 }}
+                    onClick={() => setSelectedEvent(null)}
+                  >
+                    <Icon name="chevron-left" size={12} /> Back to Events
+                  </button>
                   <div className="font-cinzel" style={{ fontSize: 16, fontWeight: 700 }}>{selectedEvent.eventDate}</div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
