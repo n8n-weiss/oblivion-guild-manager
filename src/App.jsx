@@ -16,6 +16,7 @@ import Modal from "./components/ui/Modal";
 import TreasuryModal from "./components/common/TreasuryModal";
 import { NotificationCenter } from "./components/common/NotificationCenter";
 import { CardSkeleton } from "./components/ui/Skeleton";
+import DashboardSkeleton from "./components/dashboard/DashboardSkeleton";
 
 const lazyWithRetry = (importer, key) =>
   React.lazy(async () => {
@@ -38,7 +39,7 @@ const lazyWithRetry = (importer, key) =>
     }
   });
 
-const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"), "dashboard");
+import Dashboard from "./pages/Dashboard";
 const MembersPage = lazyWithRetry(() => import("./pages/MembersPage"), "members");
 const EventsPage = lazyWithRetry(() => import("./pages/EventsPage"), "events");
 const AbsencesPage = lazyWithRetry(() => import("./pages/AbsencesPage"), "absences");
@@ -927,14 +928,16 @@ export default function App() {
               fallback={
                 effectivePage === "members" && isMember
                   ? <MyProfileSkeleton />
-                  : (
-                    <div className="grid-2">
-                      <CardSkeleton />
-                      <CardSkeleton />
-                      <CardSkeleton />
-                      <CardSkeleton />
-                    </div>
-                  )
+                  : (effectivePage === "dashboard"
+                      ? <DashboardSkeleton />
+                      : (
+                        <div className="grid-2">
+                          <CardSkeleton />
+                          <CardSkeleton />
+                          <CardSkeleton />
+                          <CardSkeleton />
+                        </div>
+                      ))
               }
             >
               <AnimatePresence mode="wait">
