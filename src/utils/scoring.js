@@ -19,7 +19,7 @@ export function computeAttendanceStatus(attendancePct) {
   return { label: "At Risk", color: "var(--red)", badge: "badge-atrisk", icon: "🚨" };
 }
 
-export function computeLeaderboard(members, events, attendance, performance, eoRatings = []) {
+export function computeLeaderboard(members, events, attendance, performance, eoRatings = [], filterMonth = null) {
   return members.map((member) => {
     let totalScore = 0;
     let presentCount = 0;
@@ -34,6 +34,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
 
     // Filter events: include if after Join Date OR if member has explicit data for it
     const eligibleEvents = events.filter(e => {
+      if (filterMonth && String(e?.eventDate || "").slice(0, 7) !== filterMonth) return false;
       if (!member.joinDate) return true;
       if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
       const hasAtt = attendance.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === e.eventId);

@@ -4,6 +4,8 @@ import { db, auth, firebaseConfig } from '../firebase';
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId, deleteField } from 'firebase/firestore';
 import { onAuthStateChanged, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
+import { resetMonthlyData } from '../services/guildService';
+
 
 const migrateMentions = (cat, defaultType = "none") => {
   if (!cat) return { enabled: true, webhookUrl: "", mentions: { [defaultType]: true } };
@@ -1328,8 +1330,28 @@ export const GuildProvider = ({ children, initialData }) => {
       setDoc(doc(db, "metadata", "discord"), metadata.discord || {}, { merge: true })
     ]);
   };
+  const resetMonthlyScores = async () => {
+    setLoading(true);
+    try {
+      const now = new Date();
+      const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      await resetMonthlyData(monthYear);
+
+      // Clear local state to trigger UI refresh
+      setAttendance([]);
+      setPerformance([]);
+      setEoRatings([]);
+
+      showToast(`Monthly data for ${monthYear} has been archived and reset.`, "success");
+    } catch (err) {
+      console.error("Reset monthly data error:", err);
+      showToast("Failed to reset monthly data", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const backfillBattleBuckets = async () => {
-    if (!isArchitect) throw new Error("FORBIDDEN");
     const [eventsSnap, attSnap, perfSnap, eoSnap] = await Promise.all([
       getDocs(collection(db, "events")),
       getDocs(collection(db, "attendance")),
@@ -1926,7 +1948,9 @@ export const GuildProvider = ({ children, initialData }) => {
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
     resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill,
+    resetMonthlyScores,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata
+
 
   };
 
