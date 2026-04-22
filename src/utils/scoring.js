@@ -8,9 +8,7 @@ export function computeScore({ event, att, perf }) {
   const ctf3 = perf?.ctf3 ?? 0;
   const ctfTotal = ctf1 + ctf2 + ctf3;
   const pp = perf?.performancePoints ?? 0;
-  const kills = perf?.kills ?? 0;
-  const assists = perf?.assists ?? 0;
-  return ctfTotal + pp + kills + assists;
+  return ctfTotal + pp;
 }
 
 export function computeAttendanceStatus(attendancePct) {
