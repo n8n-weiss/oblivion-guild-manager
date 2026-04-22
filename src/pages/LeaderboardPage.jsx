@@ -236,13 +236,43 @@ function LeaderboardPage({ onViewProfile }) {
   const postWeeklyDigest = async () => {
     setPostingDigest(true);
     try {
-      // Re-compute raw leaderboard so we have all metrics agnostic of the current UI tab
+      const sortedEvents = [...events].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+      if (sortedEvents.length === 0) {
+        showToast("No events available for digest.", "error");
+        setPostingDigest(false);
+        return;
+      }
+      
+      const latestGlobalEvent = sortedEvents[0];
+      const latestDate = new Date(latestGlobalEvent.eventDate);
+      
+      const day = latestDate.getDay();
+      const diff = latestDate.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(latestDate);
+      monday.setDate(diff);
+      monday.setHours(0, 0, 0, 0);
+      
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+
+      const weeklyEvents = events.filter(e => {
+        const d = new Date(e.eventDate);
+        return d >= monday && d <= sunday;
+      });
+      const previousGlobalEvents = events.filter(e => new Date(e.eventDate) < monday);
+
+      const weeklyIds = new Set(weeklyEvents.map(e => e.eventId));
+      const weeklyAtt = attendance.filter(a => weeklyIds.has(a.eventId));
+      const weeklyPerf = performance.filter(p => weeklyIds.has(p.eventId));
+      const weeklyEo = eoRatings.filter(r => !r.eventId || weeklyIds.has(r.eventId));
+
       const rawLb = computeLeaderboard(
         activeMembers,
-        scopedData.scopedEvents,
-        scopedData.scopedAttendance,
-        scopedData.scopedPerformance,
-        scopedData.scopedEoRatings
+        weeklyEvents,
+        weeklyAtt,
+        weeklyPerf,
+        weeklyEo
       );
 
       const topCombat = [...rawLb].sort((a, b) => b.totalScore - a.totalScore).slice(0, 10);
@@ -252,14 +282,12 @@ function LeaderboardPage({ onViewProfile }) {
       }).sort((a, b) => b.supportIndex - a.supportIndex).slice(0, 10);
       const topAttendance = [...rawLb].sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore).slice(0, 10);
 
-      // Algorithmic Outliers (Most Improved this week)
-      // Calculate by comparing the most recent Guild League event against their historical average.
-      const glEvents = scopedData.scopedEvents.filter(e => e.eventType === "Guild League");
-      const latestEvent = glEvents[0];
-      const previousEvents = glEvents.slice(1);
+      const glWeeklyEvents = weeklyEvents.filter(e => e.eventType === "Guild League");
+      const previousGLEvents = previousGlobalEvents.filter(e => e.eventType === "Guild League");
       
       let movers = [];
-      if (latestEvent && previousEvents.length > 0) {
+      if (glWeeklyEvents.length > 0 && previousGLEvents.length > 0) {
+        const latestWeekGL = [...glWeeklyEvents].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))[0];
         const topCombatIds = new Set(topCombat.map(c => (c.memberId || "").toLowerCase()));
         const topSupportIds = new Set(topSupport.map(s => (s.memberId || "").toLowerCase()));
 
@@ -268,9 +296,9 @@ function LeaderboardPage({ onViewProfile }) {
           
           let histScoreAgg = 0;
           let histCount = 0;
-          previousEvents.forEach(ev => {
-             const att = scopedData.scopedAttendance.find(a => a.eventId === ev.eventId && (a.memberId || "").toLowerCase() === mId);
-             const perf = scopedData.scopedPerformance.find(p => p.eventId === ev.eventId && (p.memberId || "").toLowerCase() === mId);
+          previousGLEvents.forEach(ev => {
+             const att = attendance.find(a => a.eventId === ev.eventId && (a.memberId || "").toLowerCase() === mId);
+             const perf = performance.find(p => p.eventId === ev.eventId && (p.memberId || "").toLowerCase() === mId);
              if (att?.status === "present") {
                 histScoreAgg += computeScore({ event: ev, att, perf });
                 histCount++;
@@ -278,9 +306,9 @@ function LeaderboardPage({ onViewProfile }) {
           });
           const histAvg = histCount > 0 ? histScoreAgg / histCount : 0;
           
-          const latestAtt = scopedData.scopedAttendance.find(a => a.eventId === latestEvent.eventId && (a.memberId || "").toLowerCase() === mId);
-          const latestPerf = scopedData.scopedPerformance.find(p => p.eventId === latestEvent.eventId && (p.memberId || "").toLowerCase() === mId);
-          const latestScore = latestAtt?.status === "present" ? computeScore({ event: latestEvent, att: latestAtt, perf: latestPerf }) : 0;
+          const latestAtt = weeklyAtt.find(a => a.eventId === latestWeekGL.eventId && (a.memberId || "").toLowerCase() === mId);
+          const latestPerf = weeklyPerf.find(p => p.eventId === latestWeekGL.eventId && (p.memberId || "").toLowerCase() === mId);
+          const latestScore = latestAtt?.status === "present" ? computeScore({ event: latestWeekGL, att: latestAtt, perf: latestPerf }) : 0;
           
           const delta = latestScore - histAvg;
           return { ...m, delta: Math.round(delta), latestScore, histAvg };
@@ -296,6 +324,8 @@ function LeaderboardPage({ onViewProfile }) {
       };
 
       const pingOverride = discordConfig?.oblivionRoleId ? `<@&${discordConfig.oblivionRoleId}>` : "@everyone";
+      const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const sunStr = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
       await sendDiscordEmbed(
         `🏆  __**OBLIVION WEEKLY GUILD HONORS**__  🏆`,
@@ -303,19 +333,19 @@ function LeaderboardPage({ onViewProfile }) {
         0xF0C040,
         [
           { name: "⚔️  TOP 10 COMBAT (Overall)", value: formatRow(topCombat, m => `**${m.totalScore} pts** (${m.totalKills || 0} kills | ${m.totalPP || 0} pp)`), inline: false },
-          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "\u200B", value: "\u200B", inline: false },
           { name: "✨  TOP 10 SUPPORT / UTILITY", value: formatRow(topSupport, m => `**${m.supportIndex} SPI** (${m.totalAssists || 0} ast | ${m.totalPP || 0} pp)`), inline: false },
-          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "\u200B", value: "\u200B", inline: false },
           { name: "🛡️  TOP 10 ATTENDANCE", value: formatRow(topAttendance, m => `**${m.attendancePct}%** Attendance Rate`), inline: false },
-          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
+          { name: "\u200B", value: "\u200B", inline: false },
           { name: "🚀  MOST IMPROVED MEMBERS", value: movers.length > 0 ? formatRow(movers, m => `**+${m.delta} pts** above personal average`) : "_No significant rank movement detected._", inline: false },
-          { name: "\u200B", value: "\u200B", inline: false }, // Spacer
-          { name: "📅  DETAILS", value: `**Scope:** ${periodScope === "all" ? "All-Time" : periodScope === "30d" ? "Last 30 Days" : "Last 8 Events"}\n**Date Filter:** ${filter}`, inline: false }
+          { name: "\u200B", value: "\u200B", inline: false },
+          { name: "📅  DETAILS", value: `**Weekly Range:** ${monStr} – ${sunStr}\n**Events Evaluated:** ${weeklyEvents.length}`, inline: false }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
         "leaderboard",
         "weekly_digest",
-        { scope: periodScope },
+        { scope: "Weekly" },
         null,
         pingOverride
       );
