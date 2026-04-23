@@ -626,15 +626,19 @@ function AuctionBuilder() {
   const buildAuctionBlob = React.useCallback(async () => {
     const element = document.getElementById('auction-table-export');
     if (!element) return null;
-    const bgColor = getComputedStyle(document.body).getPropertyValue('--bg-deepest').trim() || '#080a0f';
     const canvas = await html2canvas(element, {
-      backgroundColor: bgColor,
+      backgroundColor: '#1a2035',
       scale: 2,
       logging: false,
       useCORS: true,
       onclone: (clonedDoc) => {
         const el = clonedDoc.getElementById('auction-table-export');
-        if (el) el.style.maxHeight = 'none';
+        if (el) {
+          el.style.maxHeight = 'none';
+          el.style.background = '#1a2035';
+          el.style.padding = '20px';
+          el.style.borderRadius = '0';
+        }
       }
     });
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
