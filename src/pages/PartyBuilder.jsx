@@ -4,6 +4,8 @@ import Icon from '../components/ui/icons';
 
 const PARTY_NAMES = ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"];
 const RAID_NAMES = ["Raid Alpha", "Raid Bravo", "Raid Charlie", "Raid Delta"];
+const LEAGUE_MAIN_NAMES = ["Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"];
+const LEAGUE_SUB_NAMES = ["Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"];
 const RAID_CAPACITY = 40;
 
 function PartyBuilder() {
@@ -11,6 +13,7 @@ function PartyBuilder() {
     members, events, attendance,
     parties, setParties, partyNames, setPartyNames,
     raidParties, setRaidParties, raidPartyNames, setRaidPartyNames,
+    leagueParties, setLeagueParties, leaguePartyNames, setLeaguePartyNames,
     partyOverrides, setPartyOverrides,
     showToast
   } = useGuild();
@@ -22,6 +25,7 @@ function PartyBuilder() {
   const [editingName, setEditingName] = useState(null);
   const [nameInput, setNameInput] = useState("");
   const [editingMember, setEditingMember] = useState(null);
+  const [leagueSearch, setLeagueSearch] = useState("");
 
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
 
@@ -91,6 +95,61 @@ function PartyBuilder() {
 
   const resetRaids = () => setRaidParties([]);
 
+  // ── LEAGUE MODE ───────────────────────────────────────────────
+  const assignedLeagueIds = useMemo(() => {
+    const mainIds = (leagueParties.main || []).flatMap(p => p.map(m => m.memberId));
+    const subIds = (leagueParties.sub || []).flatMap(p => p.map(m => m.memberId));
+    return new Set([...mainIds, ...subIds]);
+  }, [leagueParties]);
+  
+  const leagueBench = useMemo(() => poolMembers.filter(m => !assignedLeagueIds.has(m.memberId)), [poolMembers, assignedLeagueIds]);
+  
+  const filteredLeagueBench = useMemo(() => {
+    if (!leagueSearch) return leagueBench;
+    const term = leagueSearch.toLowerCase();
+    return leagueBench.filter(m => 
+      m.ign.toLowerCase().includes(term) || 
+      m.class.toLowerCase().includes(term)
+    );
+  }, [leagueBench, leagueSearch]);
+
+  const leagueBenchDPS = useMemo(() => filteredLeagueBench.filter(m => m.role === "DPS"), [filteredLeagueBench]);
+  const leagueBenchSUP = useMemo(() => filteredLeagueBench.filter(m => m.role !== "DPS"), [filteredLeagueBench]);
+
+  const removeMemberFromLeague = (memberId, field, partyIdx) => {
+    setLeagueParties(prev => ({
+      ...prev,
+      [field]: (prev[field] || []).map((p, i) => i === partyIdx ? p.filter(m => m.memberId !== memberId) : p)
+    }));
+  };
+
+  const addMemberToLeague = (member, field, partyIdx) => {
+    setLeagueParties(prev => {
+      // 1. Remove from ALL league parties first
+      const nextMain = (prev.main || []).map(p => p.filter(m => m.memberId !== member.memberId));
+      const nextSub = (prev.sub || []).map(p => p.filter(m => m.memberId !== member.memberId));
+      
+      const targetList = field === "main" ? nextMain : nextSub;
+      
+      // 2. Check capacity
+      if (targetList[partyIdx] && targetList[partyIdx].length >= 5) {
+        showToast("Party is full! (Max 5 members)", "error");
+        return prev;
+      }
+      
+      // 3. Add to target
+      if (field === "main") {
+        nextMain[partyIdx] = [...nextMain[partyIdx], member];
+      } else {
+        nextSub[partyIdx] = [...nextSub[partyIdx], member];
+      }
+      
+      return { main: nextMain, sub: nextSub };
+    });
+  };
+
+  const resetLeague = () => setLeagueParties({ main: Array(8).fill([]), sub: Array(8).fill([]) });
+
   // ── DRAG HANDLERS ─────────────────────────────────────────────
   const onDragStart = (memberId, from) => setDragging({ memberId, fromParty: from });
   const onDragEnd = () => { setDragging(null); setDragOver(null); };
@@ -107,7 +166,7 @@ function PartyBuilder() {
       } else {
         addMemberToParty(member, toTarget);
       }
-    } else {
+    } else if (builderType === "raid") {
       // raid mode — toTarget = "bench" | "raid:X"
       if (toTarget === "bench") {
         if (typeof fromParty === "string" && fromParty.startsWith("raid:")) {
@@ -117,6 +176,21 @@ function PartyBuilder() {
       } else if (typeof toTarget === "string" && toTarget.startsWith("raid:")) {
         const raidIdx = parseInt(toTarget.split(":")[1]);
         addMemberToRaid(member, raidIdx);
+      }
+    } else if (builderType === "league") {
+      // league mode — toTarget = "bench" | "league:main:X" | "league:sub:X"
+      if (toTarget === "bench") {
+        if (typeof fromParty === "string" && fromParty.startsWith("league:")) {
+          const parts = fromParty.split(":");
+          const field = parts[1];
+          const idx = parseInt(parts[2]);
+          removeMemberFromLeague(memberId, field, idx);
+        }
+      } else if (typeof toTarget === "string" && toTarget.startsWith("league:")) {
+        const parts = toTarget.split(":");
+        const field = parts[1];
+        const idx = parseInt(parts[2]);
+        addMemberToLeague(member, field, idx);
       }
     }
     setDragging(null);
@@ -134,10 +208,20 @@ function PartyBuilder() {
     }
   };
   const commitRename = () => {
-    if (editingName === null) return;
     if (typeof editingName === "string" && editingName.startsWith("raid:")) {
       const idx = parseInt(editingName.split(":")[1]);
       setRaidPartyNames(prev => { const n = [...prev]; n[idx] = nameInput || `Raid ${idx + 1}`; return n; });
+    } else if (typeof editingName === "string" && editingName.startsWith("league:")) {
+      const parts = editingName.split(":");
+      const field = parts[1];
+      const idx = parseInt(parts[2]);
+      setLeaguePartyNames(prev => {
+        const next = { ...prev };
+        const list = [...(next[field] || Array(8).fill(""))];
+        list[idx] = nameInput || `Party ${idx + 1}`;
+        next[field] = list;
+        return next;
+      });
     } else {
       setPartyNames(prev => { const n = [...prev]; n[editingName] = nameInput || `Party ${editingName + 1}`; return n; });
     }
@@ -253,6 +337,11 @@ function PartyBuilder() {
                   onClick={() => switchBuilder("raid")}
                   style={builderType === "raid" ? { background: "linear-gradient(135deg,#c0392b,#e74c3c)", borderColor: "#c0392b" } : {}}
                 >⚔️ Raid (40-man)</button>
+                <button
+                  className={`btn btn-sm ${builderType === "league" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => switchBuilder("league")}
+                  style={builderType === "league" ? { background: "linear-gradient(135deg,var(--gold),#f39c12)", borderColor: "var(--gold)" } : {}}
+                >🏆 Guild League</button>
               </div>
             </div>
 
@@ -295,12 +384,16 @@ function PartyBuilder() {
                 {hasParties && <button className="btn btn-ghost" onClick={resetParties}><Icon name="trash" size={14} /> Reset</button>}
                 <button className="btn btn-primary" onClick={addParty}><Icon name="plus" size={14} /> Add Party</button>
               </>
-            ) : (
+            ) : builderType === "raid" ? (
               <>
                 {hasRaids && <button className="btn btn-ghost" onClick={resetRaids}><Icon name="trash" size={14} /> Reset All</button>}
                 <button className="btn btn-primary" onClick={addRaid} style={{ background: "linear-gradient(135deg,#c0392b,#e74c3c)", borderColor: "#c0392b" }}>
                   <Icon name="plus" size={14} /> Add Raid
                 </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-ghost" onClick={resetLeague}><Icon name="trash" size={14} /> Reset League</button>
               </>
             )}
           </div>
@@ -560,17 +653,186 @@ function PartyBuilder() {
             </div>
           )}
 
-          {/* Raid empty state — no raids yet */}
-          {!hasRaids && (
-            <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-              <div className="empty-state">
-                <div className="empty-state-icon">⚔️</div>
-                <div className="empty-state-text">
-                  Click "Add Raid" to create a raid group, then drag members here
+        </>
+      )}
+
+      {/* ── LEAGUE MODE ── */}
+      {builderType === "league" && (
+        <>
+          {/* League Search & Bench */}
+          <div className="card" style={{ marginBottom: 24, border: "1px solid var(--border-bright)" }}>
+            <div className="flex items-center justify-between mb-4" style={{ gap: 20 }}>
+              <div className="card-title" style={{ marginBottom: 0 }}>🔍 Quick Find Member</div>
+              <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Search IGN or Class..." 
+                  value={leagueSearch}
+                  onChange={e => setLeagueSearch(e.target.value)}
+                  style={{ paddingLeft: 36, borderRadius: 12, background: "var(--bg-deepest)" }}
+                />
+                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }}>
+                  <Icon name="search" size={16} />
                 </div>
+                {leagueSearch && (
+                  <button 
+                    onClick={() => setLeagueSearch("")}
+                    style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                )}
               </div>
             </div>
-          )}
+
+            {renderBench(filteredLeagueBench, leagueBenchDPS, leagueBenchSUP, true)}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            
+            {/* Main Field Partition */}
+            <div style={{ background: "rgba(240,192,64,0.03)", borderRadius: 24, border: "1px solid rgba(240,192,64,0.15)", padding: "32px 24px" }}>
+              <div style={{ textAlign: "center", marginBottom: 30 }}>
+                <h2 style={{ margin: 0, fontFamily: "Cinzel, serif", fontSize: 28, color: "var(--gold)", letterSpacing: 3, fontWeight: 900 }}>MAIN ELITE TEAMS</h2>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6, letterSpacing: 1 }}>
+                  {(leagueParties.main || []).reduce((s, p) => s + p.length, 0)} / 40 MEMBERS ASSIGNED
+                </div>
+              </div>
+
+              <div className="league-grid">
+                {(leagueParties.main || []).map((party, i) => {
+                  const dropKey = `league:main:${i}`;
+                  const name = (leaguePartyNames.main && leaguePartyNames.main[i]) || LEAGUE_MAIN_NAMES[i];
+                  return (
+                    <div key={i} className="party-card"
+                      style={{ ...dropTargetStyle(dropKey), border: "1px solid rgba(240,192,64,0.2)" }}
+                      onDragOver={e => { e.preventDefault(); setDragOver(dropKey); }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={() => onDrop(dropKey)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        {editingName === dropKey ? (
+                          <input className="form-input" style={{ fontSize: 12, padding: "2px 6px" }}
+                            value={nameInput} autoFocus
+                            onChange={e => setNameInput(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={e => e.key === "Enter" && commitRename()} />
+                        ) : (
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--gold)", cursor: "pointer" }} onClick={() => {
+                            setEditingName(dropKey);
+                            setNameInput(name);
+                          }}>
+                            {name} <span style={{ fontSize: 10, opacity: 0.5 }}>✎</span>
+                          </div>
+                        )}
+                        <span style={{ fontSize: 11, opacity: 0.7 }}>{party.length}/5</span>
+                      </div>
+                      
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {party.map(m => (
+                          <div className="party-member" key={m.memberId}
+                            draggable
+                            onDragStart={() => onDragStart(m.memberId, dropKey)}
+                            onDragEnd={onDragEnd}
+                            style={{ cursor: "grab", opacity: dragging?.memberId === m.memberId ? 0.35 : 1 }}>
+                            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} className="hover-highlight">
+                              <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                                {m.ign}
+                                <Icon name="edit" size={10} style={{ opacity: 0.3 }} />
+                              </div>
+                              <div style={{ fontSize: 11, color: m.isOverridden ? "var(--gold)" : "var(--text-muted)" }}>{m.class}{m.isOverridden ? " *" : ""}</div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>
+                                {m.role === "DPS" ? "DPS" : "SUP"}
+                              </span>
+                              <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", lineHeight: 1, marginLeft: 2 }}
+                                onClick={() => removeMemberFromLeague(m.memberId, "main", i)} title="Remove">
+                                <Icon name="x" size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {party.length === 0 && <div style={{ fontSize: 10, textAlign: "center", padding: "12px 0", opacity: 0.4, border: "1px dashed var(--border)", borderRadius: 6 }}>Empty Slot</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sub Field Partition */}
+            <div style={{ background: "rgba(99,130,230,0.03)", borderRadius: 24, border: "1px solid rgba(99,130,230,0.15)", padding: "32px 24px" }}>
+              <div style={{ textAlign: "center", marginBottom: 30 }}>
+                <h2 style={{ margin: 0, fontFamily: "Cinzel, serif", fontSize: 28, color: "var(--accent)", letterSpacing: 3, fontWeight: 900 }}>SUB TEAMS</h2>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6, letterSpacing: 1 }}>
+                  {(leagueParties.sub || []).reduce((s, p) => s + p.length, 0)} / 40 MEMBERS ASSIGNED
+                </div>
+              </div>
+
+              <div className="league-grid">
+                {(leagueParties.sub || []).map((party, i) => {
+                  const dropKey = `league:sub:${i}`;
+                  const name = (leaguePartyNames.sub && leaguePartyNames.sub[i]) || LEAGUE_SUB_NAMES[i];
+                  return (
+                    <div key={i} className="party-card"
+                      style={{ ...dropTargetStyle(dropKey), border: "1px solid rgba(99,130,230,0.2)" }}
+                      onDragOver={e => { e.preventDefault(); setDragOver(dropKey); }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={() => onDrop(dropKey)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        {editingName === dropKey ? (
+                          <input className="form-input" style={{ fontSize: 12, padding: "2px 6px" }}
+                            value={nameInput} autoFocus
+                            onChange={e => setNameInput(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={e => e.key === "Enter" && commitRename()} />
+                        ) : (
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--accent)", cursor: "pointer" }} onClick={() => {
+                            setEditingName(dropKey);
+                            setNameInput(name);
+                          }}>
+                            {name} <span style={{ fontSize: 10, opacity: 0.5 }}>✎</span>
+                          </div>
+                        )}
+                        <span style={{ fontSize: 11, opacity: 0.7 }}>{party.length}/5</span>
+                      </div>
+                      
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {party.map(m => (
+                          <div className="party-member" key={m.memberId}
+                            draggable
+                            onDragStart={() => onDragStart(m.memberId, dropKey)}
+                            onDragEnd={onDragEnd}
+                            style={{ cursor: "grab", opacity: dragging?.memberId === m.memberId ? 0.35 : 1 }}>
+                            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} className="hover-highlight">
+                              <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                                {m.ign}
+                                <Icon name="edit" size={10} style={{ opacity: 0.3 }} />
+                              </div>
+                              <div style={{ fontSize: 11, color: m.isOverridden ? "var(--gold)" : "var(--text-muted)" }}>{m.class}{m.isOverridden ? " *" : ""}</div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>
+                                {m.role === "DPS" ? "DPS" : "SUP"}
+                              </span>
+                              <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", lineHeight: 1, marginLeft: 2 }}
+                                onClick={() => removeMemberFromLeague(m.memberId, "sub", i)} title="Remove">
+                                <Icon name="x" size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {party.length === 0 && <div style={{ fontSize: 10, textAlign: "center", padding: "12px 0", opacity: 0.4, border: "1px dashed var(--border)", borderRadius: 6 }}>Empty Slot</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </>
       )}
       {/* ── EDIT MEMBER MODAL ── */}

@@ -392,10 +392,7 @@ function EventsPage() {
     const current = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
     
     // Cycle: present -> absent -> loa -> present
-    let newStatus = "absent";
-    if (current?.status === "present") newStatus = "absent";
-    else if (current?.status === "absent") newStatus = "loa";
-    else if (current?.status === "loa") newStatus = "present";
+    const newStatus = (current?.status === "present") ? "absent" : "present";
 
     const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
@@ -787,9 +784,8 @@ function EventsPage() {
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
-                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)} title="Click to cycle status (Present > Absent > LOA)">
+                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)} title="Click to toggle (Present / Absent)">
                               {(m.att?.status || "present") === "present" ? <><Icon name="check" size={11} /> Present</> : 
-                               (m.att?.status || "present") === "loa" ? <><Icon name="shield" size={11} /> LOA</> : 
                                <><Icon name="x" size={11} /> Absent</>}
                             </button>
                           </td>

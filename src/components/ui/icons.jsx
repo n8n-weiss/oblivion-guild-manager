@@ -23,6 +23,8 @@ const Icon = ({ name, size = 18 }) => {
     copy: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
     menu: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
     refresh: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+    chart: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>,
+    "brand-discord": <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M13 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M7.147 6.162a11.314 11.314 0 0 0 -4.147 5.838c.5 1.5 1.5 3 2.5 4l.5 2.5c2 1 4.5 1 6 0l.5 -2.5c1 -1 2 -2.5 2.5 -4a11.314 11.314 0 0 0 -4.147 -5.838"/><path d="M10 15c1 1 3 1 4 0"/></svg>,
   };
   return icons[name] || null;
 };

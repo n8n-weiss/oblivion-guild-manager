@@ -585,6 +585,7 @@ function AuctionBuilder() {
     
     showToast("Generating image...", "info");
     
+    try {
       const bgColor = getComputedStyle(document.body).getPropertyValue('--bg-deepest').trim() || '#080a0f';
       
       const canvas = await html2canvas(element, {

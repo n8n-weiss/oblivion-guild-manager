@@ -8,7 +8,9 @@ export function computeScore({ event, att, perf }) {
   const ctf3 = perf?.ctf3 ?? 0;
   const ctfTotal = ctf1 + ctf2 + ctf3;
   const pp = perf?.performancePoints ?? 0;
-  return ctfTotal + pp;
+  const kills = perf?.kills ?? 0;
+  const assists = perf?.assists ?? 0;
+  return ctfTotal + pp + kills + assists;
 }
 
 export function computeAttendanceStatus(attendancePct) {
@@ -53,9 +55,6 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
       if (status === "present") {
         presentCount++;
         tempConsecutive = 0;
-      } else if (status === "loa") {
-        absentCount++;
-        tempConsecutive = 0; // Excused absence resets the streak
       } else {
         absentCount++;
         tempConsecutive++;
@@ -76,22 +75,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     const avgScore = glCount > 0 ? Math.round((totalScore / glCount) * 10) / 10 : 0;
     const attStatus = computeAttendanceStatus(attendancePct);
 
-    // Score-based classification (for dashboard charts)
-    let classification = "At Risk";
-    if (totalScore > 80) classification = "Core";
-    else if (totalScore >= 60) classification = "Active";
-    else if (totalScore >= 40) classification = "Casual";
-
-    // EO-based calculations
-    const memberEoRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
-    const totalEoScore = memberEoRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
-    const avgEoRating = memberEoRatings.length > 0 ? Math.round((totalEoScore / memberEoRatings.length) * 10) / 10 : 0;
-
-    // Support Performance Index (SPI)
-    // Formula: (Attendance * 0.5) + (Assists * 5) + (EO Rating * 10) + (Performance Points * 2)
-    const supportIndex = Math.round((attendancePct * 0.5) + (totalPP * 2) + (totalAssists * 5) + (avgEoRating * 10));
-
-    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists, totalPP, totalCTF };
+    return { ...member, totalScore, attendancePct, avgScore, absentCount, consecutiveAbsent, attStatus, totalKills, totalAssists, totalPP, totalCTF };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }

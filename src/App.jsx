@@ -43,7 +43,7 @@ import Dashboard from "./pages/Dashboard";
 const MembersPage = lazyWithRetry(() => import("./pages/MembersPage"), "members");
 const EventsPage = lazyWithRetry(() => import("./pages/EventsPage"), "events");
 const AbsencesPage = lazyWithRetry(() => import("./pages/AbsencesPage"), "absences");
-const LeaderboardPage = lazyWithRetry(() => import("./pages/LeaderboardPage"), "leaderboard");
+const ReportsPage = lazyWithRetry(() => import("./pages/ReportsPage"), "reports");
 const PartyBuilder = lazyWithRetry(() => import("./pages/PartyBuilder"), "party");
 const MemberProfilePage = lazyWithRetry(() => import("./pages/MemberProfilePage"), "member-profile");
 const AuctionBuilder = lazyWithRetry(() => import("./pages/AuctionBuilder"), "auction");
@@ -59,7 +59,7 @@ const pagePrefetchers = {
   "member-profile": () => import("./pages/MemberProfilePage"),
   events: () => import("./pages/EventsPage"),
   absences: () => import("./pages/AbsencesPage"),
-  leaderboard: () => import("./pages/LeaderboardPage"),
+  reports: () => import("./pages/ReportsPage"),
   party: () => import("./pages/PartyBuilder"),
   import: () => import("./pages/ImportPage"),
   auction: () => import("./pages/AuctionBuilder"),
@@ -967,12 +967,12 @@ export default function App() {
               </PageWrapper>
             )}
 
-            {effectivePage === "leaderboard" && (
-              <PageWrapper id={profileMember ? `profile-lb-${profileMember.memberId}` : "leaderboard"}>
+            {effectivePage === "reports" && (
+              <PageWrapper id={profileMember ? `profile-rpt-${profileMember.memberId}` : "reports"}>
                   {profileMember ? (
                     <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
                   ) : (
-                    <LeaderboardPage onViewProfile={setProfileMember} />
+                    <ReportsPage onViewProfile={setProfileMember} />
                   )}
               </PageWrapper>
             )}
@@ -989,11 +989,7 @@ export default function App() {
               </PageWrapper>
             )}
 
-            {effectivePage === "report" && (
-              <PageWrapper id="report">
-                <WeeklyReportPage />
-              </PageWrapper>
-            )}
+
 
             {effectivePage === "auction" && (
               <PageWrapper id="auction">

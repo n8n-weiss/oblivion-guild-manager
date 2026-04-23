@@ -12,7 +12,10 @@ const GuildHighlights = () => {
     recentEvents.forEach(ev => {
       const evPerf = performance
         .filter(p => p.eventId === ev.eventId)
-        .map(p => ({ ...p, calculatedScore: (p.performancePoints || 0) + (p.ctfPoints || 0) }))
+        .map(p => ({ 
+          ...p, 
+          calculatedScore: (p.performancePoints || 0) + (p.kills || 0) + (p.assists || 0) + (p.ctfPoints || p.ctf1 || 0) + (p.ctf2 || 0) + (p.ctf3 || 0)
+        }))
         .sort((a, b) => b.calculatedScore - a.calculatedScore)
         .slice(0, 3);
       evPerf.forEach((p, idx) => {

@@ -353,12 +353,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     : attPct >= 60 ? { label: "Average", badge: "badge-casual" }
       : { label: "At Risk", badge: "badge-atrisk" };
 
-  // Support-specific stats
+  // Support-specific stats removed as per new simplified scoring
   const isSupport = member.role === "Support";
-  // SPI: Support Performance Index (0–100)
-  const supportIndex = Math.round((attPct * 0.5) + (avgEoRating * 10));
-  // Pillar Score (SPI - Absence Penalties)
-  const pillarScore = Math.max(0, Math.round(supportIndex - (memberAbsences.length * 5)));
 
   // 5. RPG Rankings & Levels
   const getRankInfo = (score) => {
@@ -380,13 +376,16 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const prevLevelScore = Math.pow(level / 5, 2);
   const levelProgress = Math.min(100, Math.round(((totalGLScore - prevLevelScore) / (nextLevelScore - prevLevelScore || 1)) * 100));
 
-  // 6. Enhanced Radar Chart Data
+  // 6. Updated Radar Chart Data (Removed SPI/EO Rating)
+  const totalKills = glEvents.reduce((sum, e) => sum + (e.perf?.kills || 0), 0);
+  const totalAssists = glEvents.reduce((sum, e) => sum + (e.perf?.assists || 0), 0);
+  
   const radarData = [
-    { subject: 'Combat', full: 'WAR SCORE', icon: '⚔️', A: totalGLScore, B: guildAvgGL, fullMark: Math.max(totalGLScore, guildAvgGL, 100) },
+    { subject: 'Combat', full: 'TOTAL SCORE', icon: '⚔️', A: totalGLScore, B: guildAvgGL, fullMark: Math.max(totalGLScore, guildAvgGL, 100) },
+    { subject: 'Kills', full: 'KILLS', icon: '🔥', A: totalKills, B: 50, fullMark: 100 },
+    { subject: 'Assists', full: 'ASSISTS', icon: '🤝', A: totalAssists, B: 50, fullMark: 100 },
     { subject: 'Duty', full: 'ATTENDANCE', icon: '🛡️', A: attPct, B: 75, fullMark: 100 },
-    { subject: 'Stability', full: 'RELIABILITY', icon: '⚖️', A: 100 - (memberAbsences.length * 10), B: 90, fullMark: 100 },
-    { subject: 'Support', full: 'TEAM PLAY', icon: '✨', A: isSupport ? supportIndex : (avgGL * 10), B: isSupport ? 60 : 50, fullMark: 100 },
-    { subject: 'EO Skill', full: 'EO RANKING', icon: '🏰', A: avgEoRating * 20, B: 70, fullMark: 100 },
+    { subject: 'Reliability', full: 'STABILITY', icon: '⚖️', A: Math.max(0, 100 - (memberAbsences.length * 10)), B: 90, fullMark: 100 },
   ];
 
 
@@ -605,6 +604,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             {member.isDonator && <span title="Oblivion Patron" style={{ fontSize: 12, filter: 'drop-shadow(0 0 4px var(--gold))', marginLeft: 2 }}>🌟</span>}
             <span className="badge badge-premium" style={{ background: theme.color, fontSize: 9 }}>{theme.icon} {member.class}</span>
             <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{member.role}</span>
+            <span className={`badge ${attStatus.badge}`} title={`Attendance Score: ${attPct}% (${presentCount}/${memberEvents.length})\n\nReliable: 80%+\nAverage: 60-79%\nAt Risk: Below 60%`}>
+              {attPct >= 80 ? "✅" : attPct >= 60 ? "⚠" : "🚨"} {attStatus.label}
+            </span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -657,7 +659,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         }}>
           <div>
             <div className="rank-label" style={{ color: isUpcoming ? "var(--gold)" : "var(--text-muted)", marginBottom: 3 }}>
-              {isUpcoming ? "🚨 Next Mission" : "📅 Most Recent Event"}
+              {isUpcoming ? "📅 Upcoming Mission" : "📅 Most Recent Event"}
             </div>
             <div className="flex items-center gap-2">
               <span style={{ fontSize: 16 }}>{nextEvent.eventType === "Guild League" ? "⚔️" : "🏰"}</span>
@@ -666,7 +668,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             </div>
           </div>
           {isOwnProfile && isUpcoming && (
-            <button className="btn btn-danger btn-sm" onClick={quickAbsence}>I'm Busy Today 🛡️</button>
+            <button className="btn btn-danger btn-sm" onClick={quickAbsence} title="File a quick absence notification for this event">Notify Absence 📢</button>
           )}
         </div>
       )}
@@ -747,9 +749,11 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                 {member.isDonator && <span title="Oblivion Patron (Donator)" style={{ fontSize: 18, filter: 'drop-shadow(0 0 6px var(--gold))' }}>🌟</span>}
                 <span className="badge badge-premium" style={{ background: theme.color }}>{theme.icon} {member.class}</span>
                 <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`}>
-                  {member.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />} {member.role}
+                   {member.role === "DPS" ? <Icon name="sword" size={10} /> : <Icon name="shield" size={10} />} {member.role}
                 </span>
-                <span className={`badge ${attStatus.badge}`}>🎯 {attStatus.label}</span>
+                <span className={`badge ${attStatus.badge}`} title={`Thresholds:\nReliable: 80%+\nAverage: 60-79%\nAt Risk: Below 60%`}>
+                  🎯 {attStatus.label} ({attPct}%)
+                </span>
                 {dynamicBadges.map((b, i) => (
                   <span key={i} title={`${b.label}: ${b.desc}`} style={{ 
                     fontSize: 18, cursor: "help", filter: `drop-shadow(0 0 6px ${b.color}66)`,
@@ -860,49 +864,26 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           </div>
           <div className="stat-change">all time GL total</div>
         </div>
-        <div className="stat-card" style={{ "--stat-accent": attPct >= 75 ? "var(--green)" : attPct >= 50 ? "var(--gold)" : "var(--red)" }}>
+        <div className="stat-card" style={{ "--stat-accent": attPct >= 75 ? "var(--green)" : attPct >= 50 ? "var(--gold)" : "var(--red)" }} 
+          title={`Calculation: (Present Events / Total Events) * 100\n\nYour stats: ${presentCount} present out of ${memberEvents.length} operations.`}>
           <div className="stat-icon">📋</div>
           <div className="stat-label">War Duty</div>
           <div className="stat-value" style={{ color: attPct >= 75 ? "var(--green)" : attPct >= 50 ? "var(--gold)" : "var(--red)" }}>{attPct}%</div>
           <div className="stat-change">{presentCount} of {memberEvents.length} events</div>
         </div>
-        {/* Stat Card 3 — role-based */}
-        {isSupport ? (
-          <div className="stat-card" style={{ "--stat-accent": "var(--color-priest)" }}>
-            <div className="stat-icon">🌟</div>
-            <div className="stat-label">Support Index</div>
-            <div className="stat-value" style={{ color: "var(--color-priest)" }}>
-              {avgEoRating > 0 || attPct > 0 ? supportIndex : "—"}
-            </div>
-            <div className="stat-change">Attendance (50%) + EO Quality (50%)</div>
-          </div>
-        ) : (
-          <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
-            <div className="stat-icon">📊</div>
-            <div className="stat-label">Kill Efficiency</div>
-            <div className="stat-value" style={{ color: "var(--accent)" }}>{avgGL}</div>
-            <div className="stat-change">per war average</div>
-          </div>
-        )}
+        <div className="stat-card" style={{ "--stat-accent": "var(--accent)" }}>
+          <div className="stat-icon">🔥</div>
+          <div className="stat-label">Total Kills</div>
+          <div className="stat-value" style={{ color: "var(--accent)" }}>{totalKills}</div>
+          <div className="stat-change">career combat kills</div>
+        </div>
 
-        {/* Stat Card 4 — role-based */}
-        {isSupport ? (
-          <div className="stat-card" style={{ "--stat-accent": "var(--gold)" }}>
-            <div className="stat-icon">🏛️</div>
-            <div className="stat-label">Guild Pillar</div>
-            <div className="stat-value" style={{
-              color: pillarScore >= 70 ? "var(--green)" : pillarScore >= 40 ? "var(--gold)" : "var(--red)"
-            }}>{pillarScore}</div>
-            <div className="stat-change">attendance + EO − absences</div>
-          </div>
-        ) : (
-          <div className="stat-card" style={{ "--stat-accent": "var(--gold)" }}>
-            <div className="stat-icon">⭐</div>
-            <div className="stat-label">EO Honor</div>
-            <div className="stat-value" style={{ color: "var(--gold)" }}>{avgEoRating > 0 ? `★${avgEoRating}` : "—"}</div>
-            <div className="stat-change">{eoRatingsList.length} reviews</div>
-          </div>
-        )}
+        <div className="stat-card" style={{ "--stat-accent": "var(--color-priest)" }}>
+          <div className="stat-icon">🤝</div>
+          <div className="stat-label">Total Assists</div>
+          <div className="stat-value" style={{ color: "var(--color-priest)" }}>{totalAssists}</div>
+          <div className="stat-change">career combat assists</div>
+        </div>
       </div>
 
       {/* Tab Navigation */}
@@ -1268,7 +1249,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                       </div>
                       <div style={{ flex: 1 }}>
                         <span style={{ fontWeight: 700, fontSize: 12, color: isPresent ? "var(--green)" : "var(--red)" }}>
-                          {isPresent ? "✅ Present" : (ev.att?.status === "loa" ? "🛌 LOA" : "❌ Absent")}
+                          {isPresent ? "✅ Present" : "❌ Absent"}
                         </span>
                         {isGL && isPresent && (
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
@@ -1276,15 +1257,11 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                           </div>
                         )}
                       </div>
-                      <div style={{ textAlign: "right" }}>
-                        {isGL && isPresent ? (
-                          <span style={{ fontFamily: "Cinzel,serif", fontWeight: 700, color: theme.color, fontSize: 18 }}>{ev.score}</span>
-                        ) : isEO && isPresent ? (
-                          <span style={{ color: "var(--gold)" }}>{[1, 2, 3, 4, 5].map(s => <span key={s} style={{ fontSize: 14, color: s <= (ev.eoRating?.rating || 0) ? "var(--gold)" : "rgba(99,130,230,0.2)" }}>★</span>)}</span>
+                        {isPresent ? (
+                          <span style={{ fontFamily: "Cinzel,serif", fontWeight: 700, color: theme.color, fontSize: 18 }}>{isGL ? ev.score : "P"}</span>
                         ) : (
-                          <span className="text-muted" style={{ fontSize: 12 }}>—</span>
+                          <span className="text-muted" style={{ fontSize: 12 }}>A</span>
                         )}
-                      </div>
                     </div>
                   </div>
                 );

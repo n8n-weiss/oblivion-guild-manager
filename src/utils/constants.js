@@ -65,7 +65,7 @@ export const NAV_ITEMS = [
   { id: "members", label: "Members", icon: "members" },
   { id: "events", label: "Events", icon: "events" },
   { id: "absences", label: "Absences", icon: "absence" },
-  { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },
+  { id: "reports", label: "Reports", icon: "chart" },
   { id: "party", label: "Party Builder", icon: "party" },
   { id: "import", label: "Import CSV", icon: "save" },
   { id: "auction", label: "Auction Builder", icon: "trophy" },
