@@ -8,6 +8,7 @@ import AbsenceWatchlist from '../components/common/AbsenceWatchlist';
 import GuildHighlights from '../components/common/GuildHighlights';
 import LootRadar from '../components/common/LootRadar';
 import AttendanceTrend from '../components/common/AttendanceTrend';
+import PerformanceSnapshot from '../components/common/PerformanceSnapshot';
 
 function Dashboard() {
   const {
@@ -57,6 +58,9 @@ function Dashboard() {
 
       {/* CORE STATS GRID */}
       <StatsGrid />
+
+      {/* PERFORMANCE SNAPSHOTS (MONTHLY vs YTD) */}
+      <PerformanceSnapshot />
 
       {/* MAIN WIDGETS GRID */}
       <div className="grid-2 mb-4">

@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useGuild } from '../../context/GuildContext';
 import Icon from '../ui/icons';
 
 const OfficerHub = () => {
-  const { requests, joinRequests, absences, events, resetMonthlyScores } = useGuild();
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const { requests, joinRequests, absences, events } = useGuild();
 
   const pendingJoin = joinRequests.filter(r => r.status === "pending").length;
   const pendingProfile = requests.filter(r => r.status === "pending").length;
@@ -55,78 +54,10 @@ const OfficerHub = () => {
           </div>
         )}
 
-        <div className="mt-4 pt-3 border-t border-white border-opacity-10 flex flex-col gap-2">
-          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1 }} className="flex items-center gap-2">
-            Maintenance
-            {(() => {
-              const now = new Date();
-              const day = now.getDate();
-              return (day >= 1 && day <= 10) ? (
-                <span className="flex items-center gap-1 text-[10px] text-green-400 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></span>
-                  Reset Window Open
-                </span>
-              ) : null;
-            })()}
-          </div>
-          {(() => {
-            const now = new Date();
-            const day = now.getDate();
-            const isWindowOpen = day >= 1 && day <= 10;
-
-            return (
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => isWindowOpen ? setShowResetConfirm(true) : alert("Monthly reset is only available from the 1st to the 10th of the month.")}
-                  className={`w-full py-1.5 px-3 rounded text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 border border-white border-opacity-10 ${isWindowOpen ? 'hover:bg-white hover:bg-opacity-10 shadow-[0_0_10px_rgba(224,92,138,0.2)]' : 'opacity-50 cursor-not-allowed'}`}
-                  style={{ color: "var(--text-primary)", background: "rgba(0,0,0,0.3)" }}
-                  disabled={!isWindowOpen}
-                >
-                  <span className={isWindowOpen ? 'animate-spin-slow' : ''}>🔄</span> Reset Monthly Data
-                </button>
-                <div className={`text-[10px] text-center ${isWindowOpen ? 'text-green-400' : 'text-muted'} italic`}>
-                  {isWindowOpen ? "🟢 Reset window is currently open." : "🔒 Reset window opens on the 1st of every month."}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {(pendingJoin === 0 && pendingProfile === 0 && upcomingAbsences === 0 && pendingAudits.length === 0) && (
-           <div className="mt-4 text-xs text-center text-muted">All clear. No pending administrative actions.</div>
-        )}
+        {pendingJoin === 0 && pendingProfile === 0 && upcomingAbsences === 0 && pendingAudits.length === 0}
       </div>
 
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}>
-          <div className="card max-w-md w-full p-6 text-center border border-white border-opacity-20" style={{ background: "rgba(15, 20, 30, 0.9)", borderRadius: 16 }}>
-            <div style={{ fontSize: 24, marginBottom: 12 }}>⚠️</div>
-            <div className="text-lg font-bold text-white mb-2">Confirm Monthly Reset</div>
-            <div className="text-sm text-muted mb-6 leading-relaxed">
-              This will <b>archive attendance</b> for the current month and <b>completely clear</b> all performance scores and EO ratings. <br/><br/>
-              This action cannot be undone.
-            </div>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                className="px-4 py-2 rounded text-xs font-bold text-muted hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  setShowResetConfirm(false);
-                  await resetMonthlyScores();
-                }}
-                className="px-4 py-2 rounded text-xs font-bold text-white transition-all"
-                style={{ background: "var(--accent)", boxShadow: "0 0 12px var(--accent)" }}
-              >
-                Confirm Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </>
   );
 };

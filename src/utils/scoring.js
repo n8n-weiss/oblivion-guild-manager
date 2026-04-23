@@ -17,7 +17,7 @@ export function computeAttendanceStatus(attendancePct) {
   return { label: "At Risk", color: "var(--red)", badge: "badge-atrisk", icon: "🚨" };
 }
 
-export function computeLeaderboard(members, events, attendance, performance, eoRatings = [], filterMonth = null) {
+export function computeLeaderboard(members, events, attendance, performance, eoRatings = [], filterMonth = null, filterYear = null) {
   return members.map((member) => {
     let totalScore = 0;
     let presentCount = 0;
@@ -27,12 +27,14 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     let totalKills = 0;
     let totalAssists = 0;
     let totalPP = 0;
+    let totalCTF = 0;
 
     const mId = (member.memberId || "").toLowerCase();
 
     // Filter events: include if after Join Date OR if member has explicit data for it
     const eligibleEvents = events.filter(e => {
       if (filterMonth && String(e?.eventDate || "").slice(0, 7) !== filterMonth) return false;
+      if (filterYear && String(e?.eventDate || "").slice(0, 4) !== filterYear) return false;
       if (!member.joinDate) return true;
       if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
       const hasAtt = attendance.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === e.eventId);
@@ -61,10 +63,12 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
       }
 
       if (event.eventType === "Guild League") {
-        totalScore += computeScore({ event, att, perf });
         totalKills += perf?.kills ?? 0;
         totalAssists += perf?.assists ?? 0;
         totalPP += perf?.performancePoints ?? 0;
+        const ctf = (perf?.ctf1 ?? perf?.ctfPoints ?? 0) + (perf?.ctf2 ?? 0) + (perf?.ctf3 ?? 0);
+        totalCTF += ctf;
+        totalScore += computeScore({ event, att, perf });
       }
     });
 
@@ -87,7 +91,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     // Formula: (Attendance * 0.5) + (Assists * 5) + (EO Rating * 10) + (Performance Points * 2)
     const supportIndex = Math.round((attendancePct * 0.5) + (totalPP * 2) + (totalAssists * 5) + (avgEoRating * 10));
 
-    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists, totalPP };
+    return { ...member, totalScore, attendancePct, avgScore, classification, absentCount, consecutiveAbsent, attStatus, avgEoRating, totalEoScore, supportIndex, totalKills, totalAssists, totalPP, totalCTF };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }
