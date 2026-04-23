@@ -12,8 +12,7 @@ const MemberStatus = ({ rankNum, totalScore }) => {
       border: "1px solid rgba(99,130,230,0.3)",
       background: "linear-gradient(180deg, rgba(99,130,230,0.1) 0%, rgba(10, 15, 25, 0.6) 100%)",
       backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px 0 rgba(99, 130, 230, 0.1)",
-      transition: "transform 0.2s ease, box-shadow 0.2s ease"
+      boxShadow: "0 8px 32px 0 rgba(99, 130, 230, 0.1)"
     }}>
       <div className="card-title text-accent flex items-center justify-between">
         <span style={{ textShadow: "0 0 10px rgba(99,130,230,0.5)" }}>👤 My Guild Status</span>

@@ -38,8 +38,7 @@ const GuildHighlights = () => {
       border: "1px solid rgba(240,192,64,0.2)",
       background: "linear-gradient(180deg, rgba(240,192,64,0.1) 0%, rgba(10, 15, 25, 0.6) 100%)",
       backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px 0 rgba(240, 192, 64, 0.05)",
-      transition: "transform 0.2s ease, box-shadow 0.2s ease"
+      boxShadow: "0 8px 32px 0 rgba(240, 192, 64, 0.05)"
     }}>
       <div className="card-title" style={{ textShadow: "0 0 10px rgba(240,192,64,0.5)" }}>📡 Guild Highlights</div>
       <div className="flex flex-col gap-3 mt-4">

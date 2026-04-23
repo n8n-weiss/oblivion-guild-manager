@@ -116,6 +116,7 @@ export default function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [densityMode, setDensityMode] = useState(() => localStorage.getItem("ui_density_mode") || "comfy");
   const [highContrastMode, setHighContrastMode] = useState(() => localStorage.getItem("ui_high_contrast_mode") === "1");
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem("ui_theme_mode") || "dark");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
@@ -169,6 +170,10 @@ export default function App() {
   React.useEffect(() => {
     localStorage.setItem("recent_command_ids_v1", JSON.stringify(recentCommandIds.slice(0, 6)));
   }, [recentCommandIds]);
+  React.useEffect(() => {
+    localStorage.setItem("ui_theme_mode", themeMode);
+    document.documentElement.setAttribute("data-theme", themeMode);
+  }, [themeMode]);
   React.useEffect(() => {
     let rafId = 0;
     const updateStickyState = () => {
@@ -628,58 +633,33 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid rgba(255,255,255,0.05)" }} onClick={handleSignOut}>
+              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid var(--border)" }} onClick={handleSignOut}>
                 Sign Out
               </button>
-              <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
-                <div style={{ width: "100%" }}>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, letterSpacing: 0.8, textTransform: "uppercase" }}>
-                    Display Density
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ marginTop: 8 }}>
                 <button
-                  className={`btn btn-sm ${densityMode === "compact" ? "btn-primary" : "btn-ghost"}`}
-                  style={{ flex: 1, justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
-                  onClick={() => setDensityMode("compact")}
-                  title="Compact shows more rows and tighter spacing."
+                  className={`btn btn-sm ${themeMode === "light" ? "btn-primary" : "btn-ghost"}`}
+                  style={{ width: "100%", justifyContent: "center", fontSize: 10, padding: "6px 8px", border: "1px solid var(--border)" }}
+                  onClick={() => setThemeMode(v => v === "dark" ? "light" : "dark")}
+                  title="Toggle between Dark and Light visual themes."
                 >
-                  ▦ Compact
+                  {themeMode === "dark" ? "🌙 Dark Mode" : "☀️ Light Mode"}
                 </button>
-                <button
-                  className={`btn btn-sm ${densityMode === "comfy" ? "btn-primary" : "btn-ghost"}`}
-                  style={{ flex: 1, justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
-                  onClick={() => setDensityMode("comfy")}
-                  title="Comfy adds breathing room and larger spacing."
-                >
-                  ◻ Comfy
-                </button>
-                  </div>
-                  <div style={{ marginTop: 6 }}>
-                    <button
-                      className={`btn btn-sm ${highContrastMode ? "btn-primary" : "btn-ghost"}`}
-                      style={{ width: "100%", justifyContent: "center", fontSize: 10, padding: "4px 8px" }}
-                      onClick={() => setHighContrastMode(v => !v)}
-                      title="Toggle stronger contrast and focus visibility."
-                    >
-                      {highContrastMode ? "◉ High Contrast On" : "◎ High Contrast Off"}
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           )}
 
           <button
             className="btn btn-primary"
-            style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid rgba(240,192,64,0.3)" }}
+            style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid var(--border)" }}
             data-shiny="true"
             onClick={() => setShowTreasury(true)}
           >
             <Icon name="star" size={14} /> Buy Me A Beer
           </button>
 
-          <div style={{ marginTop: 12, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase" }}>
+          <div style={{ marginTop: 12, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 14, color: "var(--text-muted)", opacity: 0.6, letterSpacing: 1, textTransform: "uppercase" }}>
               Oblivion Guild Portal v2.5
             </div>
             <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>

@@ -58,8 +58,7 @@ const AttendanceTrend = () => {
       border: "1px solid rgba(255,255,255,0.05)",
       background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(10, 15, 25, 0.6) 100%)",
       backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
-      transition: "transform 0.2s ease, box-shadow 0.2s ease"
+      boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)"
     }}>
       <div className="card-title" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>📈 Guild Attendance Trend</div>
       <div className="text-xs text-muted mt-1 mb-4">Tracking operation participation across the last 10 events.</div>

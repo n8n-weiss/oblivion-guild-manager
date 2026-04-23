@@ -998,7 +998,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               
               {/* Card Album Progress */}
               <div style={{ 
-                background: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.05)",
+                background: "var(--bg-hover)", borderRadius: 12, padding: 16, border: "1px solid var(--border)",
                 display: "flex", flexDirection: "column", gap: 12
               }}>
                 <div className="flex justify-between items-center">
@@ -1019,7 +1019,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                     <>
                       <div className="flex items-start justify-between">
                         <div style={{ display: "flex", flexDirection: "column" }}>
-                           <div style={{ fontSize: 24, fontWeight: 900, color: "white", textShadow: "0 0 15px var(--accent-glow)" }}>
+                           <div style={{ fontSize: 24, fontWeight: 900, color: "var(--text-primary)", textShadow: "var(--text-shadow-accent)" }}>
                              {progress}<span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}> / 10</span>
                            </div>
                            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: -2 }}>ALBUMS HELD</div>
@@ -1030,7 +1030,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                         </div>
                       </div>
                       
-                      <div style={{ width: "100%", height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 5, overflow: "hidden", position: "relative" }}>
+                      <div style={{ width: "100%", height: 10, background: "var(--bg-deepest)", borderRadius: 5, overflow: "hidden", position: "relative", border: "1px solid var(--border)" }}>
                         <div style={{ 
                           width: `${progress * 10}%`, height: "100%", 
                           background: `linear-gradient(90deg, var(--accent), var(--accent-glow))`,
@@ -1044,9 +1044,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                       </div>
 
                       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                        <button 
-                          className="btn btn-ghost btn-sm"
-                          style={{ flex: 1, fontSize: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}
+                          <button 
+                            className="btn btn-ghost btn-sm"
+                            style={{ flex: 1, fontSize: 10, border: "1px solid var(--border)" }}
                           onClick={() => {
                              const val = prompt("Enter your current total Card Album wins:", cardWins);
                              if (val !== null) {
@@ -1075,17 +1075,17 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
               {/* Feather Progress & Bidding */}
               <div style={{ 
-                background: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.05)",
+                background: "var(--bg-hover)", borderRadius: 12, padding: 16, border: "1px solid var(--border)",
                 display: "flex", flexDirection: "column", gap: 12
               }}>
                 <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700, fontSize: 13, color: "var(--gold)" }}>🪶 L&D Feather Progress</div>
                 
                 <div className="flex items-center justify-between">
-                  <div style={{ fontSize: 24, fontWeight: 900, color: "white" }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>
                     {memberLootStats[member.memberId]?.feathers || 0}
                     <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginLeft: 4 }}>WINS</span>
                   </div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "2px 6px", borderRadius: 4 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", background: "var(--bg-deepest)", padding: "2px 6px", borderRadius: 4 }}>
                     LIFETIME
                   </div>
                 </div>
@@ -1359,12 +1359,16 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
           <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Row 1: Vanguard Profile Card + Attendance Ring */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <div className="card" style={{ background: `linear-gradient(135deg, ${theme.color}12, rgba(10,14,24,0.8))`, border: `1px solid ${theme.color}33`, padding: 24 }}>
+              <div className="card" style={{ 
+                background: `linear-gradient(180deg, ${theme.color}08 0%, var(--bg-card2) 100%)`, 
+                border: `1px solid ${theme.color}33`, 
+                padding: 24 
+              }}>
                 <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: theme.color, marginBottom: 16, fontWeight: 800 }}>⚔️ Vanguard Profile</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
                   <MemberAvatar ign={member.ign} index={memberIdx} size={56} memberClass={member.class} glScore={totalGLScore} hexagon />
                   <div>
-                    <div style={{ fontFamily: "Cinzel,serif", fontWeight: 900, fontSize: 18, color: "#fff", textShadow: `0 0 20px ${theme.color}66` }}>{member.ign}</div>
+                    <div style={{ fontFamily: "Cinzel,serif", fontWeight: 900, fontSize: 18, color: "var(--text-primary)", textShadow: `0 0 20px ${theme.color}66` }}>{member.ign}</div>
                     <div style={{ fontSize: 11, color: theme.color, fontWeight: 700, marginTop: 2 }}>{theme.icon} {member.class}</div>
                     <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>ID: {member.memberId}</div>
                   </div>

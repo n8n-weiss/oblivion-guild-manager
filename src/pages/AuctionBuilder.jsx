@@ -37,7 +37,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
   const pageList = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
-    <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "rgba(10,12,18,0.7)", animation: "fade-in 0.3s" }}>
+    <div className="card custom-scrollbar" style={{ padding: 14, overflowY: "auto", flex: 1, background: "var(--bg-card2)", animation: "fade-in 0.3s" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
         <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, margin: 0, whiteSpace: "nowrap" }}>
           <Icon name="grid" size={14} color="var(--accent)" /> Resource Map
@@ -46,7 +46,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
           <select
             value={selectedMapColId || (session?.columns?.[0]?.id || "")}
             onChange={e => setSelectedMapColId(e.target.value)}
-            style={{ fontSize: 10, background: "rgba(30,35,50,0.8)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--accent)", borderRadius: 4, padding: "2px 4px", width: "100%", outline: "none" }}
+            style={{ fontSize: 10, background: "var(--bg-deepest)", border: "1px solid var(--border)", color: "var(--accent)", borderRadius: 4, padding: "2px 4px", width: "100%", outline: "none" }}
           >
             {session?.columns?.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -63,12 +63,12 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
           {mapFocusMode ? "Focus On" : "Focus Off"}
         </button>
       </div>
-      <div style={{ position: "sticky", top: 0, zIndex: 3, marginBottom: 10, background: "rgba(10,12,18,0.9)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 8 }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 3, marginBottom: 10, background: "var(--bg-card)", border: "1px solid var(--border-bright)", borderRadius: 10, padding: 8 }}>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>
           Map Overview
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6 }}>
-          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(255,255,255,0.03)", textAlign: "center" }}>Pages<br /><strong>{mapSummary.pages}</strong></div>
+          <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "var(--bg-hover)", textAlign: "center" }}>Pages<br /><strong>{mapSummary.pages}</strong></div>
           <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(42,191,107,0.08)", textAlign: "center", color: "var(--green)" }}>Assigned<br /><strong>{mapSummary.assignedSlots}</strong></div>
           <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(240,192,64,0.08)", textAlign: "center", color: "var(--gold)" }}>Unassigned<br /><strong>{mapSummary.unassignedSlots}</strong></div>
           <div style={{ fontSize: 10, padding: 6, borderRadius: 8, background: "rgba(224,80,80,0.08)", textAlign: "center", color: "var(--red)" }}>Conflicts<br /><strong>{mapSummary.conflictSlots}</strong></div>
@@ -76,7 +76,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
       </div>
 
       <div className="space-y-4">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
           {pageList.map(p => {
             const isSelected = selectedMapPage === p;
             let status = "empty";
@@ -91,14 +91,14 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
               <button key={p} onMouseDown={e => e.preventDefault()} onClick={() => setSelectedMapPage(p)}
                 style={{
                   position: "relative", width: 32, height: 32, borderRadius: 8, fontSize: 12, fontWeight: 900,
-                  background: isSelected ? "var(--accent)" : "rgba(255,255,255,0.03)",
+                  background: isSelected ? "var(--accent)" : "var(--bg-hover)",
                   color: isSelected ? "white" : "var(--text-muted)",
-                  border: `1px solid ${isSelected ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`,
+                  border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
                   transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)", cursor: "pointer",
                   boxShadow: isSelected ? "0 0 15px rgba(99,130,230,0.4)" : "none"
                 }}
-                onMouseEnter={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-                onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                onMouseEnter={e => !isSelected && (e.currentTarget.style.background = "var(--bg-hover)")}
+                onMouseLeave={e => !isSelected && (e.currentTarget.style.background = "transparent")}
               >
                 {p}
                 {heat >= 5 && <span style={{ position: "absolute", left: -2, bottom: -2, fontSize: 9 }}>🔥</span>}
@@ -106,7 +106,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                   <div style={{
                     position: "absolute", top: -3, right: -3, width: 10, height: 10, borderRadius: "50%",
                     background: status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)",
-                    border: "2px solid #080a0f",
+                    border: "2px solid var(--bg-dark)",
                     boxShadow: `0 0 8px ${status === "conflict" ? "var(--red)" : status === "full" ? "var(--green)" : "var(--gold)"}`
                   }} />
                 )}
@@ -117,7 +117,7 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
         </div>
 
         <div key={selectedMapPage} style={{ animation: "fade-in 0.2s" }}>
-          <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ background: "var(--bg-deepest)", borderRadius: 8, padding: 10, border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", textTransform: "uppercase" }}>Page {selectedMapPage}</div>
@@ -131,18 +131,18 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                   </span>
                 )}
               </div>
-              <select
+               <select
                 value={selectedPageAnalysis.fullPageValue}
                 onChange={e => handleDropdownAssignment(selectedMapPage, null, e.target.value)}
                 style={{
-                  fontSize: 9, background: "rgba(255,255,255,0.1)", border: "1px solid var(--accent)", color: "white",
+                  fontSize: 9, background: "var(--bg-deepest)", border: "1px solid var(--accent)", color: "var(--text-primary)",
                   borderRadius: 4, padding: "2px 6px", outline: "none", cursor: "pointer",
                   borderColor: selectedPageAnalysis.fullPageBorderColor
                 }}
               >
-                <option value="none" style={{ background: "#1a1e2e" }}>Clear Full Page Assignment</option>
+                <option value="none" style={{ background: "var(--bg-dark)" }}>Clear Full Page Assignment</option>
                 {sessionMembers.map(m => (
-                  <option key={m.memberId} value={m.memberId} style={{ background: "#1a1e2e" }}>{m.ign}</option>
+                  <option key={m.memberId} value={m.memberId} style={{ background: "var(--bg-dark)" }}>{m.ign}</option>
                 ))}
               </select>
               <button
@@ -182,8 +182,8 @@ const AuctionMapSidebar = React.memo(function AuctionMapSidebar({
                     onDrop={e => { if (dragging) { e.preventDefault(); handleDropdownAssignment(selectedMapPage, row, dragging); setDraggedOverSlot(null); } }}
                     style={{
                       padding: mapFocusMode ? "12px 12px" : "8px 10px", borderRadius: 10,
-                      background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "rgba(255,255,255,0.02)"),
-                      border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "rgba(255,255,255,0.06)")}`,
+                      background: isDragTarget ? "rgba(99,130,230,0.18)" : (hasConflict ? "rgba(224,80,80,0.12)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.08)" : "var(--bg-deepest)"),
+                      border: `1px solid ${isDragTarget ? "var(--accent)" : (hasConflict ? "rgba(224,80,80,0.4)" : currentMemId !== "none" ? "rgba(42, 191, 107, 0.4)" : "var(--border)")}`,
                       position: "relative",
                       boxShadow: isDragTarget ? "0 0 18px rgba(99,130,230,0.35)" : (currentMemId !== "none" && !hasConflict ? "inset 0 0 15px rgba(42, 191, 107, 0.03)" : "none"),
                       backdropFilter: "blur(8px)",
@@ -302,9 +302,9 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
   );
   return (
     <div style={{
-      background: isExpanded ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
+      background: isExpanded ? "var(--bg-hover)" : "var(--bg-card2)",
       borderRadius: 12,
-      border: isExpanded ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
+      border: isExpanded ? "1px solid var(--accent)" : "1px solid var(--border)",
       marginBottom: 8, overflow: "hidden", display: "flex", flexDirection: "column",
       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
       boxShadow: isExpanded ? "0 8px 24px rgba(0,0,0,0.3)" : "none"
@@ -312,7 +312,7 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
       <div
         onClick={() => onToggle(memberId)}
         style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 10, padding: compact ? "8px 10px" : "12px", cursor: "pointer", position: "relative" }}
-        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+        onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
         onMouseLeave={e => e.currentTarget.style.background = "transparent"}
       >
         <MemberAvatar ign={ign} size={compact ? 24 : (isExpanded ? 36 : 28)} />
@@ -328,7 +328,7 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
             {anomalies.missingLast && <span title="Missing latest session" style={{ fontSize: 11, color: "var(--gold)" }}>⏱</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-            <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ flex: 1, height: 3, background: "var(--bg-deepest)", borderRadius: 2, overflow: "hidden" }}>
               <div style={{ width: `${dominance}%`, height: "100%", background: badgeColor, borderRadius: 2, boxShadow: `0 0 5px ${badgeColor}` }} />
             </div>
             <div style={{ fontSize: 8, color: "var(--text-muted)", fontWeight: 700, width: 25 }}>{Math.round(dominance)}%</div>
@@ -344,7 +344,7 @@ const TrackerMemberRow = React.memo(function TrackerMemberRow({
       {isExpanded && (
         <div style={{ padding: "0 10px 10px 10px", display: "flex", flexDirection: "column", gap: 6, animation: "fade-in 0.2s" }}>
           {seshArray.map(sesh => (
-            <div key={sesh.id} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
+            <div key={sesh.id} style={{ background: "var(--bg-deepest)", borderRadius: 6, padding: "8px", borderLeft: `3px solid ${badgeBorder}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6, color: "var(--text-secondary)" }}>
                 <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>{String(sesh.name).toUpperCase()}</span>
                 <span style={{ opacity: 0.6 }}>{new Date(sesh.date).toLocaleDateString()}</span>
@@ -1527,7 +1527,7 @@ function AuctionBuilder() {
                 <h1 className="page-title">📜 {session.name}</h1>
                 <button 
                   className="btn btn-ghost btn-sm" 
-                  style={{ padding: "4px 8px", background: "rgba(255,255,255,0.05)", borderRadius: 6 }}
+                  style={{ padding: "4px 8px", background: "var(--bg-hover)", borderRadius: 6, border: "1px solid var(--border)" }}
                   onClick={() => handleEditSessionClick(session)}
                 >
                   <Icon name="edit" size={12} /> Edit Details
@@ -1550,10 +1550,10 @@ function AuctionBuilder() {
             ) : (
               <button className="btn btn-ghost" onClick={() => setShowNewTemplate(true)}><Icon name="save" size={14} /> Save as Template</button>
             )}
-            <button className="btn btn-primary" onClick={exportTableToImage} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <button className="btn btn-primary" onClick={exportTableToImage} style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <Icon name="camera" size={14} /> 📸 Export Image
             </button>
-            <button className="btn btn-primary" onClick={postTableToDiscord} style={{ background: "rgba(88,101,242,0.15)", color: "#5865F2", border: "1px solid rgba(88,101,242,0.3)" }}>
+            <button className="btn btn-primary" onClick={postTableToDiscord} style={{ background: "rgba(88,101,242,0.1)", color: "#5865F2", border: "1px solid rgba(88,101,242,0.2)" }}>
               <Icon name="discord" size={14} /> 🚀 Post to Discord
             </button>
             <button className="btn btn-ghost" onClick={retryLastDiscordPost} disabled={postingDiscord || !lastDiscordAttempt} title="Retry the last posted auction result payload">
@@ -1623,7 +1623,7 @@ function AuctionBuilder() {
           <div style={{
             minHeight: 120, maxHeight: "calc(100vh - 280px)", overflowY: "auto", borderRadius: 10, 
             border: `2px dashed ${dragOver === "pool" ? "var(--accent)" : "var(--border)"}`,
-            background: dragOver === "pool" ? "rgba(99,130,230,0.08)" : "var(--bg-card)",
+            background: dragOver === "pool" ? "rgba(99,130,230,0.08)" : "var(--bg-deepest)",
             padding: 8, transition: "all 0.15s",
           }}
             className="custom-scrollbar"
@@ -1642,17 +1642,17 @@ function AuctionBuilder() {
                 onDragStart={() => onDragStart(m.memberId)}
                 onDragEnd={onDragEnd}
                 style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, cursor: "grab",
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6, boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                  opacity: dragging === m.memberId ? 0.4 : 1, userSelect: "none", transition: "all 0.15s"
+                  display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
+                  background: "var(--bg-card2)", border: "1px solid var(--border)", marginBottom: 6, boxShadow: "var(--shadow-sm)",
+                  opacity: dragging === m.memberId ? 0.4 : 1, userSelect: "none", transition: "all 0.15s", cursor: "grab"
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "var(--accent)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+                onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.borderColor = "var(--accent)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-card2)"; e.currentTarget.style.borderColor = "var(--border)"; }}
               >
                 {miniAvatar(m, members.indexOf(m))}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                    <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: 0.5 }}>{m.ign}</div>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: 0.5 }}>{m.ign}</div>
                     {(() => {
                       const wishEntry = auctionWishlist.find(b => b.id === m.memberId);
                       const albumWish = wishEntry?.bids?.find(bi => bi.type === "Card Album");
@@ -1662,7 +1662,7 @@ function AuctionBuilder() {
                       const progress = albums % 10;
                       if (progress === 0 && albums === 0) return null;
                       return (
-                        <span title={`${progress}/10 Card Progress (${albums} total)`} style={{ fontSize: 9, fontWeight: 900, color: progress >= 9 ? "var(--red)" : "var(--accent)", background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: 4 }}>
+                        <span title={`${progress}/10 Card Progress (${albums} total)`} style={{ fontSize: 9, fontWeight: 900, color: progress >= 9 ? "var(--red)" : "var(--accent)", background: "var(--bg-deepest)", border: "1px solid var(--border)", padding: "1px 4px", borderRadius: 4 }}>
                           {progress}/10
                         </span>
                       );
@@ -1683,7 +1683,7 @@ function AuctionBuilder() {
         )}
 
         {/* Table Wrap for Image Capture */}
-        <div id="auction-table-export" style={{ flex: 1, minWidth: 0, padding: 12, background: "var(--bg-dark)", borderRadius: 16 }}>
+        <div id="auction-table-export" style={{ flex: 1, minWidth: 0, padding: 12, background: "var(--bg-card)", borderRadius: 16 }}>
           <div style={{
             minHeight: 80, borderRadius: 10,
             border: `2px dashed ${dragOver === "table" ? "var(--accent)" : "transparent"}`,
@@ -1702,10 +1702,10 @@ function AuctionBuilder() {
               <div className="table-responsive">
                 <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
-                      <th style={{ padding: "12px 16px", textAlign: "left", fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: 160, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>Member</th>
+                    <tr style={{ background: "var(--bg-hover)", borderBottom: "2px solid var(--border)" }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontFamily: "Cinzel,serif", fontSize: 11, letterSpacing: 1.5, color: "var(--text-primary)", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: 160 }}>Member</th>
                       {session.columns.map(col => (
-                        <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid rgba(255,255,255,0.1)", minWidth: 200 }}>
+                        <th key={col.id} style={{ padding: "12px 16px", textAlign: "left", borderLeft: "1px solid var(--border)", minWidth: 200 }}>
                           {editingColId === col.id ? (
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, animation: "fade-in 0.2s" }}>
                               {availableCategories.map(rc => (
@@ -1713,13 +1713,13 @@ function AuctionBuilder() {
                                   onClick={() => handleColumnRename(col.id, rc)}
                                   style={{ 
                                     padding: "4px 8px", fontSize: 10, borderRadius: 6, cursor: "pointer", fontWeight: 900,
-                                    background: col.name === rc ? "var(--accent)" : "rgba(255,255,255,0.05)",
+                                    background: col.name === rc ? "var(--accent)" : "var(--bg-deepest)",
                                     color: col.name === rc ? "white" : "var(--text-muted)",
-                                    border: `1px solid ${col.name === rc ? "var(--accent)" : "rgba(255,255,255,0.1)"}`,
+                                    border: `1px solid ${col.name === rc ? "var(--accent)" : "var(--border)"}`,
                                     transition: "all 0.2s"
                                   }}
-                                  onMouseEnter={e => { if (col.name !== rc) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
-                                  onMouseLeave={e => { if (col.name !== rc) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                                  onMouseEnter={e => { if (col.name !== rc) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                                  onMouseLeave={e => { if (col.name !== rc) e.currentTarget.style.background = "var(--bg-deepest)"; }}
                                 >
                                   {rc}
                                 </button>
@@ -1750,11 +1750,11 @@ function AuctionBuilder() {
                               <div style={{ display: "flex", gap: 4 }}>
                                 <button 
                                   style={{ 
-                                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", 
+                                    background: "var(--bg-deepest)", border: "1px solid var(--border)", cursor: "pointer", 
                                     color: "var(--text-secondary)", fontSize: 13, padding: "4px 6px", borderRadius: 6, transition: "all 0.2s"
                                   }}
-                                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "white"; }}
-                                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                                  onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-deepest)"; e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
                                   onClick={() => { setEditingColId(col.id); }}
                                   title="Edit column name"
                                 >
@@ -1787,17 +1787,17 @@ function AuctionBuilder() {
                         onDragEnd={onDragEnd}
                         style={{
                           borderBottom: "1px solid var(--border)", 
-                          background: rowIdx % 2 === 1 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.15)",
+                          background: rowIdx % 2 === 1 ? "var(--bg-hover)" : "var(--bg-card2)",
                           opacity: dragging === m.memberId ? 0.35 : 1, transition: "background 0.15s, opacity 0.15s"
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
-                        onMouseLeave={e => e.currentTarget.style.background = rowIdx % 2 === 1 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.15)"}
+                        onMouseEnter={e => e.currentTarget.style.background = "var(--accent-light)"}
+                        onMouseLeave={e => e.currentTarget.style.background = rowIdx % 2 === 1 ? "var(--bg-hover)" : "var(--bg-card2)"}
                       >
-                        <td className="sticky-col" style={{ padding: "10px 16px" }}>
+                        <td className="sticky-col" style={{ padding: "10px 16px", background: rowIdx % 2 === 1 ? "var(--bg-hover)" : "var(--bg-card2)" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "grab" }}>
                             {miniAvatar(m, members.indexOf(m))}
                             <div>
-                              <div style={{ fontWeight: 800, fontSize: 13, color: "#ffffff", letterSpacing: 0.5 }}>{m.ign}</div>
+                              <div style={{ fontWeight: 800, fontSize: 13, color: "var(--text-primary)", letterSpacing: 0.5 }}>{m.ign}</div>
                               <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 500 }}>{m.class}</div>
                             </div>
                           </div>
@@ -1825,7 +1825,7 @@ function AuctionBuilder() {
                                         boxShadow: tc.glow || "none"
                                       }}>
                                         {tc.opacity ? tag.substring(1) : tag}
-                                        <div className="flex items-center gap-1 ml-1" style={{ borderLeft: "1px solid rgba(255,255,255,0.1)", paddingLeft: 4 }}>
+                                        <div className="flex items-center gap-1 ml-1" style={{ borderLeft: "1px solid var(--border)", paddingLeft: 4 }}>
                                           <button style={{ background: "none", border: "none", cursor: "pointer", color: "white", opacity: 0.5, fontSize: 10, padding: 0 }}
                                             title="Toggle Outbid status"
                                             onClick={e => { e.stopPropagation(); toggleOutbid(m.memberId, col.id, ti); }}>🔄</button>
@@ -1858,8 +1858,8 @@ function AuctionBuilder() {
             
             {/* Sidebar Tab Switcher */}
             <div style={{ 
-              display: "flex", background: "rgba(0,0,0,0.4)", padding: 4, borderRadius: 12, gap: 4, 
-              border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" 
+              display: "flex", background: "var(--bg-deepest)", padding: 4, borderRadius: 12, gap: 4, 
+              border: "1px solid var(--border)", backdropFilter: "blur(12px)" 
             }}>
               <button 
                 onClick={() => setSidebarTab("map")}
@@ -1930,7 +1930,7 @@ function AuctionBuilder() {
 
             {/* 2. Wishlist Tab */}
             {sidebarTab === "wishlist" && (
-              <div className="card custom-scrollbar animate-fade-in" style={{ flex: 1, padding: 14, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column" }}>
+              <div className="card custom-scrollbar animate-fade-in" style={{ flex: 1, padding: 14, overflowY: "auto", background: "var(--bg-card2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
                 <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <Icon name="star" size={14} color="var(--gold)" /> Active Loot Wishlist
                 </div>
@@ -1942,7 +1942,7 @@ function AuctionBuilder() {
                     const m = members.find(mx => mx.memberId === wishEntry.id);
                     if (!m) return null;
                     return (
-                      <div key={wishEntry.id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10 }}>
+                      <div key={wishEntry.id} style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
                         <div className="flex items-center gap-2 mb-2">
                           <MemberAvatar ign={m.ign} size={24} />
                           <div style={{ fontSize: 12, fontWeight: 800 }}>{m.ign}</div>
@@ -1965,7 +1965,7 @@ function AuctionBuilder() {
                                 <div style={{ fontSize: 9, opacity: 0.8 }}>{b.type.toUpperCase()}</div>
                                 {isAlbum && (
                                   <div style={{ display: "flex", gap: 8, marginTop: 1 }}>
-                                    <span style={{ color: "white" }}>HAVE: {cardWins}</span>
+                                    <span style={{ color: "var(--text-primary)" }}>HAVE: {cardWins}</span>
                                     <span style={{ color: "var(--red)" }}>NEED: {need}</span>
                                   </div>
                                 )}
@@ -1982,11 +1982,11 @@ function AuctionBuilder() {
  
             {/* 2. Global World Master Tracker Tab */}
             {sidebarTab === "tracker" && (
-              <div className="card custom-scrollbar" style={{ flex: 1, padding: 16, overflowY: "auto", background: "rgba(10,12,18,0.7)", display: "flex", flexDirection: "column", animation: "fade-in 0.3s" }}>
+              <div className="card custom-scrollbar" style={{ flex: 1, padding: 16, overflowY: "auto", background: "var(--bg-card2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", animation: "fade-in 0.3s" }}>
                <div className="card-title" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                  <Icon name="shield" size={14} color="var(--gold)" /> World Master Tracker
                </div>
-               <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "rgba(255,255,255,0.05)", padding: 4, borderRadius: 8, flexWrap: "wrap" }}>
+               <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "var(--bg-deepest)", padding: 4, borderRadius: 8, flexWrap: "wrap", border: "1px solid var(--border)" }}>
                  {Object.keys(resourceHistory).map(cat => (
                    <button key={cat} onClick={() => setTrackerTab(cat)} style={{ flex: "1 1 auto", padding: "5px 10px", fontSize: 10, fontWeight: 900, borderRadius: 6, background: trackerTab === cat ? "var(--bg-card)" : "transparent", color: trackerTab === cat ? (isLDColumn(cat) ? "#c080ff" : "var(--accent)") : "var(--text-muted)", border: "none", cursor: "pointer", transition: "all 0.2s" }}>
                      {cat.toUpperCase()}
@@ -1999,7 +1999,7 @@ function AuctionBuilder() {
                   </button>
                </div>
                <div style={{ position: "relative", marginBottom: 10 }}>
-                  <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "rgba(0,0,0,0.3)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
+                  <input className="form-input" style={{ fontSize: 11, padding: "6px 28px", width: "100%", background: "var(--bg-card)", border: "1px solid var(--border)" }} placeholder={`Search ${trackerTab}...`} value={cardSearch} onChange={e => setCardSearch(e.target.value)} />
                   <div style={{ position: "absolute", left: 8, top: 7, opacity: 0.5 }}><Icon name="search" size={12} /></div>
                </div>
               <div
@@ -2142,7 +2142,7 @@ function AuctionBuilder() {
           Another officer saved Auction changes while you have local unsaved edits.
           <br /><br />
           {conflictSummary && (
-            <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-deepest)" }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: "var(--accent)", marginBottom: 6 }}>DIFF SUMMARY</div>
               <div style={{ fontSize: 12 }}>
                 Sessions: <strong>{conflictSummary.localSessionsCount}</strong> local vs <strong>{conflictSummary.remoteSessionsCount}</strong> remote

@@ -328,7 +328,7 @@ function ImportPage() {
             <div className="card-title">📋 Paano mag-import nang tama</div>
             <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8 }}>
               <div>Para hindi malito ang system, ito ang dapat content ng CSV file mo:</div>
-              <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6, fontFamily: "monospace", fontSize: 11 }}>
+              <div style={{ marginTop: 8, padding: 12, background: "var(--bg-deepest)", border: "1px solid var(--border)", borderRadius: 6, fontFamily: "monospace", fontSize: 11 }}>
                 #, IGN, Class, UID, Role, Discord<br />
                 1, Ebakook, High Wizard, OBL335675, DPS, taegamingsaaa<br />
                 2, Pulube22, Creator, OBL404266, DPS, weissgaming

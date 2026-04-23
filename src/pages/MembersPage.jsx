@@ -295,7 +295,7 @@ function MembersPage({ onViewProfile }) {
               <select className="form-select" style={{ minWidth: 100 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
                 <option>All</option><option>DPS</option><option>Support</option>
               </select>
-              <div className="flex gap-1 p-1 bg-deepest rounded-lg border border-border">
+              <div className="flex gap-1 p-1 rounded-lg border border-border" style={{ background: "var(--bg-deepest)" }}>
                 <button className={`btn btn-sm ${statusFilter === "active" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStatusFilter("active")} style={{ fontSize: 10 }}>Active</button>
                 <button className={`btn btn-sm ${statusFilter === "left" ? "btn-danger" : "btn-ghost"}`} onClick={() => setStatusFilter("left")} style={{ fontSize: 10 }}>Left</button>
               </div>

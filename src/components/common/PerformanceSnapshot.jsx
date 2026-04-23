@@ -29,7 +29,7 @@ const PerformanceSnapshot = () => {
       flexDirection: 'column', 
       maxHeight: 400,
       border: `1px solid ${color}33`,
-      background: `linear-gradient(180deg, ${color}08 0%, rgba(10, 15, 25, 0.6) 100%)`
+      background: `linear-gradient(180deg, ${color}08 0%, var(--bg-card2) 100%)`
     }}>
       <div className="flex items-center justify-between mb-4">
         <div className="card-title" style={{ marginBottom: 0, fontSize: 16, color }}>
@@ -49,7 +49,7 @@ const PerformanceSnapshot = () => {
           </thead>
           <tbody>
             {data.map((m, i) => (
-              <tr key={m.memberId} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+              <tr key={m.memberId} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '10px 4px', fontSize: 13, fontWeight: 700, color: i < 3 ? color : 'var(--text-muted)' }}>
                   {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}
                 </td>

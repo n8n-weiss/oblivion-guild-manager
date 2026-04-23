@@ -34,22 +34,21 @@ const LootRadar = () => {
 
   return (
     <div className="card" style={{
-      border: "1px solid rgba(255,255,255,0.05)",
-      background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(10, 15, 25, 0.6) 100%)",
-      backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
-      transition: "transform 0.2s ease, box-shadow 0.2s ease"
+      border: "1px solid var(--border)",
+      background: "var(--bg-card)",
+      backdropFilter: "var(--glass-blur)",
+      boxShadow: "var(--shadow-premium)"
     }}>
       <div className="card-title flex justify-between items-center">
-        <span style={{ textShadow: "0 0 10px rgba(255,255,255,0.3)" }}>⭐ Active Loot Wishlist</span>
-        <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-muted)", background: "rgba(255,255,255,0.08)", padding: "2px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)" }}>Live Radar</span>
+        <span style={{ textShadow: "none" }}>⭐ Active Loot Wishlist</span>
+        <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-muted)", background: "var(--bg-deepest)", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border)" }}>Live Radar</span>
       </div>
       <div className="text-xs text-muted mt-1 mb-4">Items currently requested by members on their active wishlist.</div>
 
       <div className="flex flex-col gap-3">
          {wishlistRadar.length > 0 ? wishlistRadar.map(w => (
-            <div key={w.type} className="p-3 rounded border border-white border-opacity-5" style={{
-              background: "rgba(0,0,0,0.4)",
+            <div key={w.type} className="p-3 rounded border border-border" style={{
+              background: "var(--bg-deepest)",
               transition: "background 0.2s ease, transform 0.2s ease",
               cursor: "default"
             }}>

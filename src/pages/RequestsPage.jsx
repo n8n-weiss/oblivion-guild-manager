@@ -152,7 +152,7 @@ function RequestsPage() {
         </div>
         
         {/* Modern Tab Switcher */}
-        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.4)', padding: 4, borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', background: 'var(--bg-deepest)', padding: 4, borderRadius: 12, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
           {tabItems.map(t => (
             <button
               key={t.id}
@@ -212,7 +212,7 @@ function RequestsPage() {
                     <div style={{ padding: 20, background: 'rgba(99, 130, 230, 0.05)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 16 }}>
                       <MemberAvatar ign={r.requesterIgn} index={mIndex} size={48} />
                       <div>
-                        <div style={{ fontWeight: 800, color: '#fff', fontSize: 18 }}>{r.requesterIgn}</div>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.requesterIgn}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{r.memberId}</div>
                       </div>
                     </div>
@@ -221,12 +221,12 @@ function RequestsPage() {
                       <div style={{ fontSize: 11, color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1.5, marginBottom: 16 }}>Requested Changes</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {changes.map(c => (
-                          <div key={c.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.03)' }}>
+                          <div key={c.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-deepest)', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}>
                             <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, width: 40 }}>{c.label}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, justifyContent: 'flex-end' }}>
                               <span style={{ fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'line-through', opacity: 0.6 }}>{c.old}</span>
                               <Icon name="arrow" size={12} className="text-accent" />
-                              <span style={{ fontSize: 14, color: '#fff', fontWeight: 700, textShadow: '0 0 10px var(--accent-glow)' }}>{c.new}</span>
+                              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700 }}>{c.new}</span>
                             </div>
                           </div>
                         ))}
@@ -249,7 +249,7 @@ function RequestsPage() {
                         </button>
                       </div>
                     </div>
-                    <div style={{ padding: '8px 20px', background: 'rgba(0,0,0,0.2)', fontSize: 10, color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.02)' }}>
+                    <div style={{ padding: '8px 20px', background: 'var(--bg-deepest)', fontSize: 10, color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
                       Requested {new Date(r.timestamp).toLocaleDateString()} at {new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
@@ -280,7 +280,7 @@ function RequestsPage() {
                   }}>
                     <div style={{ padding: 20, background: isDup ? 'linear-gradient(135deg, rgba(224, 80, 80, 0.1), transparent)' : 'linear-gradient(135deg, rgba(130,90,230,0.1), transparent)', borderBottom: `1px solid ${isDup ? 'rgba(224,80,80,0.1)' : 'rgba(130,90,230,0.1)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontWeight: 800, color: '#fff', fontSize: 18 }}>{r.ign}</div>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.ign}</div>
                         <div style={{ fontSize: 12, color: isDup ? 'var(--red)' : 'var(--accent)', fontWeight: 700 }}>UID: {r.uid}</div>
                       </div>
                       <div style={{ background: isDup ? 'rgba(224, 80, 80, 0.2)' : 'rgba(130,90,230,0.2)', padding: '4px 8px', borderRadius: 6, fontSize: 10, color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -296,9 +296,9 @@ function RequestsPage() {
                       )}
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div style={{ background: 'var(--bg-deepest)', padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
                           <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Job Class</div>
-                          <div style={{ fontSize: 14, color: '#fff', fontWeight: 700 }}>{r.jobClass}</div>
+                          <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700 }}>{r.jobClass}</div>
                         </div>
                         <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.03)' }}>
                           <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Combat Role</div>
@@ -306,13 +306,13 @@ function RequestsPage() {
                         </div>
                       </div>
 
-                      <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.03)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 24, height: 24, background: 'rgba(88,101,242,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ background: 'var(--bg-deepest)', padding: 12, borderRadius: 10, border: '1px solid var(--border)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 24, height: 24, background: 'rgba(88,101,242,0.1)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Icon name="user" size={14} style={{ color: '#5865F2' }} />
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Discord Handle</div>
-                          <div style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>{r.discord}</div>
+                          <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{r.discord}</div>
                         </div>
                       </div>
                       

@@ -29,7 +29,6 @@ const StatsGrid = () => {
         backdropFilter: "blur(12px)",
         border: "1px solid rgba(255,255,255,0.05)",
         boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
-        transition: "transform 0.2s ease, box-shadow 0.2s ease",
         cursor: "default"
       }}>
         <div className="stat-icon" style={{ textShadow: "0 0 12px var(--accent)" }}>⚔️</div>
@@ -43,7 +42,6 @@ const StatsGrid = () => {
         backdropFilter: "blur(12px)",
         border: "1px solid rgba(255,255,255,0.05)",
         boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
-        transition: "transform 0.2s ease, box-shadow 0.2s ease",
         cursor: "default"
       }}>
         <div className="stat-icon">📋</div>
@@ -57,7 +55,6 @@ const StatsGrid = () => {
         backdropFilter: "blur(12px)",
         border: "1px solid rgba(255,255,255,0.05)",
         boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
-        transition: "transform 0.2s ease, box-shadow 0.2s ease",
         cursor: "default"
       }}>
         <div className="stat-icon">🏆</div>

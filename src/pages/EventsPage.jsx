@@ -618,15 +618,15 @@ function EventsPage() {
               
               return (
                 <div key={month} style={{ marginBottom: 6 }}>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ 
-                      width: "100%", justifyContent: "space-between", fontSize: 11, padding: "10px 12px", 
-                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", 
-                      marginBottom: isMonthExpanded ? 8 : 0, borderRadius: 8
-                    }}
-                    onClick={() => toggleMonth(month)}
-                  >
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ 
+                        width: "100%", justifyContent: "space-between", fontSize: 11, padding: "10px 12px", 
+                        background: "var(--bg-card2)", border: "1px solid var(--border)", 
+                        marginBottom: isMonthExpanded ? 8 : 0, borderRadius: 8
+                      }}
+                      onClick={() => toggleMonth(month)}
+                    >
                     <span style={{ fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ color: "var(--accent)", fontSize: 10 }}>{isMonthExpanded ? "▼" : "▶"}</span> {month.toUpperCase()}
                     </span>
@@ -644,8 +644,8 @@ function EventsPage() {
                               className="btn btn-ghost btn-sm"
                               style={{ 
                                 width: "100%", justifyContent: "flex-start", fontSize: 10, padding: "6px 10px", 
-                                background: isWeekExpanded ? "rgba(99,130,230,0.08)" : "rgba(255,255,255,0.02)", 
-                                border: "1px solid rgba(255,255,255,0.04)", 
+                                background: isWeekExpanded ? "var(--accent-light)" : "var(--bg-hover)", 
+                                border: "1px solid var(--border)", 
                                 borderRadius: 6, gap: 8, letterSpacing: 0.5, color: isWeekExpanded ? "var(--text-primary)" : "var(--text-muted)",
                                 height: "auto"
                               }}
@@ -780,10 +780,10 @@ function EventsPage() {
                       const assists = curPerf.assists !== undefined ? curPerf.assists : (m.perf?.assists ?? 0);
                       const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
                       return (
-                        <tr key={m.memberId}>
-                          <td className="sticky-col">
-                            <div style={{ fontWeight: 700 }}>{m.ign}</div>
-                            <div className="text-xs text-muted">{m.memberId}</div>
+                         <tr key={m.memberId} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td className="sticky-col" style={{ padding: "12px 16px", background: "var(--bg-card2)", borderRight: "1px solid var(--border)" }}>
+                            <div style={{ fontWeight: 800, color: "var(--text-primary)", fontSize: 13 }}>{m.ign}</div>
+                            <div className="text-xs text-muted" style={{ fontSize: 10 }}>{m.memberId}</div>
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
