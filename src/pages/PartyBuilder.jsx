@@ -11,6 +11,7 @@ function PartyBuilder() {
     members, events, attendance,
     parties, setParties, partyNames, setPartyNames,
     raidParties, setRaidParties, raidPartyNames, setRaidPartyNames,
+    partyOverrides, setPartyOverrides,
     showToast
   } = useGuild();
 
@@ -20,38 +21,38 @@ function PartyBuilder() {
   const [dragOver, setDragOver] = useState(null);
   const [editingName, setEditingName] = useState(null);
   const [nameInput, setNameInput] = useState("");
-  const [mode, setMode] = useState("auto");
+  const [editingMember, setEditingMember] = useState(null);
 
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
 
   const poolMembers = useMemo(() => {
-    if (sourceMode === "all") return activeMembers;
-    const eventId = sourceMode.replace("event:", "");
-    const presentIds = new Set(
-      activeMembers.filter(m => {
-        const a = attendance.find(att => att.eventId === eventId && att.memberId === m.memberId);
-        return (a?.status || "present") === "present";
-      }).map(m => m.memberId)
-    );
-    return members.filter(m => presentIds.has(m.memberId));
-  }, [sourceMode, activeMembers, members, attendance]);
+    let baseMembers = [];
+    if (sourceMode === "all") {
+      baseMembers = activeMembers;
+    } else {
+      const eventId = sourceMode.replace("event:", "");
+      const presentIds = new Set(
+        activeMembers.filter(m => {
+          const a = attendance.find(att => att.eventId === eventId && att.memberId === m.memberId);
+          return (a?.status || "present") === "present";
+        }).map(m => m.memberId)
+      );
+      baseMembers = members.filter(m => presentIds.has(m.memberId));
+    }
+    
+    return baseMembers.map(m => {
+      if (partyOverrides && partyOverrides[m.memberId]) {
+        return { ...m, ...partyOverrides[m.memberId], isOverridden: true };
+      }
+      return m;
+    });
+  }, [sourceMode, activeMembers, members, attendance, partyOverrides]);
 
   // ── PARTY MODE ────────────────────────────────────────────────
   const assignedPartyIds = useMemo(() => new Set(parties.flatMap(p => p.map(m => m.memberId))), [parties]);
   const partyBench = useMemo(() => poolMembers.filter(m => !assignedPartyIds.has(m.memberId)), [poolMembers, assignedPartyIds]);
   const partyBenchDPS = useMemo(() => partyBench.filter(m => m.role === "DPS"), [partyBench]);
   const partyBenchSUP = useMemo(() => partyBench.filter(m => m.role !== "DPS"), [partyBench]);
-
-  const autoGenerate = () => {
-    const dps = [...poolMembers.filter(m => m.role === "DPS")].sort(() => Math.random() - 0.5);
-    const sup = [...poolMembers.filter(m => m.role !== "DPS")].sort(() => Math.random() - 0.5);
-    const partyCount = Math.max(1, Math.ceil(poolMembers.length / 5));
-    const result = Array.from({ length: partyCount }, () => []);
-    sup.forEach((s, i) => result[i % partyCount].push(s));
-    let di = 0;
-    result.forEach(p => { while (p.length < 5 && di < dps.length) p.push(dps[di++]); });
-    setParties(result.filter(p => p.length > 0));
-  };
 
   const addParty = () => setParties(prev => [...prev, []]);
   const removeParty = (idx) => setParties(prev => prev.filter((_, i) => i !== idx));
@@ -69,17 +70,6 @@ function PartyBuilder() {
   const raidBench = useMemo(() => poolMembers.filter(m => !assignedRaidIds.has(m.memberId)), [poolMembers, assignedRaidIds]);
   const raidBenchDPS = useMemo(() => raidBench.filter(m => m.role === "DPS"), [raidBench]);
   const raidBenchSUP = useMemo(() => raidBench.filter(m => m.role !== "DPS"), [raidBench]);
-
-  const autoFillRaid = () => {
-    const shuffled = [...poolMembers].sort(() => Math.random() - 0.5);
-    const raidCount = raidParties.length || 1;
-    const result = Array.from({ length: raidCount }, () => []);
-    shuffled.forEach((m, i) => {
-      const target = i % raidCount;
-      if (result[target].length < RAID_CAPACITY) result[target].push(m);
-    });
-    setRaidParties(result);
-  };
 
   const addRaid = () => setRaidParties(prev => [...prev, []]);
   const removeRaid = (idx) => setRaidParties(prev => prev.filter((_, i) => i !== idx));
@@ -205,8 +195,11 @@ function PartyBuilder() {
                   <div key={m.memberId} draggable
                     onDragStart={() => onDragStart(m.memberId, "bench")}
                     onDragEnd={onDragEnd}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 8, cursor: "grab", userSelect: "none", fontSize: 12, fontWeight: 600, opacity: dragging?.memberId === m.memberId ? 0.4 : 1 }}>
-                    {m.ign} <span style={{ opacity: 0.5, fontWeight: 400, fontSize: 10 }}>{m.class}</span>
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg-card2)", border: m.isOverridden ? "1px solid var(--gold)" : "1px solid var(--border)", borderRadius: 8, cursor: "grab", userSelect: "none", fontSize: 12, fontWeight: 600, opacity: dragging?.memberId === m.memberId ? 0.4 : 1 }}>
+                    <div onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                      {m.ign} <span style={{ opacity: 0.8, fontWeight: 400, fontSize: 10, color: m.isOverridden ? "var(--gold)" : "inherit" }}>({m.class}{m.isOverridden ? " *" : ""})</span>
+                      <Icon name="edit" size={10} style={{ opacity: 0.4 }} />
+                    </div>
                   </div>
                 ))}
                 {benchDPS.length === 0 && <div className="text-xs text-muted" style={{ fontStyle: "italic", fontSize: 10 }}>No DPS on bench</div>}
@@ -239,7 +232,7 @@ function PartyBuilder() {
     <div>
       <div className="page-header">
         <h1 className="page-title">⭐ Party Builder</h1>
-        <p className="page-subtitle">Auto-balance or manually arrange teams — state persists across tabs</p>
+        <p className="page-subtitle">Manually arrange teams for guild events — state persists across tabs</p>
       </div>
 
       {/* Controls card */}
@@ -288,17 +281,6 @@ function PartyBuilder() {
               </select>
             </div>
 
-            {/* Mode toggle — only for party */}
-            {builderType === "party" && (
-              <div className="form-group" style={{ gap: 4, marginBottom: 0 }}>
-                <label className="form-label">Mode</label>
-                <div className="flex gap-1">
-                  <button className={`btn btn-sm ${mode === "auto" ? "btn-primary" : "btn-ghost"}`} onClick={() => setMode("auto")}>Auto</button>
-                  <button className={`btn btn-sm ${mode === "manual" ? "btn-primary" : "btn-ghost"}`} onClick={() => setMode("manual")}>Manual</button>
-                </div>
-              </div>
-            )}
-
             <div className="text-xs text-muted" style={{ paddingTop: 18 }}>
               {poolMembers.length} members · {poolMembers.filter(m => m.role === "DPS").length} DPS · {poolMembers.filter(m => m.role !== "DPS").length} Support
               {builderType === "raid" && hasRaids && (
@@ -311,19 +293,13 @@ function PartyBuilder() {
             {builderType === "party" ? (
               <>
                 {hasParties && <button className="btn btn-ghost" onClick={resetParties}><Icon name="trash" size={14} /> Reset</button>}
-                {mode === "manual" && <button className="btn btn-ghost" onClick={addParty}><Icon name="plus" size={14} /> Add Party</button>}
-                <button className="btn btn-primary" onClick={autoGenerate}><Icon name="refresh" size={14} /> {hasParties ? "Rebalance" : "Generate"}</button>
+                <button className="btn btn-primary" onClick={addParty}><Icon name="plus" size={14} /> Add Party</button>
               </>
             ) : (
               <>
                 {hasRaids && <button className="btn btn-ghost" onClick={resetRaids}><Icon name="trash" size={14} /> Reset All</button>}
-                <button className="btn btn-ghost" onClick={addRaid} style={{ borderColor: "rgba(192,57,43,0.3)", color: "var(--text-primary)" }}>
+                <button className="btn btn-primary" onClick={addRaid} style={{ background: "linear-gradient(135deg,#c0392b,#e74c3c)", borderColor: "#c0392b" }}>
                   <Icon name="plus" size={14} /> Add Raid
-                </button>
-                <button className="btn btn-primary"
-                  style={{ background: "linear-gradient(135deg,#c0392b,#e74c3c)", borderColor: "#c0392b" }}
-                  onClick={autoFillRaid}>
-                  <Icon name="refresh" size={14} /> {hasRaids ? "Refill" : "Fill Raid"}
                 </button>
               </>
             )}
@@ -334,7 +310,7 @@ function PartyBuilder() {
       {/* ── PARTY MODE ── */}
       {builderType === "party" && (
         <>
-          {mode === "manual" && hasParties && renderBench(partyBench, partyBenchDPS, partyBenchSUP, false)}
+          {hasParties && renderBench(partyBench, partyBenchDPS, partyBenchSUP, false)}
 
           {hasParties && (
             <div className="party-grid">
@@ -344,10 +320,10 @@ function PartyBuilder() {
                 const name = partyNames[i] || `Party ${i + 1}`;
                 return (
                   <div className="party-card" key={i}
-                    style={mode === "manual" ? dropTargetStyle(i) : {}}
-                    onDragOver={mode === "manual" ? (e => { e.preventDefault(); setDragOver(i); }) : undefined}
-                    onDragLeave={mode === "manual" ? (() => setDragOver(null)) : undefined}
-                    onDrop={mode === "manual" ? (() => onDrop(i)) : undefined}
+                    style={dropTargetStyle(i)}
+                    onDragOver={e => { e.preventDefault(); setDragOver(i); }}
+                    onDragLeave={() => setDragOver(null)}
+                    onDrop={() => onDrop(i)}
                   >
                     <div className="flex items-center justify-between mb-1" style={{ gap: 6 }}>
                       {editingName === i ? (
@@ -357,13 +333,13 @@ function PartyBuilder() {
                           onBlur={commitRename}
                           onKeyDown={e => e.key === "Enter" && commitRename()} />
                       ) : (
-                        <div className="party-name" style={{ marginBottom: 0, flex: 1, cursor: mode === "manual" ? "pointer" : "default" }}
-                          onClick={() => mode === "manual" && startRename(i)}>
+                        <div className="party-name" style={{ marginBottom: 0, flex: 1, cursor: "pointer" }}
+                          onClick={() => startRename(i)}>
                           {name}
-                          {mode === "manual" && <span className="text-xs text-muted" style={{ marginLeft: 6, fontFamily: "Rajdhani,sans-serif", fontWeight: 400 }}>✎</span>}
+                          <span className="text-xs text-muted" style={{ marginLeft: 6, fontFamily: "Rajdhani,sans-serif", fontWeight: 400 }}>✎</span>
                         </div>
                       )}
-                      {mode === "manual" && parties.length > 1 && (
+                      {parties.length > 1 && (
                         <button className="btn btn-danger btn-sm btn-icon" style={{ padding: "3px 6px" }} onClick={() => removeParty(i)}><Icon name="x" size={11} /></button>
                       )}
                     </div>
@@ -375,28 +351,29 @@ function PartyBuilder() {
                     </div>
                     {party.map((m) => (
                       <div className="party-member" key={m.memberId}
-                        draggable={mode === "manual"}
-                        onDragStart={mode === "manual" ? () => onDragStart(m.memberId, i) : undefined}
-                        onDragEnd={mode === "manual" ? onDragEnd : undefined}
-                        style={{ cursor: mode === "manual" ? "grab" : "default", opacity: dragging?.memberId === m.memberId ? 0.35 : 1 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{m.ign}</div>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.class}</div>
+                        draggable
+                        onDragStart={() => onDragStart(m.memberId, i)}
+                        onDragEnd={onDragEnd}
+                        style={{ cursor: "grab", opacity: dragging?.memberId === m.memberId ? 0.35 : 1 }}>
+                        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} className="hover-highlight">
+                          <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                            {m.ign}
+                            <Icon name="edit" size={10} style={{ opacity: 0.3 }} />
+                          </div>
+                          <div style={{ fontSize: 11, color: m.isOverridden ? "var(--gold)" : "var(--text-muted)" }}>{m.class}{m.isOverridden ? " *" : ""}</div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className={`badge ${m.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>
                             {m.role === "DPS" ? "DPS" : "SUP"}
                           </span>
-                          {mode === "manual" && (
                             <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", lineHeight: 1, marginLeft: 2 }}
                               onClick={() => removeMemberFromParty(m.memberId, i)} title="Remove">
                               <Icon name="x" size={12} />
                             </button>
-                          )}
                         </div>
                       </div>
                     ))}
-                    {mode === "manual" && party.length === 0 && (
+                    {party.length === 0 && (
                       <div className="text-xs text-muted" style={{ textAlign: "center", padding: "12px 0", opacity: 0.5 }}>Drop members here</div>
                     )}
                   </div>
@@ -410,7 +387,7 @@ function PartyBuilder() {
               <div className="empty-state">
                 <div className="empty-state-icon">⭐</div>
                 <div className="empty-state-text">
-                  {mode === "auto" ? 'Click "Generate" to auto-build balanced teams' : 'Click "Generate" to start, then drag to rearrange'}
+                  Add parties and drag members from the bench to start planning
                 </div>
               </div>
             </div>
@@ -502,7 +479,7 @@ function PartyBuilder() {
                     {raid.length === 0 && (
                       <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-muted)", fontSize: 13 }}>
                         <div style={{ fontSize: 28, marginBottom: 6 }}>⚔️</div>
-                        <div>Click <strong style={{ color: "var(--gold)" }}>Fill Raid</strong> or drag members here</div>
+                        <div>Drag members here from the bench</div>
                       </div>
                     )}
 
@@ -523,13 +500,15 @@ function PartyBuilder() {
                                 style={{
                                   display: "flex", alignItems: "center", justifyContent: "space-between",
                                   padding: "6px 10px", background: "var(--bg-card2)",
-                                  border: "1px solid var(--border)", borderRadius: 8,
+                                  border: m.isOverridden ? "1px solid var(--gold)" : "1px solid var(--border)", borderRadius: 8,
                                   cursor: "grab", userSelect: "none",
                                   opacity: dragging?.memberId === m.memberId ? 0.35 : 1,
-                                }}>
-                                <div>
+                                }}
+                                onDoubleClick={() => setEditingMember(m)}>
+                                <div style={{ cursor: "pointer", flex: 1 }} onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} className="hover-highlight">
                                   <span style={{ fontWeight: 700, fontSize: 13 }}>{m.ign}</span>
-                                  <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8 }}>{m.class}</span>
+                                  <span style={{ fontSize: 10, color: m.isOverridden ? "var(--gold)" : "var(--text-muted)", marginLeft: 8 }}>{m.class}{m.isOverridden ? " *" : ""}</span>
+                                  <Icon name="edit" size={10} style={{ opacity: 0.3, marginLeft: 6 }} />
                                 </div>
                                 <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", lineHeight: 1 }}
                                   onClick={() => removeMemberFromRaid(m.memberId, ri)} title="Remove">
@@ -554,13 +533,15 @@ function PartyBuilder() {
                                 style={{
                                   display: "flex", alignItems: "center", justifyContent: "space-between",
                                   padding: "6px 10px", background: "var(--bg-card2)",
-                                  border: "1px solid var(--border)", borderRadius: 8,
+                                  border: m.isOverridden ? "1px solid var(--gold)" : "1px solid var(--border)", borderRadius: 8,
                                   cursor: "grab", userSelect: "none",
                                   opacity: dragging?.memberId === m.memberId ? 0.35 : 1,
-                                }}>
-                                <div>
+                                }}
+                                onDoubleClick={() => setEditingMember(m)}>
+                                <div style={{ cursor: "pointer", flex: 1 }} onClick={(e) => { e.stopPropagation(); setEditingMember(m); }} className="hover-highlight">
                                   <span style={{ fontWeight: 700, fontSize: 13 }}>{m.ign}</span>
-                                  <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8 }}>{m.class}</span>
+                                  <span style={{ fontSize: 10, color: m.isOverridden ? "var(--gold)" : "var(--text-muted)", marginLeft: 8 }}>{m.class}{m.isOverridden ? " *" : ""}</span>
+                                  <Icon name="edit" size={10} style={{ opacity: 0.3, marginLeft: 6 }} />
                                 </div>
                                 <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", lineHeight: 1 }}
                                   onClick={() => removeMemberFromRaid(m.memberId, ri)} title="Remove">
@@ -585,12 +566,75 @@ function PartyBuilder() {
               <div className="empty-state">
                 <div className="empty-state-icon">⚔️</div>
                 <div className="empty-state-text">
-                  Click "Add Raid" to create a raid group, or "Fill Raid" to auto-fill one
+                  Click "Add Raid" to create a raid group, then drag members here
                 </div>
               </div>
             </div>
           )}
         </>
+      )}
+      {/* ── EDIT MEMBER MODAL ── */}
+      {editingMember && (
+        <div className="modal-overlay" onClick={() => setEditingMember(null)} style={{ zIndex: 1000 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, border: "1px solid var(--border)", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 style={{ margin: 0, fontFamily: "Cinzel, serif" }}>Edit Class</h3>
+              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditingMember(null)}><Icon name="x" size={14} /></button>
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "var(--accent)" }}>{editingMember.ign}</div>
+              <div style={{ fontSize: 11, opacity: 0.6 }}>{editingMember.isOverridden ? "Currently Overridden" : "Original Profile"}</div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Class Override</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                id="editClassInput" 
+                defaultValue={editingMember.class} 
+                autoFocus
+                onKeyDown={e => e.key === "Enter" && document.getElementById("saveOverrideBtn").click()}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 20 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Role Override</label>
+              <select className="form-select" id="editRoleInput" defaultValue={editingMember.role}>
+                <option value="DPS">DPS</option>
+                <option value="Support">Support/Utility</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button id="saveOverrideBtn" className="btn btn-primary w-full" onClick={() => {
+                const cls = document.getElementById("editClassInput").value.trim();
+                const rl = document.getElementById("editRoleInput").value;
+                if (!cls) return showToast("Class cannot be empty", "error");
+                
+                setPartyOverrides(prev => ({
+                  ...prev,
+                  [editingMember.memberId]: { class: cls, role: rl }
+                }));
+                setEditingMember(null);
+                showToast(`Override applied for ${editingMember.ign}`);
+              }}>Apply Override</button>
+              
+              {editingMember.isOverridden && (
+                <button className="btn btn-ghost w-full" style={{ color: "#e74c3c" }} onClick={() => {
+                  setPartyOverrides(prev => {
+                    const next = { ...prev };
+                    delete next[editingMember.memberId];
+                    return next;
+                  });
+                  setEditingMember(null);
+                  showToast(`Override cleared for ${editingMember.ign}`);
+                }}>Reset to Original</button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

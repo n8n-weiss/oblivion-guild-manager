@@ -130,6 +130,15 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch { return ["Raid Alpha"]; }
   });
 
+  const [partyOverrides, setPartyOverrides] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_partyOverrides');
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      return parsed.data || {};
+    } catch { return {}; }
+  });
+
   // Refs for tracking changes (to avoid unnecessary writes)
   const prevData = useRef({});
   const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0, battlelog: 0 });
@@ -157,6 +166,7 @@ export const GuildProvider = ({ children, initialData }) => {
     partyNames,
     raidParties,
     raidPartyNames,
+    partyOverrides,
     auctionSessions,
     auctionTemplates,
     resourceCategories,
@@ -400,10 +410,12 @@ export const GuildProvider = ({ children, initialData }) => {
           setRaidParties(cloudRaid);
           setPartyNames(data.partyNames || []);
           setRaidPartyNames(data.raidPartyNames || []);
+          setPartyOverrides(data.partyOverrides || {});
           prevData.current.parties = [...cloudParties];
           prevData.current.raidParties = [...cloudRaid];
           prevData.current.partyNames = [...(data.partyNames || [])];
           prevData.current.raidPartyNames = [...(data.raidPartyNames || [])];
+          prevData.current.partyOverrides = { ...(data.partyOverrides || {}) };
           markMetadataReady();
         });
         unsubs.push(unsubPartiesMeta);
@@ -842,7 +854,8 @@ export const GuildProvider = ({ children, initialData }) => {
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
           JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
-          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames);
+          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
+          JSON.stringify(partyOverrides) !== JSON.stringify(prevData.current.partyOverrides);
         const hasMetadataAuctionChanges =
           JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
           JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
@@ -983,6 +996,7 @@ export const GuildProvider = ({ children, initialData }) => {
             partyNames,
             raidParties: wrappedRaids,
             raidPartyNames,
+            partyOverrides,
             lastUpdate: new Date().toISOString(),
             lastEditorUid: currentUser?.uid || null
           });
@@ -991,6 +1005,7 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.partyNames = [...partyNames];
           prevData.current.raidParties = [...raidParties];
           prevData.current.raidPartyNames = [...raidPartyNames];
+          prevData.current.partyOverrides = { ...partyOverrides };
           wroteMetadata = true;
         }
         if (hasMetadataAuctionChanges) {
@@ -1057,7 +1072,7 @@ export const GuildProvider = ({ children, initialData }) => {
     const debounceMs = burstCount >= 5 ? 2200 : burstCount >= 3 ? 1600 : 1000;
     const timeout = setTimeout(saveData, debounceMs);
     return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, discordConfig, battlelogConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
+  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, partyOverrides, discordConfig, battlelogConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
 
   useEffect(() => {
     if (loading) return;
@@ -1078,6 +1093,11 @@ export const GuildProvider = ({ children, initialData }) => {
     if (loading) return;
     localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: raidPartyNames, ts: Date.now() }));
   }, [raidPartyNames, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    localStorage.setItem('guild_partyOverrides', JSON.stringify({ data: partyOverrides, ts: Date.now() }));
+  }, [partyOverrides, loading]);
 
   const sendNotification = async (targetId, title, message, type = "info") => {
     const notif = {
@@ -1937,6 +1957,7 @@ export const GuildProvider = ({ children, initialData }) => {
     partyNames, setPartyNames,
     raidParties, setRaidParties,
     raidPartyNames, setRaidPartyNames,
+    partyOverrides, setPartyOverrides,
     eoRatings, setEoRatings,
     auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
