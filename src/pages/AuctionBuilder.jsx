@@ -585,9 +585,10 @@ function AuctionBuilder() {
     
     showToast("Generating image...", "info");
     
-    try {
+      const bgColor = getComputedStyle(document.body).getPropertyValue('--bg-deepest').trim() || '#080a0f';
+      
       const canvas = await html2canvas(element, {
-        backgroundColor: '#080a0f', // Match app background
+        backgroundColor: bgColor, 
         scale: 2, // Higher resolution
         logging: false,
         useCORS: true,
@@ -624,8 +625,9 @@ function AuctionBuilder() {
   const buildAuctionBlob = React.useCallback(async () => {
     const element = document.getElementById('auction-table-export');
     if (!element) return null;
+    const bgColor = getComputedStyle(document.body).getPropertyValue('--bg-deepest').trim() || '#080a0f';
     const canvas = await html2canvas(element, {
-      backgroundColor: '#080a0f',
+      backgroundColor: bgColor,
       scale: 2,
       logging: false,
       useCORS: true,
