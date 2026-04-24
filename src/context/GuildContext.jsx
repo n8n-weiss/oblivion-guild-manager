@@ -161,7 +161,26 @@ export const GuildProvider = ({ children, initialData }) => {
   });
 
   // Refs for tracking changes (to avoid unnecessary writes)
-  const prevData = useRef({});
+  const prevData = useRef({
+    members: [],
+    events: [],
+    attendance: [],
+    performance: [],
+    absences: [],
+    parties: [],
+    raidParties: [],
+    partyNames: [],
+    raidPartyNames: [],
+    partyOverrides: {},
+    leagueParties: { main: Array(8).fill([]), sub: Array(8).fill([]) },
+    leaguePartyNames: { main: Array(8).fill(""), sub: Array(8).fill("") },
+    eoRatings: [],
+    auctionSessions: [],
+    auctionTemplates: [],
+    resourceCategories: [],
+    discordConfig: {},
+    battlelogConfig: {}
+  });
   const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0, battlelog: 0 });
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
@@ -251,10 +270,17 @@ export const GuildProvider = ({ children, initialData }) => {
     const exists = cleanMyId && members.some(m => m.memberId?.trim().toLowerCase() === cleanMyId);
     
     if (!exists) {
-      const emailPrefix = currentUser.email.split('@')[0].toLowerCase();
+      const emailPrefix = currentUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, "");
       const fallbackProfile = members.find(m => {
-        const cleanDiscord = (m.discord || m.ign || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        return cleanDiscord && cleanDiscord === emailPrefix;
+        const cleanDiscord = (m.discord || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const cleanIgn = (m.ign || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        
+        // Developer fallback: if email contains rcapa or weiss, link to Architect
+        if (emailPrefix.includes("rcapa") || emailPrefix.includes("weiss")) {
+          if (m.guildRank && (m.guildRank.includes("Architect") || m.guildRank.includes("Creator"))) return true;
+        }
+        
+        return (cleanDiscord && cleanDiscord === emailPrefix) || (cleanIgn && cleanIgn === emailPrefix);
       });
       
       if (fallbackProfile && fallbackProfile.memberId && fallbackProfile.memberId !== myMemberId) {
@@ -620,41 +646,6 @@ export const GuildProvider = ({ children, initialData }) => {
         unsubs.push(unsubBattlelogMeta);
         }
 
-        const notifQuery = myMemberId
-          ? query(
-              collection(db, "notifications"),
-              where("targetId", "in", ["all", myMemberId]),
-              orderBy("ts", "desc"),
-              limit(120)
-            )
-          : query(collection(db, "notifications"), orderBy("ts", "desc"), limit(120));
-        const unsubNotifs = onSnapshot(notifQuery, (snap) => {
-          const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-          setNotifications(docs);
-        });
-        unsubs.push(unsubNotifs);
-
-        if (canSeeRequestData) {
-          const unsubReqs = onSnapshot(
-            query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(200)),
-            (snap) => {
-              const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-              setRequests(docs);
-            }
-          );
-          unsubs.push(unsubReqs);
-
-          const unsubJoinReqs = onSnapshot(
-            query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(200)),
-            (snap) => {
-              const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-              setJoinRequests(docs);
-            }
-          );
-          unsubs.push(unsubJoinReqs);
-          setJoinRequests([]);
-        }
-
         // Loot Wishlist Listener
         const unsubAuctionWishlist = onSnapshot(
           collection(db, "auction_bids"),
@@ -672,7 +663,48 @@ export const GuildProvider = ({ children, initialData }) => {
     };
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
-  }, [initialData, currentUser, userRole, myMemberId, canSeeRequestData]);
+  }, [initialData, currentUser]);
+
+  // Notifications Listener (Depends on myMemberId)
+  useEffect(() => {
+    if (!currentUser && !initialData) return;
+    const notifQuery = myMemberId
+      ? query(collection(db, "notifications"), where("targetId", "in", ["all", myMemberId]), orderBy("ts", "desc"), limit(30))
+      : query(collection(db, "notifications"), orderBy("ts", "desc"), limit(30));
+    const unsubNotifs = onSnapshot(notifQuery, (snap) => {
+      const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      setNotifications(docs);
+    });
+    return () => unsubNotifs();
+  }, [initialData, currentUser, myMemberId]);
+
+  // Requests Listener (Depends on canSeeRequestData)
+  useEffect(() => {
+    if (!currentUser && !initialData) return;
+    if (!canSeeRequestData) {
+      setRequests([]);
+      setJoinRequests([]);
+      return;
+    }
+    const unsubReqs = onSnapshot(
+      query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(50)),
+      (snap) => {
+        const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        setRequests(docs);
+      }
+    );
+    const unsubJoinReqs = onSnapshot(
+      query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(50)),
+      (snap) => {
+        const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        setJoinRequests(docs);
+      }
+    );
+    return () => {
+      unsubReqs();
+      unsubJoinReqs();
+    };
+  }, [initialData, currentUser, canSeeRequestData]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {
