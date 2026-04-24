@@ -243,6 +243,28 @@ export const GuildProvider = ({ children, initialData }) => {
     return () => unsub();
   }, []);
 
+  // Auto-heal missing or mismatched memberId
+  useEffect(() => {
+    if (!currentUser || !currentUser.email || members.length === 0) return;
+    
+    const cleanMyId = (myMemberId || "").trim().toLowerCase();
+    const exists = cleanMyId && members.some(m => m.memberId?.trim().toLowerCase() === cleanMyId);
+    
+    if (!exists) {
+      const emailPrefix = currentUser.email.split('@')[0].toLowerCase();
+      const fallbackProfile = members.find(m => {
+        const cleanDiscord = (m.discord || m.ign || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        return cleanDiscord && cleanDiscord === emailPrefix;
+      });
+      
+      if (fallbackProfile && fallbackProfile.memberId && fallbackProfile.memberId !== myMemberId) {
+        console.log("Auto-linking memberId:", fallbackProfile.memberId);
+        setMyMemberId(fallbackProfile.memberId);
+        setDoc(doc(db, "userroles", currentUser.uid), { memberId: fallbackProfile.memberId }, { merge: true }).catch(console.error);
+      }
+    }
+  }, [currentUser, members, myMemberId]);
+
   // Presence: write lastSeen on login + heartbeat every 3 minutes
   useEffect(() => {
     if (!currentUser) return;
@@ -1016,7 +1038,14 @@ export const GuildProvider = ({ children, initialData }) => {
             const remote = snap.exists() ? snap.data() : {};
             const remoteVersion = Number(remote.version || 0);
             if (remoteVersion !== baseVersion) {
-              throw new Error("META_VERSION_CONFLICT");
+              // Only throw a real conflict if it was edited by a DIFFERENT user.
+              // If it's the same user (burst saves), silently adopt the remote version and proceed.
+              const isSelfConflict = !remote.lastEditorUid || remote.lastEditorUid === currentUser?.uid;
+              if (!isSelfConflict) {
+                throw new Error("META_VERSION_CONFLICT");
+              }
+              // Self-conflict: update our local version reference and proceed with the latest version
+              metadataVersions.current[docId] = remoteVersion;
             }
             const updatedVersion = remoteVersion + 1;
             tx.set(metadataRef, { ...payload, version: updatedVersion }, { merge: true });
