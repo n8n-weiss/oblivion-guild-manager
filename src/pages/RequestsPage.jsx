@@ -12,7 +12,7 @@ function RequestsPage() {
   const { 
     requests, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
     joinRequests, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
-    isOfficer, isArchitect, members, currentUser 
+    isOfficer, isArchitect, members, currentUser, fetchRequests, isFetchingRequests 
   } = useGuild();
   
   const [subTab, setSubTab] = useState("profile"); // profile, join, reactivation
@@ -148,7 +148,17 @@ function RequestsPage() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 32, marginBottom: 8 }}>📝 Request Manager</h1>
-          <p className="page-subtitle">Premium dashboard for member data & applications</p>
+          <div className="flex items-center gap-3">
+            <p className="page-subtitle" style={{ marginBottom: 0 }}>Premium dashboard for member data & applications</p>
+            <button 
+              className={`btn btn-sm btn-ghost ${isFetchingRequests ? 'animate-spin' : ''}`} 
+              onClick={fetchRequests}
+              disabled={isFetchingRequests}
+              title="Refresh Data"
+            >
+              <Icon name="refresh" size={14} />
+            </button>
+          </div>
         </div>
         
         {/* Modern Tab Switcher */}

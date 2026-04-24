@@ -136,8 +136,18 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     requests, submitRequest,
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
     auctionSessions, migrateMemberData,
-    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata
+    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
+    historicalEvents, historicalAttendance, historicalPerformance, fetchHistoricalData
   } = useGuild();
+
+  useEffect(() => {
+    fetchHistoricalData();
+  }, [fetchHistoricalData]);
+
+  // Combine live data with historical data
+  const allEvents = useMemo(() => [...events, ...historicalEvents], [events, historicalEvents]);
+  const allAttendance = useMemo(() => [...attendance, ...historicalAttendance], [attendance, historicalAttendance]);
+  const allPerformance = useMemo(() => [...performance, ...historicalPerformance], [performance, historicalPerformance]);
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestForm, setRequestForm] = useState({

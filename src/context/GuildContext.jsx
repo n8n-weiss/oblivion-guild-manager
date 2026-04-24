@@ -69,7 +69,13 @@ export const GuildProvider = ({ children, initialData }) => {
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [isFetchingRequests, setIsFetchingRequests] = useState(false);
   const [auctionWishlist, setAuctionWishlist] = useState([]);
+  const [historicalEvents, setHistoricalEvents] = useState([]);
+  const [historicalAttendance, setHistoricalAttendance] = useState([]);
+  const [historicalPerformance, setHistoricalPerformance] = useState([]);
+  const [historicalEoRatings, setHistoricalEoRatings] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [discordConfig, setDiscordConfig] = useState({ 
     webhookUrl: "", 
     masterRoleId: "", 
@@ -348,13 +354,42 @@ export const GuildProvider = ({ children, initialData }) => {
         });
         unsubs.push(unsubRoster);
 
-        const unsubEvents = onSnapshot(collection(db, "events"), (snap) => {
-          const docs = snap.docs.map(d => d.data()).sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
-          const finalDocs = docs.length ? docs : (initialData.INITIAL_EVENTS || []);
-          if (JSON.stringify(finalDocs) !== JSON.stringify(prevData.current.events)) {
-            setEvents(finalDocs);
-            prevData.current.events = [...finalDocs];
+        const fortyFiveDaysAgo = new Date();
+        fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+        const cutoffDate = fortyFiveDaysAgo.toISOString().split("T")[0];
+        const eventsQuery = query(collection(db, "events"), where("eventDate", ">=", cutoffDate));
+
+        const unsubEvents = onSnapshot(eventsQuery, (snap) => {
+          const rawDocs = snap.docs.map(d => d.data());
+          const finalDocs = rawDocs.length ? rawDocs : (initialData.INITIAL_EVENTS || []);
+          
+          // Update events state
+          const sortedEvents = [...finalDocs].sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
+          if (JSON.stringify(sortedEvents) !== JSON.stringify(prevData.current.events)) {
+            setEvents(sortedEvents);
+            prevData.current.events = [...sortedEvents];
           }
+
+          // Extract nested data for battle states
+          const nestedAtt = [];
+          const nestedPerf = [];
+          const nestedEo = [];
+          
+          finalDocs.forEach(e => {
+            if (e.attendanceData) {
+              Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
+            }
+            if (e.performanceData) {
+              Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
+            }
+            if (e.eoRatingsData) {
+              Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
+            }
+          });
+
+          if (nestedAtt.length > 0) setAttendance(nestedAtt);
+          if (nestedPerf.length > 0) setPerformance(nestedPerf);
+          if (nestedEo.length > 0) setEoRatings(nestedEo);
         });
         unsubs.push(unsubEvents);
 
@@ -678,215 +713,35 @@ export const GuildProvider = ({ children, initialData }) => {
     return () => unsubNotifs();
   }, [initialData, currentUser, myMemberId]);
 
-  // Requests Listener (Depends on canSeeRequestData)
+  const fetchRequests = useCallback(async () => {
+    if (!currentUser || !canSeeRequestData || isFetchingRequests) return;
+    setIsFetchingRequests(true);
+    try {
+      const reqsSnap = await getDocs(query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(50)));
+      const joinSnap = await getDocs(query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(50)));
+      
+      setRequests(reqsSnap.docs.map(d => ({ ...d.data(), id: d.id })));
+      setJoinRequests(joinSnap.docs.map(d => ({ ...d.data(), id: d.id })));
+    } catch (err) {
+      console.error("Fetch requests error:", err);
+    } finally {
+      setIsFetchingRequests(false);
+    }
+  }, [currentUser, canSeeRequestData]);
+
+  // Requests Listener removed for data savings. Replaced by manual fetch.
   useEffect(() => {
-    if (!currentUser && !initialData) return;
-    if (!canSeeRequestData) {
+    if (canSeeRequestData) {
+      fetchRequests();
+    } else {
       setRequests([]);
       setJoinRequests([]);
-      return;
     }
-    const unsubReqs = onSnapshot(
-      query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(50)),
-      (snap) => {
-        const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        setRequests(docs);
-      }
-    );
-    const unsubJoinReqs = onSnapshot(
-      query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(50)),
-      (snap) => {
-        const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        setJoinRequests(docs);
-      }
-    );
-    return () => {
-      unsubReqs();
-      unsubJoinReqs();
-    };
-  }, [initialData, currentUser, canSeeRequestData]);
+  }, [canSeeRequestData, fetchRequests]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {
-    if ((!currentUser && !initialData) || !needsBattleData) return;
-    const unsubs = [];
-    const sourceEvents = events.length ? events : (initialData?.INITIAL_EVENTS || []);
-    const eventIds = Array.from(new Set(sourceEvents.map(e => e?.eventId).filter(Boolean)));
-    const monthKeys = Array.from(new Set(
-      sourceEvents
-        .map(e => String(e?.eventDate || "").slice(0, 7))
-        .filter(Boolean)
-    ));
-    if (eventIds.length === 0) {
-      if (prevData.current.attendance?.length) {
-        setAttendance([]);
-        prevData.current.attendance = [];
-      }
-      if (prevData.current.performance?.length) {
-        setPerformance([]);
-        prevData.current.performance = [];
-      }
-      if (prevData.current.eoRatings?.length) {
-        setEoRatings([]);
-        prevData.current.eoRatings = [];
-      }
-      return () => {};
-    }
-    const chunkSize = 10;
-    const chunks = [];
-    for (let i = 0; i < eventIds.length; i += chunkSize) {
-      chunks.push(eventIds.slice(i, i + chunkSize));
-    }
-    const monthChunks = [];
-    for (let i = 0; i < monthKeys.length; i += chunkSize) {
-      monthChunks.push(monthKeys.slice(i, i + chunkSize));
-    }
-    const flattenSnapshotStores = (stores) => {
-      const out = [];
-      stores.forEach((arr) => out.push(...arr));
-      return out;
-    };
-    const mergePreferBuckets = (legacyFlat, bucketFlat) => {
-      const merged = new Map();
-      legacyFlat.forEach((item) => {
-        merged.set(`${item.eventId}__${item.memberId}`, item);
-      });
-      bucketFlat.forEach((item) => {
-        merged.set(`${item.eventId}__${item.memberId}`, item);
-      });
-      return Array.from(merged.values());
-    };
-
-    const attendanceStores = new Map();
-    const attendanceBucketStores = new Map();
-    const emitAttendance = () => {
-      const legacyFlat = flattenSnapshotStores(attendanceStores);
-      const bucketFlat = flattenSnapshotStores(attendanceBucketStores);
-      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
-      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.attendance)) {
-        setAttendance(merged);
-        prevData.current.attendance = [...merged];
-      }
-    };
-    chunks.forEach((ids, idx) => {
-      const q = query(collection(db, "attendance"), where(documentId(), "in", ids));
-      const unsubAtt = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, members: attMembers } = d.data();
-          Object.entries(attMembers || {}).forEach(([memberId, status]) => {
-            flat.push({ eventId, memberId, status });
-          });
-        });
-        attendanceStores.set(idx, flat);
-        emitAttendance();
-      });
-      unsubs.push(unsubAtt);
-    });
-    monthChunks.forEach((months, idx) => {
-      const q = query(collection(db, "attendanceBuckets"), where("month", "in", months));
-      const unsubAttBucket = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, members: attMembers } = d.data();
-          if (!eventId || !eventIds.includes(eventId)) return;
-          Object.entries(attMembers || {}).forEach(([memberId, status]) => {
-            flat.push({ eventId, memberId, status });
-          });
-        });
-        attendanceBucketStores.set(idx, flat);
-        emitAttendance();
-      });
-      unsubs.push(unsubAttBucket);
-    });
-
-    const performanceStores = new Map();
-    const performanceBucketStores = new Map();
-    const emitPerformance = () => {
-      const legacyFlat = flattenSnapshotStores(performanceStores);
-      const bucketFlat = flattenSnapshotStores(performanceBucketStores);
-      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
-      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.performance)) {
-        setPerformance(merged);
-        prevData.current.performance = [...merged];
-      }
-    };
-    chunks.forEach((ids, idx) => {
-      const q = query(collection(db, "performance"), where(documentId(), "in", ids));
-      const unsubPerf = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, members: perfMembers } = d.data();
-          Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
-            flat.push({ ...pData, eventId, memberId });
-          });
-        });
-        performanceStores.set(idx, flat);
-        emitPerformance();
-      });
-      unsubs.push(unsubPerf);
-    });
-    monthChunks.forEach((months, idx) => {
-      const q = query(collection(db, "performanceBuckets"), where("month", "in", months));
-      const unsubPerfBucket = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, members: perfMembers } = d.data();
-          if (!eventId || !eventIds.includes(eventId)) return;
-          Object.entries(perfMembers || {}).forEach(([memberId, pData]) => {
-            flat.push({ ...pData, eventId, memberId });
-          });
-        });
-        performanceBucketStores.set(idx, flat);
-        emitPerformance();
-      });
-      unsubs.push(unsubPerfBucket);
-    });
-
-    const eoStores = new Map();
-    const eoBucketStores = new Map();
-    const emitEo = () => {
-      const legacyFlat = flattenSnapshotStores(eoStores);
-      const bucketFlat = flattenSnapshotStores(eoBucketStores);
-      const merged = mergePreferBuckets(legacyFlat, bucketFlat);
-      if (JSON.stringify(merged) !== JSON.stringify(prevData.current.eoRatings)) {
-        setEoRatings(merged);
-        prevData.current.eoRatings = [...merged];
-      }
-    };
-    chunks.forEach((ids, idx) => {
-      const q = query(collection(db, "eoRatings"), where(documentId(), "in", ids));
-      const unsubEo = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, ratings: eoRatingsMap } = d.data();
-          Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
-            flat.push({ eventId, memberId, rating });
-          });
-        });
-        eoStores.set(idx, flat);
-        emitEo();
-      });
-      unsubs.push(unsubEo);
-    });
-    monthChunks.forEach((months, idx) => {
-      const q = query(collection(db, "eoRatingsBuckets"), where("month", "in", months));
-      const unsubEoBucket = onSnapshot(q, (snap) => {
-        const flat = [];
-        snap.docs.forEach(d => {
-          const { eventId, ratings: eoRatingsMap } = d.data();
-          if (!eventId || !eventIds.includes(eventId)) return;
-          Object.entries(eoRatingsMap || {}).forEach(([memberId, rating]) => {
-            flat.push({ eventId, memberId, rating });
-          });
-        });
-        eoBucketStores.set(idx, flat);
-        emitEo();
-      });
-      unsubs.push(unsubEoBucket);
-    });
-
-    return () => { unsubs.forEach(u => u()); };
+    return () => {};
   }, [currentUser, initialData, needsBattleData, events]);
 
   useEffect(() => {
@@ -934,10 +789,6 @@ export const GuildProvider = ({ children, initialData }) => {
         const batch = writeBatch(db);
         let changesCount = 0;
         let wroteMetadata = false;
-        const eventMonthMap = new Map([
-          ...prevData.current.events.map(e => [e.eventId, String(e?.eventDate || "").slice(0, 7)]),
-          ...events.map(e => [e.eventId, String(e?.eventDate || "").slice(0, 7)])
-        ]);
         const hasMetadataPartiesChanges =
           JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
           JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
@@ -978,77 +829,57 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.members = [...uniqueMembers];
           changesCount++;
         }
-        if (JSON.stringify(events) !== JSON.stringify(prevData.current.events)) {
+        if (
+          JSON.stringify(events) !== JSON.stringify(prevData.current.events) ||
+          JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance) ||
+          JSON.stringify(performance) !== JSON.stringify(prevData.current.performance) ||
+          JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings)
+        ) {
+          const groupedAtt = {};
+          attendance.forEach(a => {
+            if (!groupedAtt[a.eventId]) groupedAtt[a.eventId] = {};
+            const cleanMid = (a.memberId || "").trim();
+            if (cleanMid) groupedAtt[a.eventId][cleanMid] = a.status;
+          });
+
+          const groupedPerf = {};
+          performance.forEach(p => {
+            if (!groupedPerf[p.eventId]) groupedPerf[p.eventId] = {};
+            const cleanMid = (p.memberId || "").trim();
+            if (cleanMid) groupedPerf[p.eventId][cleanMid] = { ...p, memberId: cleanMid };
+          });
+
+          const groupedEo = {};
+          eoRatings.forEach(r => {
+            if (!groupedEo[r.eventId]) groupedEo[r.eventId] = {};
+            const cleanMid = (r.memberId || "").trim();
+            if (cleanMid) groupedEo[r.eventId][cleanMid] = r.rating;
+          });
+
           const currentEventIds = new Set(events.map(e => e.eventId));
           const removedEventIds = prevData.current.events
             .filter(e => !currentEventIds.has(e.eventId))
             .map(e => e.eventId);
+
           removedEventIds.forEach(eid => {
             if (eid) {
               batch.delete(doc(db, "events", eid));
-              batch.delete(doc(db, "attendance", eid));
-              batch.delete(doc(db, "performance", eid));
-              batch.delete(doc(db, "eoRatings", eid));
-              const eventMonth = eventMonthMap.get(eid);
-              if (eventMonth) {
-                batch.delete(doc(db, "attendanceBuckets", `${eventMonth}_${eid}`));
-                batch.delete(doc(db, "performanceBuckets", `${eventMonth}_${eid}`));
-                batch.delete(doc(db, "eoRatingsBuckets", `${eventMonth}_${eid}`));
-              }
             }
           });
-          events.forEach(e => batch.set(doc(db, "events", e.eventId), e));
+
+          events.forEach(e => {
+            const eventDocData = {
+              ...e,
+              attendanceData: groupedAtt[e.eventId] || e.attendanceData || {},
+              performanceData: groupedPerf[e.eventId] || e.performanceData || {},
+              eoRatingsData: groupedEo[e.eventId] || e.eoRatingsData || {}
+            };
+            batch.set(doc(db, "events", e.eventId), eventDocData);
+          });
+
           prevData.current.events = [...events];
-          changesCount++;
-        }
-        if (JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance)) {
-          const grouped = {};
-          attendance.forEach(a => {
-            if (!grouped[a.eventId]) grouped[a.eventId] = {};
-            const cleanMid = (a.memberId || "").trim();
-            if (cleanMid) grouped[a.eventId][cleanMid] = a.status;
-          });
-          Object.keys(grouped).forEach(eid => {
-            batch.set(doc(db, "attendance", eid), { eventId: eid, members: grouped[eid] });
-            const month = eventMonthMap.get(eid);
-            if (month) {
-              batch.set(doc(db, "attendanceBuckets", `${month}_${eid}`), { eventId: eid, month, members: grouped[eid] });
-            }
-          });
           prevData.current.attendance = [...attendance];
-          changesCount++;
-        }
-        if (JSON.stringify(performance) !== JSON.stringify(prevData.current.performance)) {
-          const grouped = {};
-          performance.forEach(p => {
-            if (!grouped[p.eventId]) grouped[p.eventId] = {};
-            const cleanMid = (p.memberId || "").trim();
-            if (cleanMid) grouped[p.eventId][cleanMid] = { ...p, memberId: cleanMid };
-          });
-          Object.keys(grouped).forEach(eid => {
-            batch.set(doc(db, "performance", eid), { eventId: eid, members: grouped[eid] });
-            const month = eventMonthMap.get(eid);
-            if (month) {
-              batch.set(doc(db, "performanceBuckets", `${month}_${eid}`), { eventId: eid, month, members: grouped[eid] });
-            }
-          });
           prevData.current.performance = [...performance];
-          changesCount++;
-        }
-        if (JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings)) {
-          const grouped = {};
-          eoRatings.forEach(r => {
-            if (!grouped[r.eventId]) grouped[r.eventId] = {};
-            const cleanMid = (r.memberId || "").trim();
-            if (cleanMid) grouped[r.eventId][cleanMid] = r.rating;
-          });
-          Object.keys(grouped).forEach(eid => {
-            batch.set(doc(db, "eoRatings", eid), { eventId: eid, ratings: grouped[eid] });
-            const month = eventMonthMap.get(eid);
-            if (month) {
-              batch.set(doc(db, "eoRatingsBuckets", `${month}_${eid}`), { eventId: eid, month, ratings: grouped[eid] });
-            }
-          });
           prevData.current.eoRatings = [...eoRatings];
           changesCount++;
         }
@@ -1070,13 +901,10 @@ export const GuildProvider = ({ children, initialData }) => {
             const remote = snap.exists() ? snap.data() : {};
             const remoteVersion = Number(remote.version || 0);
             if (remoteVersion !== baseVersion) {
-              // Only throw a real conflict if it was edited by a DIFFERENT user.
-              // If it's the same user (burst saves), silently adopt the remote version and proceed.
               const isSelfConflict = !remote.lastEditorUid || remote.lastEditorUid === currentUser?.uid;
               if (!isSelfConflict) {
                 throw new Error("META_VERSION_CONFLICT");
               }
-              // Self-conflict: update our local version reference and proceed with the latest version
               metadataVersions.current[docId] = remoteVersion;
             }
             const updatedVersion = remoteVersion + 1;
@@ -1494,11 +1322,8 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const backfillBattleBuckets = async () => {
-    const [eventsSnap, attSnap, perfSnap, eoSnap] = await Promise.all([
-      getDocs(collection(db, "events")),
-      getDocs(collection(db, "attendance")),
-      getDocs(collection(db, "performance")),
-      getDocs(collection(db, "eoRatings"))
+    const [eventsSnap] = await Promise.all([
+      getDocs(collection(db, "events"))
     ]);
     const eventMonthMap = new Map();
     eventsSnap.docs.forEach((d) => {
@@ -1506,26 +1331,14 @@ export const GuildProvider = ({ children, initialData }) => {
       if (ev?.eventId) eventMonthMap.set(ev.eventId, String(ev?.eventDate || "").slice(0, 7));
     });
     const ops = [];
-    attSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
+    eventsSnap.docs.forEach((d) => {
+      const e = d.data();
+      const eventId = e.eventId;
       const month = eventMonthMap.get(eventId);
       if (!eventId || !month) return;
-      ops.push((b) => b.set(doc(db, "attendanceBuckets", `${month}_${eventId}`), { eventId, month, members: payload?.members || {} }, { merge: true }));
-    });
-    perfSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
-      const month = eventMonthMap.get(eventId);
-      if (!eventId || !month) return;
-      ops.push((b) => b.set(doc(db, "performanceBuckets", `${month}_${eventId}`), { eventId, month, members: payload?.members || {} }, { merge: true }));
-    });
-    eoSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
-      const month = eventMonthMap.get(eventId);
-      if (!eventId || !month) return;
-      ops.push((b) => b.set(doc(db, "eoRatingsBuckets", `${month}_${eventId}`), { eventId, month, ratings: payload?.ratings || {} }, { merge: true }));
+      if (e.attendanceData) ops.push((b) => b.set(doc(db, "attendanceBuckets", `${month}_${eventId}`), { eventId, month, members: e.attendanceData }, { merge: true }));
+      if (e.performanceData) ops.push((b) => b.set(doc(db, "performanceBuckets", `${month}_${eventId}`), { eventId, month, members: e.performanceData }, { merge: true }));
+      if (e.eoRatingsData) ops.push((b) => b.set(doc(db, "eoRatingsBuckets", `${month}_${eventId}`), { eventId, month, ratings: e.eoRatingsData }, { merge: true }));
     });
     for (let i = 0; i < ops.length; i += 400) {
       const b = writeBatch(db);
@@ -1534,36 +1347,61 @@ export const GuildProvider = ({ children, initialData }) => {
     }
     return { totalBucketDocs: ops.length };
   };
+  
+  const migrateNestingToEvents = async () => {
+    if (!isArchitect) return;
+    try {
+      const eventsSnap = await getDocs(collection(db, "events"));
+      const attSnap = await getDocs(collection(db, "attendance"));
+      const perfSnap = await getDocs(collection(db, "performance"));
+      const eoSnap = await getDocs(collection(db, "eoRatings"));
+
+      const attMap = new Map(attSnap.docs.map(d => [d.id, d.data().members || {}]));
+      const perfMap = new Map(perfSnap.docs.map(d => [d.id, d.data().members || {}]));
+      const eoMap = new Map(eoSnap.docs.map(d => [d.id, d.data().ratings || {}]));
+
+      const batch = writeBatch(db);
+      let count = 0;
+
+      eventsSnap.docs.forEach(eventDoc => {
+        const eid = eventDoc.id;
+        const eventData = eventDoc.data();
+        
+        if (!eventData.attendanceData || !eventData.performanceData) {
+          const updatedData = {
+            ...eventData,
+            attendanceData: attMap.get(eid) || {},
+            performanceData: perfMap.get(eid) || {},
+            eoRatingsData: eoMap.get(eid) || {}
+          };
+          batch.set(doc(db, "events", eid), updatedData);
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+        showToast(`Migrated ${count} events to optimized format!`, "success");
+      } else {
+        showToast("All events are already optimized.", "info");
+      }
+    } catch (err) {
+      console.error("Migration error:", err);
+      showToast("Migration failed", "error");
+    }
+  };
+  
   const estimateBattleBucketBackfill = async () => {
     if (!isArchitect) throw new Error("FORBIDDEN");
-    const [eventsSnap, attSnap, perfSnap, eoSnap] = await Promise.all([
-      getDocs(collection(db, "events")),
-      getDocs(collection(db, "attendance")),
-      getDocs(collection(db, "performance")),
-      getDocs(collection(db, "eoRatings"))
-    ]);
-    const eventMonthMap = new Map();
-    eventsSnap.docs.forEach((d) => {
-      const ev = d.data();
-      if (ev?.eventId) eventMonthMap.set(ev.eventId, String(ev?.eventDate || "").slice(0, 7));
-    });
+    const [eventsSnap] = await Promise.all([getDocs(collection(db, "events"))]);
     let attendanceEligible = 0;
     let performanceEligible = 0;
     let eoEligible = 0;
-    attSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
-      if (eventId && eventMonthMap.get(eventId)) attendanceEligible += 1;
-    });
-    perfSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
-      if (eventId && eventMonthMap.get(eventId)) performanceEligible += 1;
-    });
-    eoSnap.docs.forEach((d) => {
-      const payload = d.data();
-      const eventId = payload?.eventId || d.id;
-      if (eventId && eventMonthMap.get(eventId)) eoEligible += 1;
+    eventsSnap.docs.forEach((d) => {
+      const e = d.data();
+      if (e.attendanceData) attendanceEligible += 1;
+      if (e.performanceData) performanceEligible += 1;
+      if (e.eoRatingsData) eoEligible += 1;
     });
     return {
       attendanceEligible,
@@ -1572,6 +1410,7 @@ export const GuildProvider = ({ children, initialData }) => {
       totalBucketDocs: attendanceEligible + performanceEligible + eoEligible
     };
   };
+
   const resolveAuctionConflict = (action) => {
     if (!pendingAuctionConflict) return;
     if (action === "apply_remote") {
@@ -1849,7 +1688,6 @@ export const GuildProvider = ({ children, initialData }) => {
       // Update Request Status
       await setDoc(doc(db, "requests", requestId), { ...r, status: "approved" });
 
-      // Removed optimistic setMembers/setRequests to allow onSnapshot to handle it
       showToast(`Request approved for ${r.requesterIgn}`, "success");
       return true;
     } catch(err) {
@@ -1865,7 +1703,6 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!r) return;
       await setDoc(doc(db, "requests", requestId), { ...r, status: "rejected" });
       
-      // Removed optimistic setRequests to allow onSnapshot to handle it
       showToast(`Request rejected`, "info");
       return true;
     } catch(err) {
@@ -1878,7 +1715,6 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteRequest = async (requestId) => {
     try {
       await deleteDoc(doc(db, "requests", requestId));
-      // Removed optimistic setRequests to allow onSnapshot to handle it
       showToast("Request deleted from history", "success");
       return true;
     } catch(err) {
@@ -1911,37 +1747,37 @@ export const GuildProvider = ({ children, initialData }) => {
     const batch = writeBatch(db);
     let count = 0;
     
-    // Scan all event-based collections where member participation is stored as map keys
-    const collections = [
-      { name: "attendance", dataKey: "members" },
-      { name: "attendanceBuckets", dataKey: "members" },
-      { name: "performance", dataKey: "members" },
-      { name: "performanceBuckets", dataKey: "members" },
-      { name: "eoRatings", dataKey: "ratings" },
-      { name: "eoRatingsBuckets", dataKey: "ratings" }
-    ];
-
+    // Scan all event documents
     try {
-      for (const colInfo of collections) {
-        const snap = await getDocs(collection(db, colInfo.name));
-        snap.forEach(d => {
-          const data = d.data();
-          const map = data[colInfo.dataKey] || {};
-          
-          const targetKey = Object.keys(map).find(k => k.trim().toLowerCase() === oldId.trim().toLowerCase());
-          
-          if (targetKey) {
-            const val = map[targetKey];
-            batch.update(d.ref, {
-              [`${colInfo.dataKey}.${newId}`]: val,
-              [`${colInfo.dataKey}.${targetKey}`]: deleteField()
-            });
-            count++;
-          }
-        });
-      }
+      const evSnap = await getDocs(collection(db, "events"));
+      evSnap.forEach(d => {
+        const e = d.data();
+        let changed = false;
+        const update = {};
+        
+        if (e.attendanceData && e.attendanceData[oldId]) {
+          update[`attendanceData.${newId}`] = e.attendanceData[oldId];
+          update[`attendanceData.${oldId}`] = deleteField();
+          changed = true;
+        }
+        if (e.performanceData && e.performanceData[oldId]) {
+          update[`performanceData.${newId}`] = e.performanceData[oldId];
+          update[`performanceData.${oldId}`] = deleteField();
+          changed = true;
+        }
+        if (e.eoRatingsData && e.eoRatingsData[oldId]) {
+          update[`eoRatingsData.${newId}`] = e.eoRatingsData[oldId];
+          update[`eoRatingsData.${oldId}`] = deleteField();
+          changed = true;
+        }
+        
+        if (changed) {
+          batch.update(d.ref, update);
+          count++;
+        }
+      });
 
-      // Step 2: Update individual account mappings (userroles)
+      // Update individual account mappings (userroles)
       const urSnap = await getDocs(collection(db, "userroles"));
       urSnap.forEach(d => {
         const data = d.data();
@@ -1951,7 +1787,7 @@ export const GuildProvider = ({ children, initialData }) => {
         }
       });
 
-      // Step 3: Update centralized user registry (guildusers/list)
+      // Update centralized user registry (guildusers/list)
       const listRef = doc(db, "guildusers", "list");
       const listSnap = await getDoc(listRef);
       if (listSnap.exists()) {
@@ -2065,6 +1901,45 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const fetchHistoricalData = async () => {
+    if (historicalEvents.length > 0 || isLoadingHistory) return;
+    setIsLoadingHistory(true);
+    try {
+      const fortyFiveDaysAgo = new Date();
+      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+      const pastCutoff = fortyFiveDaysAgo.toISOString().split("T")[0];
+
+      // Fetch older events
+      const eventsSnap = await getDocs(query(collection(db, "events"), where("eventDate", "<", pastCutoff)));
+      const docs = eventsSnap.docs.map(d => d.data());
+      
+      const nestedAtt = [];
+      const nestedPerf = [];
+      const nestedEo = [];
+      
+      docs.forEach(e => {
+        if (e.attendanceData) {
+          Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
+        }
+        if (e.performanceData) {
+          Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
+        }
+        if (e.eoRatingsData) {
+          Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
+        }
+      });
+
+      setHistoricalEvents(docs);
+      setHistoricalAttendance(nestedAtt);
+      setHistoricalPerformance(nestedPerf);
+      setHistoricalEoRatings(nestedEo);
+    } catch (err) {
+      console.error("Error fetching historical data:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
@@ -2092,11 +1967,11 @@ export const GuildProvider = ({ children, initialData }) => {
     battlelogConfig, setBattlelogConfig,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
-    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill,
+    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill, migrateNestingToEvents,
     resetMonthlyScores,
-    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata
-
-
+    memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
+    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,
+    fetchRequests, isFetchingRequests
   };
 
   return (

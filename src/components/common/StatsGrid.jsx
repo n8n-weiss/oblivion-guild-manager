@@ -47,7 +47,7 @@ const StatsGrid = () => {
         <div className="stat-icon">📋</div>
         <div className="stat-label">Guild Attendance</div>
         <div className="stat-value" style={{ color: attRate >= 75 ? "var(--green)" : attRate >= 50 ? "var(--gold)" : "var(--red)", textShadow: `0 0 10px ${attRate >= 75 ? 'rgba(64,201,122,0.5)' : attRate >= 50 ? 'rgba(240,192,64,0.5)' : 'rgba(224,80,80,0.5)'}` }}>{attRate}%</div>
-        <div className="stat-change">Lifetime event average</div>
+        <div className="stat-change">Recent window average</div>
       </div>
       <div className="stat-card" style={{
         "--stat-accent": "var(--gold)",
@@ -58,9 +58,9 @@ const StatsGrid = () => {
         cursor: "default"
       }}>
         <div className="stat-icon">🏆</div>
-        <div className="stat-label">Total Operations</div>
+        <div className="stat-label">Recent Operations (45d)</div>
         <div className="stat-value" style={{ color: "var(--gold)", textShadow: "0 0 10px rgba(240,192,64,0.5)" }}>{events.length}</div>
-        <div className="stat-change">Successful campaigns</div>
+        <div className="stat-change">Active campaign window</div>
       </div>
     </div>
   );

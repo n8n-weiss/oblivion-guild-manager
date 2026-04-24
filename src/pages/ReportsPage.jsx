@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import { computeLeaderboard } from '../utils/scoring';
@@ -7,8 +7,18 @@ import { MemberAvatar } from '../components/common/MemberAvatar';
 function ReportsPage({ onViewProfile }) {
   const { 
     members, events, attendance, performance, eoRatings, 
-    isOfficer, showToast, sendDiscordEmbed, discordConfig 
+    isOfficer, showToast, sendDiscordEmbed, discordConfig,
+    historicalEvents, historicalAttendance, historicalPerformance, isLoadingHistory, fetchHistoricalData
   } = useGuild();
+
+  useEffect(() => {
+    fetchHistoricalData();
+  }, [fetchHistoricalData]);
+
+  // Combine live data with historical data
+  const allEvents = useMemo(() => [...events, ...historicalEvents], [events, historicalEvents]);
+  const allAttendance = useMemo(() => [...attendance, ...historicalAttendance], [attendance, historicalAttendance]);
+  const allPerformance = useMemo(() => [...performance, ...historicalPerformance], [performance, historicalPerformance]);
 
   const [reportType, setReportType] = useState('weekly'); // weekly, monthly, yearly
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -42,7 +52,7 @@ function ReportsPage({ onViewProfile }) {
   }, [selectedDate, reportType]);
 
   const reportData = useMemo(() => {
-    const filteredEvents = events.filter(e => {
+    const filteredEvents = allEvents.filter(e => {
       const ed = new Date(e.eventDate);
       return ed >= reportRange.start && ed <= reportRange.end;
     });
@@ -50,8 +60,8 @@ function ReportsPage({ onViewProfile }) {
     if (filteredEvents.length === 0) return null;
 
     const eventIds = new Set(filteredEvents.map(e => e.eventId));
-    const filteredAtt = attendance.filter(a => eventIds.has(a.eventId));
-    const filteredPerf = performance.filter(p => eventIds.has(p.eventId));
+    const filteredAtt = allAttendance.filter(a => eventIds.has(a.eventId));
+    const filteredPerf = allPerformance.filter(p => eventIds.has(p.eventId));
     const filteredEo = eoRatings.filter(r => !r.eventId || eventIds.has(r.eventId));
 
     const lb = computeLeaderboard(activeMembers, filteredEvents, filteredAtt, filteredPerf, filteredEo);
@@ -67,7 +77,7 @@ function ReportsPage({ onViewProfile }) {
     const topAttendance = [...lb].sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore).slice(0, 10);
 
     return { lb, topDPS, topSupport, topAttendance, eventCount: filteredEvents.length };
-  }, [activeMembers, events, attendance, performance, eoRatings, reportRange]);
+  }, [activeMembers, allEvents, allAttendance, allPerformance, eoRatings, reportRange]);
 
   const postToDiscord = async () => {
     if (!reportData) return;
@@ -147,6 +157,16 @@ function ReportsPage({ onViewProfile }) {
           <p className="page-subtitle">Generate and post performance milestones to Discord</p>
         </div>
       </div>
+
+      {/* ── Archive Loading Indicator ── */}
+      {isLoadingHistory && (
+        <div className="card mb-6 flex items-center justify-center p-4 gap-3 animate-pulse" style={{ border: "1px solid rgba(99,130,230,0.2)", background: "rgba(99,130,230,0.05)" }}>
+           <div className="animate-spin text-accent">
+             <Icon name="refresh" size={16} />
+           </div>
+           <span className="text-sm font-medium text-accent">Fetching historical data from archive...</span>
+        </div>
+      )}
 
       {/* ── Period & Date Controls ── */}
       <div className="card mb-6" style={{

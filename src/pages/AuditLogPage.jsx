@@ -9,7 +9,8 @@ import StatePanel from '../components/common/StatePanel';
 
 
 function AuditLogPage() {
-  const { isArchitect, showToast } = useGuild();
+  const { isArchitect, showToast, migrateNestingToEvents } = useGuild();
+  const [isMigrating, setIsMigrating] = useState(false);
   const CLEAR_TOKEN = "DELETE";
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,9 +111,25 @@ function AuditLogPage() {
           <p className="page-subtitle">Track all changes made by officers and admins</p>
         </div>
         {isArchitect && (
-          <button className="btn btn-danger btn-sm" onClick={clearLogs} disabled={isClearing || logs.length === 0}>
-            <Icon name="trash" size={12} /> {isClearing ? "Clearing..." : "Clear All Logs"}
-          </button>
+          <div className="flex gap-2">
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={async () => {
+                if (window.confirm("Migrate events to nested format? This optimizes data reads by 75%.")) {
+                  setIsMigrating(true);
+                  await migrateNestingToEvents();
+                  setIsMigrating(false);
+                }
+              }}
+              disabled={isMigrating}
+              style={{ border: "1px solid var(--accent2)", color: "var(--accent2)" }}
+            >
+              <Icon name="save" size={12} /> {isMigrating ? "Migrating..." : "Optimize Data Structure"}
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={clearLogs} disabled={isClearing || logs.length === 0}>
+              <Icon name="trash" size={12} /> {isClearing ? "Clearing..." : "Clear All Logs"}
+            </button>
+          </div>
         )}
       </div>
 
