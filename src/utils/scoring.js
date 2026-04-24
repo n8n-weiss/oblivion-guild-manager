@@ -75,7 +75,11 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     const avgScore = glCount > 0 ? Math.round((totalScore / glCount) * 10) / 10 : 0;
     const attStatus = computeAttendanceStatus(attendancePct);
 
-    return { ...member, totalScore, attendancePct, avgScore, absentCount, consecutiveAbsent, attStatus, totalKills, totalAssists, totalPP, totalCTF };
+    const mEoRatings = eoRatings.filter(r => (r.memberId || "").toLowerCase() === mId);
+    const avgEoRating = mEoRatings.length > 0 
+      ? Math.round((mEoRatings.reduce((s, r) => s + r.rating, 0) / mEoRatings.length) * 10) / 10 : 0;
+
+    return { ...member, totalScore, attendancePct, avgScore, avgEoRating, absentCount, consecutiveAbsent, attStatus, totalKills, totalAssists, totalPP, totalCTF };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }

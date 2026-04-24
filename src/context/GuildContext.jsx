@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { db, auth, firebaseConfig } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, documentId, deleteField } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, deleteField } from 'firebase/firestore';
 import { onAuthStateChanged, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { runMigration } from '../utils/migration';
 import { resetMonthlyData } from '../services/guildService';
@@ -698,7 +698,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
     setupListeners();
     return () => { unsubs.forEach(u => u()); };
-  }, [initialData, currentUser]);
+  }, [initialData, currentUser, userRole]);
 
   // Notifications Listener (Depends on myMemberId)
   useEffect(() => {
@@ -727,7 +727,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsFetchingRequests(false);
     }
-  }, [currentUser, canSeeRequestData]);
+  }, [currentUser, canSeeRequestData, isFetchingRequests]);
 
   // Requests Listener removed for data savings. Replaced by manual fetch.
   useEffect(() => {
@@ -737,7 +737,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setRequests([]);
       setJoinRequests([]);
     }
-  }, [canSeeRequestData, fetchRequests]);
+  }, [canSeeRequestData, fetchRequests, userRole]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {

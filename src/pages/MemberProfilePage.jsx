@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
@@ -131,23 +131,24 @@ const ProfilePerformanceChartCard = React.memo(function ProfilePerformanceChartC
 
 function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const { 
-    members, events, attendance, performance, absences, eoRatings, 
+    members, events: liveEvents, attendance: liveAttendance, performance: livePerformance, absences, eoRatings: liveEoRatings, 
     notifications, markNotifRead,
     requests, submitRequest,
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
     auctionSessions, migrateMemberData,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
-    historicalEvents, historicalAttendance, historicalPerformance, fetchHistoricalData
+    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData
   } = useGuild();
 
   useEffect(() => {
     fetchHistoricalData();
   }, [fetchHistoricalData]);
 
-  // Combine live data with historical data
-  const allEvents = useMemo(() => [...events, ...historicalEvents], [events, historicalEvents]);
-  const allAttendance = useMemo(() => [...attendance, ...historicalAttendance], [attendance, historicalAttendance]);
-  const allPerformance = useMemo(() => [...performance, ...historicalPerformance], [performance, historicalPerformance]);
+  // Merge live data with historical archives
+  const events = useMemo(() => [...liveEvents, ...historicalEvents], [liveEvents, historicalEvents]);
+  const attendance = useMemo(() => [...liveAttendance, ...historicalAttendance], [liveAttendance, historicalAttendance]);
+  const performance = useMemo(() => [...livePerformance, ...historicalPerformance], [livePerformance, historicalPerformance]);
+  const eoRatings = useMemo(() => [...liveEoRatings, ...historicalEoRatings], [liveEoRatings, historicalEoRatings]);
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestForm, setRequestForm] = useState({
@@ -218,30 +219,30 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
   const memberIdx = members.findIndex(m => (m.memberId || "").trim() === (member.memberId || "").trim());
   const mId = (member.memberId || "").trim().toLowerCase();
-  const activeMembers = React.useMemo(
+  const activeMembers = useMemo(
     () => members.filter(m => (m.status || "active") === "active"),
     [members]
   );
-  const glBaseEvents = React.useMemo(
+  const glBaseEvents = useMemo(
     () => events.filter(e => e.eventType === "Guild League"),
     [events]
   );
-  const attendanceIndex = React.useMemo(() => {
+  const attendanceIndex = useMemo(() => {
     const map = new Map();
     attendance.forEach(a => map.set(`${(a.memberId || "").trim().toLowerCase()}__${a.eventId}`, a));
     return map;
   }, [attendance]);
-  const performanceIndex = React.useMemo(() => {
+  const performanceIndex = useMemo(() => {
     const map = new Map();
     performance.forEach(p => map.set(`${(p.memberId || "").trim().toLowerCase()}__${p.eventId}`, p));
     return map;
   }, [performance]);
-  const eoRatingsIndex = React.useMemo(() => {
+  const eoRatingsIndex = useMemo(() => {
     const map = new Map();
     eoRatings.forEach(r => map.set(`${(r.memberId || "").trim().toLowerCase()}__${r.eventId}`, r));
     return map;
   }, [eoRatings]);
-  const memberEvents = React.useMemo(() => {
+  const memberEvents = useMemo(() => {
     return events
       .map(ev => {
         const k = `${mId}__${ev.eventId}`;
@@ -260,32 +261,32 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       });
   }, [events, mId, attendanceIndex, performanceIndex, eoRatingsIndex, member.joinDate]);
 
-  const glEvents = React.useMemo(() => memberEvents.filter(e => e.eventType === "Guild League"), [memberEvents]);
-  const eoEvents = React.useMemo(() => memberEvents.filter(e => e.eventType === "Emperium Overrun"), [memberEvents]);
-  const memberAbsences = React.useMemo(() => absences.filter(a => a.memberId === member.memberId), [absences, member.memberId]);
-  const myNotifs = React.useMemo(
+  const glEvents = useMemo(() => memberEvents.filter(e => e.eventType === "Guild League"), [memberEvents]);
+  const eoEvents = useMemo(() => memberEvents.filter(e => e.eventType === "Emperium Overrun"), [memberEvents]);
+  const memberAbsences = useMemo(() => absences.filter(a => a.memberId === member.memberId), [absences, member.memberId]);
+  const myNotifs = useMemo(
     () => notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId),
     [notifications, member.memberId]
   );
-  const unreadCount = React.useMemo(
+  const unreadCount = useMemo(
     () => myNotifs.filter(n => !n.isRead && n.targetId !== "all").length,
     [myNotifs]
   );
   
   const myPendingRequest = requests.find(r => r.memberId === member.memberId && r.status === "pending");
   
-  const totalGLScore = React.useMemo(() => glEvents.reduce((sum, e) => sum + e.score, 0), [glEvents]);
-  const presentCount = React.useMemo(() => memberEvents.filter(e => (e.att?.status || "present") === "present").length, [memberEvents]);
+  const totalGLScore = useMemo(() => glEvents.reduce((sum, e) => sum + e.score, 0), [glEvents]);
+  const presentCount = useMemo(() => memberEvents.filter(e => (e.att?.status || "present") === "present").length, [memberEvents]);
   const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
-  const presentGLCount = React.useMemo(() => glEvents.filter(e => (e.att?.status || "present") === "present").length, [glEvents]);
+  const presentGLCount = useMemo(() => glEvents.filter(e => (e.att?.status || "present") === "present").length, [glEvents]);
   const avgGL = presentGLCount > 0 ? Math.round((totalGLScore / presentGLCount) * 10) / 10 : 0;
-  const eoRatingsList = React.useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
+  const eoRatingsList = useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
   const avgEoRating = eoRatingsList.length > 0
     ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
 
   // --- NEW CALCULATIONS ---
   // 1. Guild Average GL
-  const guildTotalGL = React.useMemo(() => activeMembers.reduce((sum, m) => {
+  const guildTotalGL = useMemo(() => activeMembers.reduce((sum, m) => {
     const memberIdLower = (m.memberId || "").toLowerCase();
     const mScore = glBaseEvents.reduce((s, e) => {
       const att = attendanceIndex.get(`${memberIdLower}__${e.eventId}`);
@@ -364,7 +365,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       : { label: "At Risk", badge: "badge-atrisk" };
 
   // Support-specific stats removed as per new simplified scoring
-  const isSupport = member.role === "Support";
+
 
   // 5. RPG Rankings & Levels
   const getRankInfo = (score) => {
@@ -979,6 +980,12 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                   <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 22, color: "var(--gold)" }}>{memberEvents.length}</div>
                   <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{glEvents.length} GL / {eoEvents.length} EO</div>
                 </div>
+                <div style={{ background: "rgba(255,105,180,0.08)", border: "1px solid rgba(255,105,180,0.2)", borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>🌟</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: 1, marginBottom: 4 }}>AVG EO RATING</div>
+                  <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 22, color: "#ff69b4" }}>{avgEoRating}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>out of 10</div>
+                </div>
               </div>
             )}
           </div>
@@ -1241,7 +1248,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               {memberEvents.map(ev => {
                 const isPresent = (ev.att?.status || "present") === "present";
                 const isGL = ev.eventType === "Guild League";
-                const isEO = ev.eventType === "Emperium Overrun";
+
                 const barColor = isPresent ? (isGL ? theme.color : "var(--gold)") : "var(--red)";
                 return (
                   <div key={ev.eventId} style={{
