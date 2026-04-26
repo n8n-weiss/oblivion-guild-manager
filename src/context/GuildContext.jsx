@@ -646,13 +646,52 @@ export const GuildProvider = ({ children, initialData }) => {
           prevData.current.partiesData = { ...partiesData };
         }
 
+        // --- 2a. Auction Metadata ---
+        const auctionData = { auctionSessions, auctionTemplates, resourceCategories };
+        if (JSON.stringify(auctionData) !== JSON.stringify(prevData.current.auctionData)) {
+          await supabase.from('metadata').upsert({ key: 'auction', data: auctionData, updated_at: new Date().toISOString() });
+          prevData.current.auctionData = { ...auctionData };
+        }
+
+        // --- 2b. Discord Metadata ---
+        if (JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordData)) {
+          await supabase.from('metadata').upsert({ key: 'discord', data: { discord: discordConfig }, updated_at: new Date().toISOString() });
+          prevData.current.discordData = { ...discordConfig };
+        }
+
         // --- 3. Events: only upsert events that actually changed ---
+        // Pre-map current attendance/perf/eo by eventId for quick lookup
+        const attByEvent = {};
+        attendance.forEach(a => {
+          if (!attByEvent[a.eventId]) attByEvent[a.eventId] = {};
+          attByEvent[a.eventId][a.memberId] = a.status;
+        });
+        const perfByEvent = {};
+        performance.forEach(p => {
+          if (!perfByEvent[p.eventId]) perfByEvent[p.eventId] = {};
+          const { eventId, memberId, ...rest } = p;
+          perfByEvent[p.eventId][memberId] = rest;
+        });
+        const eoByEvent = {};
+        eoRatings.forEach(r => {
+          if (!eoByEvent[r.eventId]) eoByEvent[r.eventId] = {};
+          eoByEvent[r.eventId][r.memberId] = r.rating;
+        });
+
+        const mappedEvents = events.map(e => ({
+          ...e,
+          attendanceData: attByEvent[e.eventId] || {},
+          performanceData: perfByEvent[e.eventId] || {},
+          eoRatingsData: eoByEvent[e.eventId] || {}
+        }));
+
         const prevEventMap = new Map(
           (prevData.current.events || []).map(e => [e.eventId, JSON.stringify(e)])
         );
-        const dirtyEvents = events.filter(e =>
+        const dirtyEvents = mappedEvents.filter(e =>
           JSON.stringify(e) !== prevEventMap.get(e.eventId)
         );
+
         if (dirtyEvents.length > 0) {
           console.log(`[Supabase] Upserting ${dirtyEvents.length}/${events.length} changed events`);
           const { error } = await supabase.from('events').upsert(
@@ -669,7 +708,7 @@ export const GuildProvider = ({ children, initialData }) => {
             }))
           );
           if (error) throw error;
-          prevData.current.events = [...events];
+          prevData.current.events = [...mappedEvents];
         }
 
         // --- 4. Absences: only upsert rows that changed ---
@@ -705,7 +744,7 @@ export const GuildProvider = ({ children, initialData }) => {
     // 8 second debounce — batches rapid edits to reduce Supabase write bandwidth.
     const timer = setTimeout(saveToSupabase, 8000);
     return () => clearTimeout(timer);
-  }, [members, events, absences, parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, auctionSessions, auctionTemplates, resourceCategories]);
+  }, [members, events, absences, parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
 
   useEffect(() => {
@@ -744,9 +783,8 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [leaguePartyNames, loading]);
 
   const sendNotification = async (targetId, title, message, type = "info") => {
-    if (firebaseQuotaHit.current) return;
     const notif = {
-      targetId,
+      target_id: targetId,
       title,
       message,
       type,
@@ -754,13 +792,12 @@ export const GuildProvider = ({ children, initialData }) => {
       readBy: []
     };
     try {
-      await setDoc(doc(collection(db, "notifications")), notif);
+      const { error } = await supabase.from('notifications').insert([notif]);
+      if (error) throw error;
       showToast("Notification sent", "success");
     } catch(err) {
-      console.error(err);
-      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
-        firebaseQuotaHit.current = true;
-      }
+      console.error("Supabase notification error:", err);
+      showToast("Failed to send notification", "error");
     }
   };
 
@@ -1082,10 +1119,6 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const fetchFirebaseMetadataOnly = async () => {
-    if (firebaseQuotaHit.current) {
-      showToast("Firebase quota exceeded. Cannot fetch recovery data.", "error");
-      return;
-    }
     try {
       showToast("Fetching settings and parties...", "info");
       const { doc, getDoc } = await import("firebase/firestore");
@@ -1117,18 +1150,11 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Metadata backup downloaded!", "success");
     } catch (err) {
       console.error("Metadata fetch failed:", err);
-      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
-        firebaseQuotaHit.current = true;
-      }
       showToast("Fetch failed: " + err.message, "error");
     }
   };
 
   const fetchFirebaseDirect = async () => {
-    if (firebaseQuotaHit.current) {
-      showToast("Firebase quota exceeded. Cannot fetch emergency data.", "error");
-      return;
-    }
     try {
       showToast("Starting emergency Firebase fetch...", "info");
       const { collection, getDocs, query, limit } = await import("firebase/firestore");

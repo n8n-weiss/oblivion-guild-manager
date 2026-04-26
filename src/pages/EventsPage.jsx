@@ -28,12 +28,12 @@ function EventsPage() {
     return members
       .filter(m => (m.status || "active") === "active")
       .filter(m => officerRanks.has(String(m.guildRank || "").toLowerCase()))
-      .sort((a, b) => String(a.ign || "").localeCompare(String(b.ign || "")));
   }, [members]);
-  const fixedDuoOfficerPool = React.useMemo(() => {
-    const targetNames = new Set(["cobzydr", "gildartsss"]);
-    return officerPool.filter(o => targetNames.has(String(o.ign || "").trim().toLowerCase()));
-  }, [officerPool]);
+
+  // Special rotation for specific officers
+  const rotationKey = "battlelog_audit_rotation";
+  const fixedDuoOfficerPool = officerPool.filter(o => ["gildartsss", "cobzydr"].includes((o.ign || "").trim().toLowerCase()));
+
   const duoOfficerPool = React.useMemo(() => {
     const basePool = fixedDuoOfficerPool.length ? fixedDuoOfficerPool : officerPool;
     const pool = basePool.slice(0, 2);
@@ -45,89 +45,57 @@ function EventsPage() {
       return o;
     });
   }, [fixedDuoOfficerPool, officerPool]);
-  const rotationKey = "battlelog_duo_rotation_idx_v1";
-  const escalationHours = 6;
-  const reminderInFlight = React.useRef(new Set());
-  const [showModal, setShowModal] = useState(false);
+
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({
+    eventType: "Guild League",
+    eventDate: new Date().toLocaleDateString('en-CA'),
+    eventTime: "20:55",
+    auditDueOffsetHours: 12
+  });
+  const [expandedMonths, setExpandedMonths] = useState({});
+  const [expandedWeeks, setExpandedWeeks] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [postingDigest, setPostingDigest] = useState(false);
   const [finalizingDigest, setFinalizingDigest] = useState(false);
-  const [expandedMonths, setExpandedMonths] = useState({});
-  const [expandedWeeks, setExpandedWeeks] = useState({});
+  const [escalationHours] = useState(12); // after dueAt
+  const reminderInFlight = React.useRef(new Set());
 
+  // Group events by Month and Week
   const groupedEvents = React.useMemo(() => {
     const groups = {};
-    events.slice().sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate)).forEach(ev => {
-      if (!ev.eventDate) return;
-      const dateObj = new Date(ev.eventDate);
-      if (isNaN(dateObj)) {
-        if (!groups["Unknown Date"]) groups["Unknown Date"] = { "Events": [] };
-        groups["Unknown Date"]["Events"].push(ev);
-        return;
-      }
-
-      const monthYear = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-      if (!groups[monthYear]) groups[monthYear] = {};
+    events.forEach(ev => {
+      const d = new Date(ev.eventDate);
+      const monthKey = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!groups[monthKey]) groups[monthKey] = {};
       
-      // Weekly grouping (Monday start)
-      const d = new Date(dateObj);
-      const day = d.getDay(); // 0-Sun, 1-Mon, ... 6-Sat
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(d);
-      monday.setDate(diff);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+      // Calculate week of month
+      const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+      const weekNo = Math.ceil((d.getDate() + firstDay.getDay()) / 7);
+      const weekKey = `Week ${weekNo}`;
       
-      const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const sunStr = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const weekKey = `${monStr} – ${sunStr}`;
-      
-      if (!groups[monthYear][weekKey]) groups[monthYear][weekKey] = [];
-      groups[monthYear][weekKey].push(ev);
+      if (!groups[monthKey][weekKey]) groups[monthKey][weekKey] = [];
+      groups[monthKey][weekKey].push(ev);
     });
     return groups;
   }, [events]);
 
-  const monthKeys = React.useMemo(() => Object.keys(groupedEvents), [groupedEvents]);
+  const monthKeys = Object.keys(groupedEvents).sort((a, b) => new Date(b) - new Date(a));
 
-  const toggleWeek = (weekKey) => {
-    setExpandedWeeks(prev => ({ ...prev, [weekKey]: !prev[weekKey] }));
-  };
+  const toggleMonth = (m) => setExpandedMonths(prev => ({ ...prev, [m]: !prev[m] }));
+  const toggleWeek = (w) => setExpandedWeeks(prev => ({ ...prev, [w]: !prev[w] }));
 
-  React.useEffect(() => {
-    if (monthKeys.length > 0 && Object.keys(expandedMonths).length === 0) {
-      const latestMonth = monthKeys[0];
-      setExpandedMonths({ [latestMonth]: true });
-      
-      const weeks = Object.keys(groupedEvents[latestMonth]);
-      if (weeks.length > 0) {
-        // Expand ONLY the first week (latest) in the latest month
-        setExpandedWeeks({ [weeks[0]]: true });
-      }
-    }
-  }, [monthKeys, groupedEvents, expandedMonths]);
-
-  const toggleMonth = (month) => {
-    setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] }));
-  };
-
-  const deleteEvent = (eventId) => {
-    const ev = events.find(e => e.eventId === eventId);
-    setEvents(prev => prev.filter(e => e.eventId !== eventId));
-    setAttendance(prev => prev.filter(a => a.eventId !== eventId));
-    setPerformance(prev => prev.filter(p => p.eventId !== eventId));
-    if (selectedEvent?.eventId === eventId) setSelectedEvent(null);
+  const deleteEvent = (id) => {
+    setEvents(prev => prev.filter(ev => ev.eventId !== id));
+    setAttendance(prev => prev.filter(a => a.eventId !== id));
+    setPerformance(prev => prev.filter(p => p.eventId !== id));
+    setEoRatings(prev => prev.filter(r => r.eventId !== id));
+    if (selectedEvent?.eventId === id) setSelectedEvent(null);
     showToast("Event deleted", "success");
-    setConfirmDelete(null);
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${ev?.eventType} — ${ev?.eventDate}`);
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${id}`);
   };
-  const [form, setForm] = useState({
-    eventType: "Guild League",
-    eventDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD in local time
-    eventTime: "20:55",
-    auditDueOffsetHours: 12
-  });
+
   const [isEditing, setIsEditing] = useState(false);
   const [editEventId, setEditEventId] = useState(null);
   const [perfEdits, setPerfEdits] = useState({});
@@ -169,7 +137,6 @@ function EventsPage() {
       showToast("Event updated", "success");
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_update", `Updated ${form.eventType} event — ${form.eventDate}`);
       
-      // Optional: Update selectedEvent if it's the one we edited
       if (selectedEvent?.eventId === editEventId) {
         setSelectedEvent(prev => ({
           ...prev,
@@ -204,7 +171,6 @@ function EventsPage() {
       };
       setEvents(prev => [...prev, newEvent]);
 
-      // auto-load active members with absence-aware attendance
       const newAtt = members
         .filter(m => (m.status || "active") !== "left")
         .map(m => {
@@ -221,11 +187,10 @@ function EventsPage() {
       showToast("Event created with attendance loaded", "success");
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
       
-      // Discord Notification
       await sendDiscordEmbed(
         "📅 New Event Scheduled",
         `A new guild event has been scheduled! Please check your attendance.`,
-        0x6382E6, // Blue
+        0x6382E6,
         [
           { name: "Event Type", value: form.eventType, inline: true },
           { name: "Date", value: form.eventDate, inline: true },
@@ -273,16 +238,14 @@ function EventsPage() {
     if (!currentUser) return;
     const now = Date.now();
 
-    // 1. Post-Event "Soft" Reminders (55 minutes after start)
     const postEventReminders = events.filter(ev => {
       const audit = ev.battlelogAudit;
       if (!audit || audit.status === "submitted" || audit.postEventReminderSentAt) return false;
       const eventStart = new Date(`${ev.eventDate}T${ev.eventTime || "20:55"}:00`).getTime();
-      const triggerTime = eventStart + (55 * 60 * 1000); // 25m event + 30m buffer
+      const triggerTime = eventStart + (55 * 60 * 1000);
       return Number.isFinite(triggerTime) && now >= triggerTime;
     }).slice(0, 3);
 
-    // 2. Overdue "Hard" Reminders (After dueAt)
     const overduePending = events.filter(ev => {
       const audit = ev.battlelogAudit;
       if (!audit || audit.status === "submitted" || audit.reminderSentAt) return false;
@@ -292,7 +255,6 @@ function EventsPage() {
       return Number.isFinite(dueTime) && dueTime <= now;
     }).slice(0, 3);
 
-    // 3. Escalations (X hours after dueAt)
     const escalationCandidates = events.filter(ev => {
       const audit = ev.battlelogAudit;
       if (!audit || audit.status === "submitted" || !audit.reminderSentAt || audit.escalatedAt) return false;
@@ -303,7 +265,6 @@ function EventsPage() {
     }).slice(0, 3);
 
     const runReminders = async () => {
-      // Process Soft Reminders
       for (const ev of postEventReminders) {
         if (reminderInFlight.current.has(ev.eventId + "_soft")) continue;
         reminderInFlight.current.add(ev.eventId + "_soft");
@@ -330,7 +291,6 @@ function EventsPage() {
         finally { reminderInFlight.current.delete(ev.eventId + "_soft"); }
       }
 
-      // Process Hard Reminders
       for (const ev of overduePending) {
         if (reminderInFlight.current.has(ev.eventId + "_hard")) continue;
         reminderInFlight.current.add(ev.eventId + "_hard");
@@ -357,7 +317,6 @@ function EventsPage() {
         finally { reminderInFlight.current.delete(ev.eventId + "_hard"); }
       }
 
-      // Process Escalations
       for (const ev of escalationCandidates) {
         if (reminderInFlight.current.has(ev.eventId + "_esc")) continue;
         reminderInFlight.current.add(ev.eventId + "_esc");
@@ -391,9 +350,7 @@ function EventsPage() {
     const mId = (memberId || "").trim().toLowerCase();
     const current = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
     
-    // Cycle: present -> absent -> loa -> present
     const newStatus = (current?.status === "present") ? "absent" : "present";
-
     const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
     const ev = events.find(e => e.eventId === eventId);
     
@@ -404,7 +361,6 @@ function EventsPage() {
       }
       return [...prev, { memberId: memberId.trim(), eventId, status: newStatus }];
     });
-
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
   };
 
@@ -413,7 +369,6 @@ function EventsPage() {
     const mId = (memberId || "").trim().toLowerCase();
     const edits = perfEdits[key] || {};
     
-    // Ensure attendance record exists if it was missing (default to present)
     const currentAtt = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
     if (!currentAtt) {
       setAttendance(prev => [...prev, { memberId: memberId.trim(), eventId, status: "present" }]);
@@ -431,25 +386,11 @@ function EventsPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0}, Kills: ${edits.kills ?? 0}, Ast: ${edits.assists ?? 0} (${ev?.eventDate})`);
   };
 
-  const evt = selectedEvent;
-  const evtAtt = evt ? attendance.filter(a => a.eventId === evt.eventId) : [];
-  const evtMembers = evt ? members.filter(m => {
-    const mId = (m.memberId || "").trim().toLowerCase();
-    const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").trim().toLowerCase() === mId);
-    const isActive = (m.status || "active") === "active";
-    return hasAtt || isActive;
-  }).map(m => {
-    const mId = (m.memberId || "").trim().toLowerCase();
-    return {
-      ...m,
-      att: evtAtt.find(a => (a.memberId || "").trim().toLowerCase() === mId),
-      perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId)
-    };
-  }) : [];
   const leaderboardSnapshot = React.useMemo(
     () => computeLeaderboard(activeMembers, events, attendance, performance, eoRatings),
     [activeMembers, events, attendance, performance, eoRatings]
   );
+
   const buildDigestSnapshot = React.useCallback((eventObj) => {
     if (!eventObj) return null;
     const eventMembers = members.filter(m => {
@@ -491,6 +432,7 @@ function EventsPage() {
     };
     return { topDps, topSupport, topAttendance, hash: JSON.stringify(hashPayload) };
   }, [attendance, leaderboardSnapshot, members, performance]);
+  
   const currentDigest = React.useMemo(() => buildDigestSnapshot(selectedEvent), [buildDigestSnapshot, selectedEvent]);
   const digestAlreadyPosted = !!selectedEvent?.digestMeta?.hash;
   const digestIsUpdated = digestAlreadyPosted && selectedEvent?.digestMeta?.hash !== currentDigest?.hash;
@@ -520,7 +462,7 @@ function EventsPage() {
           { name: "Top 10 Support/Utility", value: rowText(digest.topSupport), inline: false },
           { name: "Top 10 Attendance", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
         ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-logo.png",
         "event_digest",
         "event_digest",
         { type: selectedEvent.eventType, date: selectedEvent.eventDate }
@@ -546,9 +488,7 @@ function EventsPage() {
       setEvents(prev => prev.map(ev => {
         if (ev.eventId === selectedEvent.eventId) {
           const updatedEvent = { ...ev, digestMeta };
-          if (isFinalize && updatedAudit) {
-            updatedEvent.battlelogAudit = updatedAudit;
-          }
+          if (isFinalize && updatedAudit) updatedEvent.battlelogAudit = updatedAudit;
           return updatedEvent;
         }
         return ev;
@@ -556,19 +496,12 @@ function EventsPage() {
       setSelectedEvent(prev => {
         if (!prev) return prev;
         const updatedEvent = { ...prev, digestMeta };
-        if (isFinalize && updatedAudit) {
-          updatedEvent.battlelogAudit = updatedAudit;
-        }
+        if (isFinalize && updatedAudit) updatedEvent.battlelogAudit = updatedAudit;
         return updatedEvent;
       });
 
       showToast(isFinalize ? "Finalized digest & submitted audit log" : "Reposted updated digest", "success");
-      writeAuditLog(
-        currentUser?.email,
-        currentUser?.displayName || currentUser?.email,
-        isFinalize ? "event_digest_finalize" : "event_digest_repost",
-        `${selectedEvent.eventType} ${selectedEvent.eventDate}`
-      );
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isFinalize ? "event_digest_finalize" : "event_digest_repost", `${selectedEvent.eventType} ${selectedEvent.eventDate}`);
     } catch (err) {
       console.error(err);
       showToast("Failed to post event digest", "error");
@@ -591,6 +524,22 @@ function EventsPage() {
     return status;
   };
 
+  const evt = selectedEvent;
+  const evtAtt = evt ? attendance.filter(a => a.eventId === evt.eventId) : [];
+  const evtMembers = evt ? members.filter(m => {
+    const mId = (m.memberId || "").trim().toLowerCase();
+    const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").trim().toLowerCase() === mId);
+    const isActive = (m.status || "active") === "active";
+    return hasAtt || isActive;
+  }).map(m => {
+    const mId = (m.memberId || "").trim().toLowerCase();
+    return {
+      ...m,
+      att: evtAtt.find(a => (a.memberId || "").trim().toLowerCase() === mId),
+      perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId)
+    };
+  }) : [];
+
   return (
     <div>
       <div className="page-header">
@@ -599,7 +548,6 @@ function EventsPage() {
       </div>
 
       <div className="events-layout-container">
-        {/* Event List */}
         {!selectedEvent && (
           <div className="events-sidebar">
           <div className="flex items-center justify-between mb-3">
@@ -612,7 +560,6 @@ function EventsPage() {
               const weekGroups = groupedEvents[month];
               const isMonthExpanded = !!expandedMonths[month];
               const weekKeys = Object.keys(weekGroups);
-              
               return (
                 <div key={month} style={{ marginBottom: 6 }}>
                     <button
@@ -629,7 +576,6 @@ function EventsPage() {
                     </span>
                     <span className="badge badge-casual" style={{ fontSize: 9 }}>{Object.values(weekGroups).flat().length}</span>
                   </button>
-
                   {isMonthExpanded && (
                     <div className="flex flex-col gap-1" style={{ paddingLeft: 8, borderLeft: "1px solid rgba(99,130,230,0.15)", marginLeft: 8, animation: "fade-in 0.2s" }}>
                       {weekKeys.map(weekKey => {
@@ -650,9 +596,7 @@ function EventsPage() {
                             >
                               <span style={{ color: isWeekExpanded ? "var(--accent)" : "rgba(255,255,255,0.2)", fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
                               <span style={{ fontWeight: 800 }}>{weekKey.toUpperCase()}</span>
-                              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.03)", marginLeft: 2 }} />
                             </button>
-                            
                             {isWeekExpanded && (
                               <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s", paddingLeft: 4 }}>
                                 {weekEvents.map(ev => {
@@ -678,7 +622,6 @@ function EventsPage() {
                                       <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
                                         {confirmDelete === ev.eventId ? (
                                           <div className="flex gap-2 items-center">
-                                            <span className="text-xs text-muted">Delete?</span>
                                             <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); deleteEvent(ev.eventId); }}>Yes</button>
                                             <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }}>No</button>
                                           </div>
@@ -706,63 +649,40 @@ function EventsPage() {
         </div>
         )}
 
-        {/* Event Detail */}
         <div className="events-detail">
           {selectedEvent ? (
             <div className="card">
               <div className="section-header">
                 <div>
-                  <button 
-                    className="btn btn-ghost btn-sm" 
-                    style={{ marginBottom: 12, paddingLeft: 0, opacity: 0.8 }}
-                    onClick={() => setSelectedEvent(null)}
-                  >
-                    <Icon name="chevron-left" size={12} /> Back to Events
+                  <button className="btn btn-ghost btn-sm" style={{ marginBottom: 12, paddingLeft: 0, opacity: 0.8 }} onClick={() => setSelectedEvent(null)}>
+                    <Icon name="chevron-left" size={12} /> Back
                   </button>
                   <div className="font-cinzel" style={{ fontSize: 16, fontWeight: 700 }}>{selectedEvent.eventDate}</div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
-                    <span className="text-xs text-muted">{evtAtt.filter(a => a.status === "present").length}/{evtAtt.length} present</span>
                     <span className={`badge ${getAuditStatus(selectedEvent) === "submitted" ? "badge-active" : getAuditStatus(selectedEvent) === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
                       Audit: {getAuditStatus(selectedEvent) || "pending"}
                     </span>
-                    {digestAlreadyPosted && (
-                      <span className={`badge ${digestIsUpdated ? "badge-casual" : "badge-active"}`} style={{ fontSize: 9 }}>
-                        {digestIsUpdated ? "Digest Outdated" : "Digest Posted"}
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
-                    <Icon name="edit" size={12} /> Edit Event
+                    <Icon name="edit" size={12} /> Edit
                   </button>
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
                     <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize"}
                   </button>
-                  {digestIsUpdated && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => postEventDigest("repost")} disabled={postingDigest || finalizingDigest}>
-                      <Icon name="refresh" size={12} /> {postingDigest ? "Posting..." : "Repost"}
-                    </button>
-                  )}
                 </div>
               </div>
               <div className="table-responsive">
                 <div className="text-xs text-muted" style={{ marginBottom: 16 }}>
-                  Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>{" "}
-                  • Due: <strong>{(() => {
-                    if (!selectedEvent.battlelogAudit?.dueAt) return "N/A";
-                    let d = new Date(selectedEvent.battlelogAudit.dueAt).getTime();
-                    const s = new Date(`${selectedEvent.eventDate}T00:00:00`).getTime();
-                    if (d <= s + 23 * 60 * 60 * 1000 && !selectedEvent.eventTime) d += 24 * 60 * 60 * 1000;
-                    return new Date(d).toLocaleString();
-                  })()}</strong>
+                  Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>
                 </div>
                 <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                   <thead><tr>
                     <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
-                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>CTF Total</th><th>Kills</th><th>Assists</th><th>Perf Pts</th><th>Score</th><th></th></>}
-                    {selectedEvent.eventType === "Emperium Overrun" && <th>EO Rating</th>}
+                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>Total</th><th>Kills</th><th>Assists</th><th>Perf</th><th>Score</th><th></th></>}
+                    {selectedEvent.eventType === "Emperium Overrun" && <th>Rating</th>}
                   </tr></thead>
                   <tbody>
                     {evtMembers.map(m => {
@@ -777,126 +697,46 @@ function EventsPage() {
                       const assists = curPerf.assists !== undefined ? curPerf.assists : (m.perf?.assists ?? 0);
                       const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
                       return (
-                         <tr key={m.memberId} style={{ borderBottom: "1px solid var(--border)" }}>
+                         <tr key={m.memberId}>
                           <td className="sticky-col" style={{ padding: "12px 16px", background: "var(--bg-card2)", borderRight: "1px solid var(--border)" }}>
                             <div style={{ fontWeight: 800, color: "var(--text-primary)", fontSize: 13 }}>{m.ign}</div>
-                            <div className="text-xs text-muted" style={{ fontSize: 10 }}>{m.memberId}</div>
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
-                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)} title="Click to toggle (Present / Absent)">
-                              {(m.att?.status || "present") === "present" ? <><Icon name="check" size={11} /> Present</> : 
-                               <><Icon name="x" size={11} /> Absent</>}
+                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)}>
+                              {(m.att?.status || "present") === "present" ? "Present" : "Absent"}
                             </button>
                           </td>
-
                           {selectedEvent.eventType === "Guild League" && (
                             <>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={ctf1}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={ctf2}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={ctf3}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <span style={{
-                                  fontFamily: "Cinzel,serif", fontSize: 14, fontWeight: 700,
-                                  color: ctfTotal > 0 ? "var(--accent)" : "var(--text-muted)",
-                                  background: "rgba(99,130,230,0.1)", padding: "3px 10px", borderRadius: 6
-                                }}>
-                                  {ctfTotal}
-                                </span>
-                              </td>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={kills}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 56, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={assists}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <input type="number" className="form-input" style={{ width: 64, padding: "4px 8px", fontSize: 13 }} min={0}
-                                  value={pp}
-                                  onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))}
-                                  disabled={(m.att?.status || "present") !== "present"} />
-                              </td>
-                              <td>
-                                <span style={{
-                                  fontFamily: "Cinzel,serif", fontSize: 15, fontWeight: 700,
-                                  color: score < 0 ? "var(--red)" : score >= 30 ? "var(--gold)" : score >= 15 ? "var(--green)" : "var(--accent)",
-                                  textShadow: score < 0 ? "0 0 8px rgba(224,80,80,0.4)" : score >= 30 ? "0 0 8px rgba(240,192,64,0.4)" : "0 0 8px rgba(64,201,122,0.3)"
-                                }}>
-                                  {score > 0 ? `+${score}` : score}
-                                </span>
-                              </td>
-                              <td>
-                                <button className="btn btn-ghost btn-sm" onClick={() => savePerformance(m.memberId, selectedEvent.eventId)}><Icon name="save" size={12} /></button>
-                              </td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
+                              <td style={{ fontWeight: 700 }}>{ctfTotal}</td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                              <td><input type="number" className="form-input" style={{ width: 50 }} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
+                              <td style={{ fontWeight: 700, color: "var(--accent)" }}>{score}</td>
+                              <td><button className="btn btn-ghost btn-sm" onClick={() => savePerformance(m.memberId, selectedEvent.eventId)}><Icon name="save" size={12} /></button></td>
                             </>
                           )}
                           {selectedEvent.eventType === "Emperium Overrun" && (
                             <td>
-                              {(m.att?.status || "present") === "present" ? (
-                                <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                                  {[1, 2, 3, 4, 5].map(star => {
-                                    const currentRating = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
-                                    return (
-                                      <span key={star}
-                                        onClick={() => {
-                                          const newRating = star === currentRating ? 0 : star;
-                                          // Auto-persistence: ensure attendance record exists if rating is being saved
-                                          if (!m.att) {
-                                            setAttendance(prev => {
-                                              if (prev.find(a => (a.memberId || "").toLowerCase() === (m.memberId || "").toLowerCase() && a.eventId === selectedEvent.eventId)) return prev;
-                                              return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, status: "present" }];
-                                            });
-                                          } else if (m.att.status !== "present") {
-                                            // Optional: Force back to present if somehow rated while being absent
-                                            setAttendance(prev => prev.map(a => (a.memberId || "").toLowerCase() === (m.memberId || "").toLowerCase() && a.eventId === selectedEvent.eventId ? { ...a, status: "present" } : a));
-                                          }
-
-                                          setEoRatings(prev => {
-                                            const exists = prev.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId);
-                                            if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? { ...r, rating: newRating } : r);
-                                            return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: newRating }];
-                                          });
-                                          if (newRating > 0) writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "eo_rating", `Rated ${m.ign} ${newRating}/5 stars — EO ${selectedEvent.eventDate}`);
-                                        }}
-                                        style={{
-                                          fontSize: 18, cursor: "pointer",
-                                          color: star <= currentRating ? "var(--gold)" : "rgba(99,130,230,0.2)",
-                                          textShadow: star <= currentRating ? "0 0 8px rgba(240,192,64,0.5)" : "none",
-                                          transition: "all 0.15s"
-                                        }}>★</span>
-                                    );
-                                  })}
-                                  {(() => {
-                                    const r = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
-                                    return r > 0 ? <span style={{ fontSize: 11, color: "var(--gold)", marginLeft: 4, fontWeight: 700 }}>{r}/5</span> : null;
-                                  })()}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                  <span style={{ color: "var(--red)" }}>❌</span> absent
-                                </span>
-                              )}
+                              <div style={{ display: "flex", gap: 2 }}>
+                                {[1, 2, 3, 4, 5].map(star => {
+                                  const currentRating = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
+                                  return (
+                                    <span key={star} onClick={() => {
+                                      const newRating = star === currentRating ? 0 : star;
+                                      setEoRatings(prev => {
+                                        const exists = prev.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId);
+                                        if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? { ...r, rating: newRating } : r);
+                                        return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: newRating }];
+                                      });
+                                    }} style={{ cursor: "pointer", color: star <= currentRating ? "var(--gold)" : "rgba(255,255,255,0.1)" }}>★</span>
+                                  );
+                                })}
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -908,10 +748,7 @@ function EventsPage() {
             </div>
           ) : (
             <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-              <div className="empty-state">
-                <div className="empty-state-icon">📅</div>
-                <div className="empty-state-text">Select an event to view details</div>
-              </div>
+              <div className="text-muted">Select an event to view details</div>
             </div>
           )}
         </div>
@@ -919,7 +756,7 @@ function EventsPage() {
 
       {showModal && (
         <Modal title={isEditing ? "Edit Event" : "Create New Event"} onClose={() => setShowModal(false)}
-          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleSaveEvent}>{isEditing ? <><Icon name="save" size={14} /> Save Changes</> : <><Icon name="plus" size={14} /> Create Event</>}</button></>}>
+          footer={<><button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleSaveEvent}>{isEditing ? "Save" : "Create"}</button></>}>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Event Type</label>
@@ -929,27 +766,9 @@ function EventsPage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Event Date</label>
+              <label className="form-label">Date</label>
               <input type="date" className="form-input" value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Event Time</label>
-              <input type="time" className="form-input" value={form.eventTime} onChange={e => setForm(f => ({ ...f, eventTime: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Audit Due (hours after event starts)</label>
-              <input
-                type="number"
-                min={0}
-                max={48}
-                className="form-input"
-                value={form.auditDueOffsetHours}
-                onChange={e => setForm(f => ({ ...f, auditDueOffsetHours: Math.max(0, Math.min(48, Number(e.target.value || 0))) }))}
-              />
-            </div>
-          </div>
-          <div className="text-xs text-muted mt-2" style={{ padding: "10px 14px", background: "rgba(99,130,230,0.05)", borderRadius: 8, border: "1px solid var(--border)" }}>
-            ℹ️ Assignment priority: Manual Auditor → Weekly Owner → Rotation. All {activeMembers.length} active members will be auto-loaded as Present. Absence records will override to Absent.
           </div>
         </Modal>
       )}
