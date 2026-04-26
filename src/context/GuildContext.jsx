@@ -437,22 +437,7 @@ export const GuildProvider = ({ children, initialData }) => {
               setResourceCategories(d.resourceCategories || ["Card Album", "Light & Dark"]);
               metadataVersions.current.auction = m.version;
             } else if (m.key === 'discord') {
-              setDiscordConfig(prev => {
-                const dbConfig = d.discord || {};
-                return {
-                  ...prev,
-                  ...dbConfig,
-                  notifications: {
-                    ...(prev.notifications || {}),
-                    ...(dbConfig.notifications || {}),
-                    auction_results: {
-                      ...(prev.notifications?.auction_results || {}),
-                      ...(dbConfig.notifications?.auction_results || {}),
-                      webhookUrl: dbConfig.notifications?.auction_results?.webhookUrl || "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb"
-                    }
-                  }
-                };
-              });
+              setDiscordConfig(d.discord || {});
               metadataVersions.current.discord = m.version;
             } else if (m.key === 'battlelog') {
               setBattlelogConfig(d);
@@ -857,13 +842,9 @@ export const GuildProvider = ({ children, initialData }) => {
     const catConfig = discordConfig.notifications?.[category];
     if (catConfig && !catConfig.enabled) return;
 
-    let targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
+    const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
       ? catConfig.webhookUrl 
       : discordConfig.webhookUrl;
-
-    if (category === "auction_results" && (!targetUrl || targetUrl.trim() === "")) {
-      targetUrl = "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb";
-    }
 
     if (!targetUrl || targetUrl.trim() === "") {
       if (isAdmin) showToast(`Discord: No Webhook URL set for '${category}'.`, "error");
