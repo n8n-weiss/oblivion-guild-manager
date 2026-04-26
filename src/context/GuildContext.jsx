@@ -191,9 +191,9 @@ export const GuildProvider = ({ children, initialData }) => {
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
 
-  const showToast = (message, type = "success", action = null) => {
+  const showToast = useCallback((message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
-  };
+  }, []);
   const triggerSyncRetry = () => {
     setSyncRetryToken(v => v + 1);
     if (navigator.onLine) setSyncStatus("saving");
@@ -303,6 +303,9 @@ export const GuildProvider = ({ children, initialData }) => {
         if (emailPrefix.includes("rcapa") || emailPrefix.includes("weiss")) {
           if (m.guildRank && (m.guildRank.includes("Architect") || m.guildRank.includes("Creator"))) return true;
         }
+
+        // Guild Master (Dopest) fallback
+        if (m.ign === "Dopest" && emailPrefix.includes("oblidopest")) return true;
         
         return (cleanDiscord && cleanDiscord === emailPrefix) || (cleanIgn && cleanIgn === emailPrefix);
       });
@@ -310,6 +313,15 @@ export const GuildProvider = ({ children, initialData }) => {
       if (fallbackProfile && fallbackProfile.memberId && fallbackProfile.memberId !== myMemberId) {
         console.log("Auto-linking memberId:", fallbackProfile.memberId);
         setMyMemberId(fallbackProfile.memberId);
+        
+        // Persist to Supabase
+        supabase.from('user_roles')
+          .update({ member_id: fallbackProfile.memberId })
+          .eq('uid', currentUser.uid)
+          .then(({ error }) => {
+            if (error) console.error("Supabase auto-link failed:", error);
+          });
+
         if (!firebaseQuotaHit.current) {
           setDoc(doc(db, "userroles", currentUser.uid), { memberId: fallbackProfile.memberId }, { merge: true }).catch(err => {
             console.error("Auto-link failed:", err);
@@ -320,7 +332,7 @@ export const GuildProvider = ({ children, initialData }) => {
         }
       }
     }
-  }, [currentUser, members, myMemberId]);
+  }, [currentUser, members, myMemberId, userRole]);
 
   // Presence Listener (Disabled to save Firebase quota)
   useEffect(() => {
@@ -845,9 +857,13 @@ export const GuildProvider = ({ children, initialData }) => {
     const catConfig = discordConfig.notifications?.[category];
     if (catConfig && !catConfig.enabled) return;
 
-    const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
+    let targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
       ? catConfig.webhookUrl 
       : discordConfig.webhookUrl;
+
+    if (category === "auction_results" && (!targetUrl || targetUrl.trim() === "")) {
+      targetUrl = "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb";
+    }
 
     if (!targetUrl || targetUrl.trim() === "") {
       if (isAdmin) showToast(`Discord: No Webhook URL set for '${category}'.`, "error");
