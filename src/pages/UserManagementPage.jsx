@@ -9,7 +9,7 @@ import Icon from '../components/ui/icons';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function UserManagementPage() {
-  const { currentUser, showToast, members, isAdmin, isArchitect, resetDatabase } = useGuild();
+  const { currentUser, setPage, showToast, members, isAdmin, isArchitect, resetDatabase, migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, firebaseQuotaHit } = useGuild();
   const RESET_TOKEN = "DELETE";
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
@@ -22,10 +22,19 @@ function UserManagementPage() {
 
   useEffect(() => {
     const loadUsers = async () => {
+      if (firebaseQuotaHit?.current) {
+        console.warn("Firebase quota hit — skipping user list load.");
+        return;
+      }
       try {
         const snap = await getDoc(doc(db, "guildusers", "list"));
         if (snap.exists()) setUsers(snap.data().users || []);
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+        if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+          showToast("Firebase quota exceeded. User list unavailable.", "error");
+        }
+      }
     };
     loadUsers();
   }, []);
@@ -290,6 +299,69 @@ function UserManagementPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => setDeletingUid(null)}>Cancel</button>
               <button className="btn btn-danger btn-sm" onClick={() => deleteUser(deletingUid)}>Revoke Access</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isArchitect && (
+        <div className="card" style={{ marginBottom: 20, border: "1px solid var(--accent)", background: "rgba(99,130,230,0.02)" }}>
+          <div className="card-title" style={{ color: "var(--accent)" }}>🚀 Migration & Optimization</div>
+          <p className="text-muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            Prepare your data for Supabase migration or optimize Firestore performance.
+          </p>
+          
+          <div className="flex flex-wrap gap-3">
+            <button 
+              className="btn btn-sm" 
+              onClick={bootstrapMyRole}
+              style={{ border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent" }}
+            >
+              <Icon name="key" size={12} /> 🔑 Bootstrap My Architect Role
+            </button>
+
+            <button 
+              className="btn btn-primary btn-sm" 
+              onClick={migrateNestingToEvents}
+              style={{ background: "linear-gradient(135deg, var(--accent), #4a6cf7)" }}
+            >
+              <Icon name="zap" size={12} /> Optimize Data Structure (Nest)
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={migrateLocalStorageToSupabase}
+              style={{ background: "var(--green)", color: "white" }}
+            >
+              <Icon name="refresh" size={12} /> 🚀 Sync Local Cache to Supabase
+            </button>
+            
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={() => setPage("import")}
+              style={{ border: "1px solid var(--accent-light)" }}
+            >
+              <Icon name="upload" size={12} /> Open Supabase Migration Tool
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={fetchFirebaseMetadataOnly}
+              style={{ border: "1px solid var(--gold)", color: "var(--gold)", background: "transparent" }}
+            >
+              <Icon name="save" size={12} /> 🛡️ Recover Metadata & Parties
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={fetchFirebaseDirect}
+              style={{ border: "1px solid var(--red)", color: "var(--red)", background: "transparent" }}
+            >
+              <Icon name="save" size={12} /> 🚨 Full Firebase Recovery
+            </button>
+          </div>
+          
+          <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(99,130,230,0.08)", borderRadius: 8, fontSize: 11, color: "var(--text-secondary)" }}>
+            <b>Note:</b> Optimization will fetch all attendance/performance records and nest them into their respective events. This is required before exporting for Supabase.
           </div>
         </div>
       )}

@@ -102,9 +102,13 @@ export default function App() {
     loading, authLoading, currentUser, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     page, setPage,
     toast, setToast, showToast,
-    members, events, absences,
+    members, events, attendance, performance, eoRatings, absences,
     notifications, requests, joinRequests, onlineUsers,
-    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry
+    parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
+    auctionSessions, auctionTemplates, resourceCategories,
+    discordConfig, battlelogConfig,
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry,
+    isOfflineMode, migrateNestingToEvents
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -131,7 +135,7 @@ export default function App() {
   });
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
-  const effectivePage = isMember ? "members" : page;
+  const effectivePage = (isMember && !(isAdmin || isOfficer || isArchitect) && page !== "import") ? "members" : page;
   const ownMember = React.useMemo(
     () => members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) || null,
     [members, myMemberId]
@@ -338,6 +342,7 @@ export default function App() {
   const commandActions = React.useMemo(() => {
     const actions = [];
     const pageActions = NAV_ITEMS.filter(item => {
+      if (isArchitect) return true;
       if (isMember) return item.id === "members";
       if (isAdmin) return !(item.id === "users" && !isArchitect);
       if (isOfficer) return item.id !== "users" && item.id !== "auditlog";
@@ -560,12 +565,18 @@ export default function App() {
         </div>
         <div className="sidebar-nav">
           {NAV_ITEMS.filter(item => {
-            if (isMember) return item.id === "members";
+            if (item.id === "import" && isArchitect) return true; 
+            
+            // Restricted view for members
+            if (isMember && !(isAdmin || isOfficer || isArchitect)) return item.id === "members";
+            
+            // Admin/Officer views
             if (isAdmin) {
               if (item.id === "users" && !isArchitect) return false;
               return true;
             }
             if (isOfficer) return item.id !== "users" && item.id !== "auditlog";
+            
             return false;
           }).map(item => {
             const activeMembersCount = members.filter(m => (m.status || "active") === "active").length;
@@ -573,7 +584,7 @@ export default function App() {
             const count = counts[item.id];
 
             let label = item.label;
-            if (isMember && item.id === "members") label = "My Profile";
+            if (isMember && !(isAdmin || isOfficer || isArchitect) && item.id === "members") label = "My Profile";
 
             return (
               <MotionDiv 
@@ -607,6 +618,33 @@ export default function App() {
           })}
         </div>
         <div className="sidebar-footer">
+          {isArchitect && (
+            <div style={{ padding: "10px", background: "rgba(224,80,80,0.1)", borderRadius: 10, border: "1px solid var(--red)", marginBottom: 12 }}>
+              <div style={{ fontSize: 9, fontWeight: 900, color: "var(--red)", marginBottom: 6, textAlign: "center", letterSpacing: 1 }}>DATABASE LOCKED</div>
+              <button 
+                className="btn btn-sm w-full" 
+                style={{ background: "var(--red)", color: "white", fontSize: 10 }}
+                onClick={() => {
+                  const payload = {
+                    members, events, attendance, performance, eoRatings, absences,
+                    parties, raidParties, partyNames, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
+                    auctionSessions, auctionTemplates, resourceCategories,
+                    discordConfig, battlelogConfig,
+                    exportedAt: new Date().toISOString()
+                  };
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `OBLIVION_EMERGENCY_BACKUP_${new Date().toLocaleDateString()}.json`;
+                  link.click();
+                  showToast("Emergency backup saved to your computer!", "success");
+                }}
+              >
+                📥 Save Work to File
+              </button>
+            </div>
+          )}
           {currentUser && (
             <div className="sidebar-user-profile">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -672,7 +710,10 @@ export default function App() {
       {/* Mobile Bottom Navigation */}
       <nav className="mobile-nav">
         {NAV_ITEMS.filter(item => {
-          if (isMember) return item.id === "members";
+          const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+          if (isLocal || isArchitect) return true;
+          if (item.id === "import") return true; // Force show Import for migration
+          if (isMember && !(isAdmin || isOfficer || isArchitect)) return item.id === "members";
           // Only show top 5 relevant items on mobile nav to avoid clutter
           const mobileWhitelisted = ["dashboard", "members", "events", "leaderboard", "party"];
           if (!mobileWhitelisted.includes(item.id)) return false;
@@ -682,7 +723,7 @@ export default function App() {
           return false;
         }).map(item => {
           let label = item.label;
-          if (isMember && item.id === "members") label = "Profile";
+          if (isMember && !(isAdmin || isOfficer || isArchitect) && item.id === "members") label = "Profile";
           if (label === "Dashboard") label = "Home"; // Shorten for mobile
           if (label === "Leaderboard") label = "Rank";
 
@@ -746,31 +787,41 @@ export default function App() {
         )}
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
         <div className="status-bar">
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 10px",
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 0.2,
-              border: "1px solid rgba(255,255,255,0.12)",
-              color:
-                syncStatus === "saving" ? "#f6d277"
-                  : syncStatus === "offline" ? "#ff9f66"
-                  : syncStatus === "error" ? "#ff7a7a"
-                  : "var(--text-secondary)",
-              background:
-                syncStatus === "saving" ? "rgba(246,210,119,0.12)"
-                  : syncStatus === "offline" ? "rgba(255,159,102,0.12)"
-                  : syncStatus === "error" ? "rgba(255,122,122,0.12)"
-                  : "rgba(120,255,170,0.1)"
-            }}
-          >
-            {syncStatus === "saving" ? "Saving..." : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync issue" : "Synced"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 10px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 0.2,
+                border: "1px solid rgba(255,255,255,0.12)",
+                color:
+                  syncStatus === "saving" ? "#f6d277"
+                    : syncStatus === "offline" ? "#ff9f66"
+                    : syncStatus === "error" ? "#ff7a7a"
+                    : "var(--text-secondary)",
+                background:
+                  syncStatus === "saving" ? "rgba(246,210,119,0.12)"
+                    : syncStatus === "offline" ? "rgba(255,159,102,0.12)"
+                    : syncStatus === "error" ? "rgba(255,122,122,0.12)"
+                    : "rgba(120,255,170,0.1)"
+              }}
+            >
+              {syncStatus === "saving" ? "Saving..." : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync issue" : "Synced"}
+            </span>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              style={{ padding: "4px 8px", fontSize: 10, border: "1px solid var(--border)" }}
+              onClick={() => triggerSyncRetry()}
+              title="Manually fetch latest data from cloud"
+            >
+              <Icon name="refresh" size={12} /> Sync
+            </button>
+          </div>
           <span
             title="Current display density mode"
             style={{
@@ -886,7 +937,7 @@ export default function App() {
           </div>
         )}
         
-        {(!isStatusActive && !isArchitect) ? (
+        {(!isStatusActive && !isArchitect && page !== "import") ? (
           <PageWrapper id="access-revoked">
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80vh", textAlign: "center", padding: 24 }}>
               <div style={{ fontSize: 64, marginBottom: 20 }}>🛡️</div>
@@ -929,7 +980,7 @@ export default function App() {
 
             {effectivePage === "members" && (
               <PageWrapper id={profileMember ? `profile-${profileMember.memberId}` : "members"}>
-                {isMember ? (
+                {isMember && !(isAdmin || isOfficer || isArchitect) ? (
                   ownMember ? (
                     <MemberProfilePage
                       member={ownMember}

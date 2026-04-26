@@ -11,21 +11,15 @@ function ReportsPage({ onViewProfile }) {
     historicalEvents, historicalAttendance, historicalPerformance, isLoadingHistory, fetchHistoricalData
   } = useGuild();
 
-  useEffect(() => {
-    fetchHistoricalData();
-  }, [fetchHistoricalData]);
-
-  // Combine live data with historical data
-  const allEvents = useMemo(() => [...events, ...historicalEvents], [events, historicalEvents]);
-  const allAttendance = useMemo(() => [...attendance, ...historicalAttendance], [attendance, historicalAttendance]);
-  const allPerformance = useMemo(() => [...performance, ...historicalPerformance], [performance, historicalPerformance]);
-
   const [reportType, setReportType] = useState('weekly'); // weekly, monthly, yearly
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [posting, setPosting] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
 
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const allEvents = useMemo(() => [...events, ...historicalEvents], [events, historicalEvents]);
+  const allAttendance = useMemo(() => [...attendance, ...historicalAttendance], [attendance, historicalAttendance]);
+  const allPerformance = useMemo(() => [...performance, ...historicalPerformance], [performance, historicalPerformance]);
 
   // Helper to get date range for reports
   const reportRange = useMemo(() => {
@@ -50,6 +44,14 @@ function ReportsPage({ onViewProfile }) {
       return { start: first, end: last, label: d.getFullYear().toString() };
     }
   }, [selectedDate, reportType]);
+
+  useEffect(() => {
+    if (reportRange.start && reportRange.end) {
+      const startStr = reportRange.start.toISOString().split('T')[0];
+      const endStr = reportRange.end.toISOString().split('T')[0];
+      fetchHistoricalData(startStr, endStr);
+    }
+  }, [reportRange, fetchHistoricalData]);
 
   const reportData = useMemo(() => {
     const filteredEvents = allEvents.filter(e => {

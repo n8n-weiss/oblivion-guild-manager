@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
+import SupabaseMigration from '../components/admin/SupabaseMigration';
 import Icon from '../components/ui/icons';
 import DiscordSettings from '../components/common/DiscordSettings';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 import StatePanel from '../components/common/StatePanel';
 
 function ImportPage() {
-  const { members, setMembers, showToast, isArchitect, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill } = useGuild();
+  const { members, setMembers, showToast, isArchitect, exportBackupSnapshot } = useGuild();
   const CONFIRM_TOKEN = "RESTORE";
   const [preview, setPreview] = useState([]);
   const [fileName, setFileName] = useState("");
@@ -16,12 +17,7 @@ function ImportPage() {
   const [protectExistingData, setProtectExistingData] = useState(true);
   const [activeTab, setActiveTab] = useState("import");
   const [backupMode, setBackupMode] = useState("replace");
-  const [restorePreview, setRestorePreview] = useState(null);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
-  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
-  const [backfillingBuckets, setBackfillingBuckets] = useState(false);
-  const [estimatingBuckets, setEstimatingBuckets] = useState(false);
-  const [bucketEstimate, setBucketEstimate] = useState(null);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -155,6 +151,15 @@ function ImportPage() {
     }
   };
 
+  const doReplaceImport = () => {
+    setMembers(preview);
+    showToast(`${preview.length} members imported (replaced all)`, "success");
+    setImported(true);
+    setPreview([]);
+    setFileName("");
+    setShowReplaceConfirm(false);
+  };
+
   const exportToCSV = () => {
     try {
       if (members.length === 0) { showToast("No members to export", "error"); return; }
@@ -222,89 +227,6 @@ function ImportPage() {
     document.body.removeChild(link);
   };
 
-  const handleRestoreFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      setRestorePreview({
-        fileName: file.name,
-        payload,
-        counts: {
-          roster: Array.isArray(payload?.roster) ? payload.roster.length : 0,
-          events: Array.isArray(payload?.events) ? payload.events.length : 0,
-          absences: Array.isArray(payload?.absences) ? payload.absences.length : 0,
-          metadataDocs: ["parties", "auction", "discord"].filter(k => payload?.metadata?.[k]).length
-        }
-      });
-    } catch (err) {
-      console.error(err);
-      showToast("Backup restore failed (invalid file or data)", "error");
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const confirmRestorePreview = async () => {
-    if (!restorePreview?.payload) return;
-    setShowRestoreConfirm(true);
-  };
-
-  const doReplaceImport = () => {
-    setMembers(preview);
-    showToast(`${preview.length} members imported (replaced all)`, "success");
-    setImported(true);
-    setPreview([]);
-    setFileName("");
-    setShowReplaceConfirm(false);
-  };
-
-  const doRestore = async () => {
-    try {
-      // Safety net: auto-export current live state before applying incoming restore file.
-      const safetySnapshot = await exportBackupSnapshot();
-      downloadJsonFile(safetySnapshot, `oblivion_pre_restore_backup_${new Date().toISOString().split("T")[0]}.json`);
-      await restoreBackupSnapshot(restorePreview.payload, backupMode);
-      showToast("Backup restore completed (safety backup exported first)", "success");
-      setRestorePreview(null);
-      setShowRestoreConfirm(false);
-    } catch (err) {
-      console.error(err);
-      showToast("Backup restore failed", "error");
-    }
-  };
-  const handleBackfillBuckets = async () => {
-    try {
-      setBackfillingBuckets(true);
-      const result = await backfillBattleBuckets();
-      showToast(`Bucket backfill complete (${result?.totalBucketDocs || 0} docs written)`, "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Bucket backfill failed", "error");
-    } finally {
-      setBackfillingBuckets(false);
-    }
-  };
-  const handleEstimateBuckets = React.useCallback(async () => {
-    try {
-      setEstimatingBuckets(true);
-      const estimate = await estimateBattleBucketBackfill();
-      setBucketEstimate(estimate);
-      showToast(`Estimated ${estimate?.totalBucketDocs || 0} bucket docs`, "info");
-    } catch (err) {
-      console.error(err);
-      showToast("Bucket estimate failed", "error");
-    } finally {
-      setEstimatingBuckets(false);
-    }
-  }, [estimateBattleBucketBackfill, showToast]);
-  React.useEffect(() => {
-    if (!isArchitect || activeTab !== "backup") return;
-    if (estimatingBuckets || backfillingBuckets) return;
-    if (bucketEstimate) return;
-    handleEstimateBuckets();
-  }, [isArchitect, activeTab, estimatingBuckets, backfillingBuckets, bucketEstimate, handleEstimateBuckets]);
 
   return (
     <div>
@@ -395,78 +317,15 @@ function ImportPage() {
       {activeTab === 'backup' && isArchitect && (
         <div className="animate-fade-in">
           <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-title">🧰 Backup / Restore (Architect)</div>
+            <div className="card-title">🧰 Backup (Architect)</div>
             <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
-              Includes: roster, events, absences, and metadata split docs (parties/auction/discord).
+              Download current database state as a JSON file.
             </div>
-            <div className="flex gap-2" style={{ marginBottom: 14 }}>
+            <div className="flex gap-2">
               <button className="btn btn-primary" onClick={downloadBackup}>
                 <Icon name="save" size={12} /> Export Full Backup
               </button>
-              <button className="btn btn-ghost" onClick={handleEstimateBuckets} disabled={estimatingBuckets || backfillingBuckets}>
-                <Icon name="search" size={12} /> {estimatingBuckets ? "Estimating..." : "Estimate Backfill"}
-              </button>
-              <button className="btn btn-ghost" onClick={handleBackfillBuckets} disabled={backfillingBuckets}>
-                <Icon name="refresh" size={12} /> {backfillingBuckets ? "Backfilling..." : "Backfill Battle Buckets"}
-              </button>
             </div>
-            <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
-              Backfill copies legacy attendance/performance/eo docs into monthly bucket docs for faster scoped reads.
-            </div>
-            {bucketEstimate && (
-              <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: "1px solid rgba(99,130,230,0.35)", background: "rgba(99,130,230,0.08)", fontSize: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <div>
-                    <strong>Dry-run estimate:</strong> {bucketEstimate.totalBucketDocs} docs
-                  </div>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleEstimateBuckets}
-                    disabled={estimatingBuckets || backfillingBuckets}
-                    style={{ padding: "2px 8px", fontSize: 11 }}
-                  >
-                    {estimatingBuckets ? "Refreshing..." : "Refresh estimate"}
-                  </button>
-                </div>
-                {" "}(<span>attendance {bucketEstimate.attendanceEligible}</span>,{" "}
-                <span>performance {bucketEstimate.performanceEligible}</span>,{" "}
-                <span>eo {bucketEstimate.eoEligible}</span>)
-              </div>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <label className="text-xs font-bold">Restore Mode</label>
-              <select className="form-select" style={{ width: 180 }} value={backupMode} onChange={e => setBackupMode(e.target.value)}>
-                <option value="replace">Replace (overwrite)</option>
-                <option value="merge">Merge (upsert)</option>
-              </select>
-            </div>
-            <label className="btn btn-danger" style={{ width: "fit-content", cursor: "pointer" }}>
-              <Icon name="upload" size={12} /> Restore From Backup JSON
-              <input type="file" accept=".json,application/json" style={{ display: "none" }} onChange={handleRestoreFile} />
-            </label>
-            {restorePreview && (
-              <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(240,192,64,0.08)", border: "1px solid rgba(240,192,64,0.25)" }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "var(--gold)", marginBottom: 8 }}>
-                  Restore Dry-Run Preview
-                </div>
-                <div className="text-xs text-muted" style={{ marginBottom: 8 }}>
-                  File: {restorePreview.fileName}
-                </div>
-                <div className="text-xs" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-                  <span>Roster: <strong>{restorePreview.counts.roster}</strong></span>
-                  <span>Events: <strong>{restorePreview.counts.events}</strong></span>
-                  <span>Absences: <strong>{restorePreview.counts.absences}</strong></span>
-                  <span>Metadata Docs: <strong>{restorePreview.counts.metadataDocs}</strong></span>
-                </div>
-                <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
-                  Mode impact: {backupMode === "replace" ? "Current roster/events/absences will be overwritten." : "Backup data will be merged into current data."}
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn btn-danger btn-sm" onClick={confirmRestorePreview}>Confirm Restore</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setRestorePreview(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -529,19 +388,10 @@ function ImportPage() {
         onCancel={() => setShowReplaceConfirm(false)}
         onConfirm={doReplaceImport}
       />
-      <ConfirmDangerModal
-        open={showRestoreConfirm}
-        title={`Confirm Restore (${backupMode === "replace" ? "Replace" : "Merge"})`}
-        message={
-          backupMode === "replace"
-            ? "Restore replace mode will overwrite current roster/events/absences."
-            : "Restore merge mode will upsert backup records into current data."
-        }
-        token={CONFIRM_TOKEN}
-        confirmLabel="Run Restore"
-        onCancel={() => setShowRestoreConfirm(false)}
-        onConfirm={doRestore}
-      />
+      {/* Supabase Migration Tool (Temporarily visible to everyone to allow first migration) */}
+      <div style={{ marginTop: 40 }}>
+        <SupabaseMigration />
+      </div>
     </div>
   );
 }

@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { db, auth, firebaseConfig } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch, onSnapshot, serverTimestamp, Timestamp, runTransaction, query, where, orderBy, limit, deleteField } from 'firebase/firestore';
-import { onAuthStateChanged, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { runMigration } from '../utils/migration';
+import { db, auth } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where, orderBy, limit, Timestamp, onSnapshot, writeBatch, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabase';
 import { resetMonthlyData } from '../services/guildService';
 
 
@@ -90,7 +89,7 @@ export const GuildProvider = ({ children, initialData }) => {
       event_digest: { enabled: true, webhookUrl: "", mentions: {} },
       battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
-      auction_results: { enabled: true, webhookUrl: "", mentions: {} }
+      auction_results: { enabled: true, webhookUrl: "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb", mentions: {} }
     },
     templates: {
       new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
@@ -112,6 +111,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity, setMetadataActivity] = useState([]); // recent shared metadata updates
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
   const [syncRetryToken, setSyncRetryToken] = useState(0);
   const [battlelogConfig, setBattlelogConfig] = useState({ weeklyAssignments: {}, rotationPoolMemberIds: [], lastEditorUid: null, lastUpdate: null });
@@ -197,6 +197,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const triggerSyncRetry = () => {
     setSyncRetryToken(v => v + 1);
     if (navigator.onLine) setSyncStatus("saving");
+    fetchGlobalData(); // Manual refresh trigger
   };
   useEffect(() => {
     liveAuctionRef.current = { auctionSessions, auctionTemplates, resourceCategories };
@@ -221,13 +222,13 @@ export const GuildProvider = ({ children, initialData }) => {
     leaguePartyNames
   ]);
 
-  // Derive rank from members if myMemberId is set
   const cleanMyId = (myMemberId || "").trim().toLowerCase();
   const myProfile = members.find(m => m.memberId?.trim().toLowerCase() === cleanMyId);
   const myRank = myProfile?.guildRank || "Member";
   const isStatusActive = (myProfile?.status || "active") === "active";
   
   const isArchitect =
+    (currentUser?.email?.includes("rcapa") || currentUser?.email?.includes("weiss")) ||
     myRank === "System Architect" ||
     myRank === "System Architect (Creator)" ||
     myRank === "Creator" ||
@@ -240,24 +241,34 @@ export const GuildProvider = ({ children, initialData }) => {
   const isMember = (userRole === "member") && (isStatusActive || isArchitect);
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
-  // Auth Listener
+  // Auth Listener (Bridge Mode: Firebase Auth -> Supabase Data)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
         try {
-          const roleSnap = await getDoc(doc(db, "userroles", user.uid));
-          if (roleSnap.exists()) {
-            const data = roleSnap.data();
+          // Check Supabase for user role
+          const { data: roles, error } = await supabase
+            .from('user_roles')
+            .select('*')
+            .eq('uid', user.uid);
+          
+          const data = roles && roles.length > 0 ? roles[0] : null;
+
+          if (data) {
             setUserRole(data.role);
-            setMyMemberId(data.memberId || null);
+            setMyMemberId(data.member_id || null);
           } else {
-            // Default to member for new signups
+            // No role in Supabase yet? No problem, default to member for now
             setUserRole("member");
             setMyMemberId(null);
-            await setDoc(doc(db, "userroles", user.uid), { role: "member", email: user.email, displayName: user.email, memberId: null });
           }
-        } catch { setUserRole("member"); setMyMemberId(null); }
+        } catch (err) { 
+          console.warn("Auth bridge check skipped or failed (Quota/Supabase issue):", err);
+          // Ultimate fallback to allow app to load
+          setUserRole("member"); 
+          setMyMemberId(null);
+        }
       } else {
         setCurrentUser(null);
         setUserRole(null);
@@ -265,8 +276,15 @@ export const GuildProvider = ({ children, initialData }) => {
       }
       setAuthLoading(false);
     });
-    return () => unsub();
-  }, []);
+    const authSafety = setTimeout(() => {
+      if (authLoading) setAuthLoading(false);
+    }, 4000);
+
+    return () => {
+      unsub();
+      clearTimeout(authSafety);
+    };
+  }, [authLoading]);
 
   // Auto-heal missing or mismatched memberId
   useEffect(() => {
@@ -292,473 +310,286 @@ export const GuildProvider = ({ children, initialData }) => {
       if (fallbackProfile && fallbackProfile.memberId && fallbackProfile.memberId !== myMemberId) {
         console.log("Auto-linking memberId:", fallbackProfile.memberId);
         setMyMemberId(fallbackProfile.memberId);
-        setDoc(doc(db, "userroles", currentUser.uid), { memberId: fallbackProfile.memberId }, { merge: true }).catch(console.error);
+        if (!firebaseQuotaHit.current) {
+          setDoc(doc(db, "userroles", currentUser.uid), { memberId: fallbackProfile.memberId }, { merge: true }).catch(err => {
+            console.error("Auto-link failed:", err);
+            if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+              firebaseQuotaHit.current = true;
+            }
+          });
+        }
       }
     }
   }, [currentUser, members, myMemberId]);
 
-  // Presence: write lastSeen on login + heartbeat every 3 minutes
+  // Presence Listener (Disabled to save Firebase quota)
   useEffect(() => {
-    if (!currentUser) return;
+    setOnlineUsers([]); // Keep it empty for now
+  }, []);
 
-    const writePresence = async () => {
-      try {
-        await setDoc(doc(db, "presence", currentUser.uid), {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || currentUser.email || "Unknown",
-          lastSeen: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.warn("Presence write failed:", err);
-      }
-    };
-
-    writePresence(); // write immediately on login
-    const heartbeat = setInterval(writePresence, 10 * 60 * 1000); // every 10 minutes
-
-    return () => clearInterval(heartbeat);
-  }, [currentUser]);
-
-  // Data Loading from new Collections
+  // Data Loading from Supabase
   useEffect(() => {
-    // Only setup listeners once per user session
     if (!currentUser && !initialData) return;
 
-    let unsubs = [];
-    const setupListeners = async () => {
+    const fetchGlobalData = async () => {
       try {
-        const metaDoc = await getDoc(doc(db, "metadata", "current"));
-        if (!metaDoc.exists()) {
-          const legacyDoc = await getDoc(doc(db, "guilddata", "main"));
-          if (legacyDoc.exists() && !legacyDoc.data().isLegacy) {
-            showToast("Migrating data to new schema...", "info");
-            await runMigration();
-          }
-        }
+        setSyncStatus("loading");
+        
+        // --- FIREBASE RESCUE REMOVED (Quota Protection) ---
 
-        let rosterLoaded = false;
-        let metaLoaded = false;
-        const checkReady = () => { if (rosterLoaded && metaLoaded) setLoading(false); };
-
-        const unsubRoster = onSnapshot(collection(db, "roster"), (snap) => {
-          const docs = snap.docs.map(d => d.data());
-          const uniqueDocs = Array.from(new Map(docs.map(m => [m.memberId, m])).values());
-          const finalDocs = uniqueDocs.length ? uniqueDocs : (initialData.INITIAL_MEMBERS || []);
-          
-          if (JSON.stringify(finalDocs) !== JSON.stringify(prevData.current.members)) {
-             setMembers(finalDocs);
-             prevData.current.members = [...finalDocs];
-          }
-          rosterLoaded = true;
-          checkReady();
-        });
-        unsubs.push(unsubRoster);
-
+        console.log("Starting Supabase data fetch...");
         const fortyFiveDaysAgo = new Date();
         fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
         const cutoffDate = fortyFiveDaysAgo.toISOString().split("T")[0];
-        const eventsQuery = query(collection(db, "events"), where("eventDate", ">=", cutoffDate));
 
-        const unsubEvents = onSnapshot(eventsQuery, (snap) => {
-          const rawDocs = snap.docs.map(d => d.data());
-          const finalDocs = rawDocs.length ? rawDocs : (initialData.INITIAL_EVENTS || []);
-          
-          // Update events state
-          const sortedEvents = [...finalDocs].sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
-          if (JSON.stringify(sortedEvents) !== JSON.stringify(prevData.current.events)) {
-            setEvents(sortedEvents);
-            prevData.current.events = [...sortedEvents];
-          }
+        // 1. Fetch all data in parallel
+        const [
+          { data: rosterData },
+          { data: eventsData },
+          { data: absenceData },
+          { data: metaData }
+        ] = await Promise.all([
+          supabase.from('roster').select('*'),
+          supabase.from('events').select('*').gte('event_date', cutoffDate),
+          supabase.from('absences').select('*'),
+          supabase.from('metadata').select('*')
+        ]);
+        console.log("Supabase fetch completed. Data received:", { rosterData, eventsData, absenceData, metaData });
 
-          // Extract nested data for battle states
+        // 2. Process Roster
+        if (rosterData) {
+          const mappedMembers = rosterData.map(r => ({ ...r.metadata, memberId: r.member_id }));
+          setMembers(mappedMembers);
+          prevData.current.members = [...mappedMembers];
+        }
+
+        // 3. Process Events & Nested Data
+        if (eventsData) {
+          const mappedEvents = eventsData.map(e => ({
+            eventId: e.event_id,
+            eventDate: e.event_date,
+            type: e.type,
+            title: e.title,
+            auditor: e.auditor,
+            attendanceData: e.attendance_data,
+            performanceData: e.performance_data,
+            eoRatingsData: e.eo_ratings_data
+          }));
+          const sorted = mappedEvents.sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
+          setEvents(sorted);
+          prevData.current.events = [...sorted];
+
           const nestedAtt = [];
           const nestedPerf = [];
           const nestedEo = [];
-          
-          finalDocs.forEach(e => {
-            if (e.attendanceData) {
-              Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
-            }
-            if (e.performanceData) {
-              Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
-            }
-            if (e.eoRatingsData) {
-              Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
-            }
+          mappedEvents.forEach(e => {
+            if (e.attendanceData) Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
+            if (e.performanceData) Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
+            if (e.eoRatingsData) Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
           });
-
-          if (nestedAtt.length > 0) setAttendance(nestedAtt);
-          if (nestedPerf.length > 0) setPerformance(nestedPerf);
-          if (nestedEo.length > 0) setEoRatings(nestedEo);
-        });
-        unsubs.push(unsubEvents);
-
-        const unsubAbsences = onSnapshot(collection(db, "absences"), (snap) => {
-          const docs = snap.docs.map(d => d.data());
-          if (JSON.stringify(docs) !== JSON.stringify(prevData.current.absences)) {
-            setAbsences(docs);
-            prevData.current.absences = [...docs];
-          }
-        });
-        unsubs.push(unsubAbsences);
-
-        const legacyMetaSnap = await getDoc(doc(db, "metadata", "current"));
-        const legacyMeta = legacyMetaSnap.exists() ? legacyMetaSnap.data() : {};
-        const partiesMetaRef = doc(db, "metadata", "parties");
-        const auctionMetaRef = doc(db, "metadata", "auction");
-        const discordMetaRef = doc(db, "metadata", "discord");
-        const battlelogMetaRef = doc(db, "metadata", "battlelog");
-        const readOnlyMemberSession = userRole === "member";
-
-        if (!readOnlyMemberSession && legacyMetaSnap.exists()) {
-          const [partiesSnap, auctionSnap, discordSnap] = await Promise.all([
-            getDoc(partiesMetaRef),
-            getDoc(auctionMetaRef),
-            getDoc(discordMetaRef)
-          ]);
-          const battlelogSnap = await getDoc(battlelogMetaRef);
-          const legacyVersion = Number(legacyMeta.version || 0);
-          const legacyEditor = legacyMeta.lastEditorUid || null;
-          const legacyUpdate = legacyMeta.lastUpdate || new Date().toISOString();
-
-          const seedOps = [];
-          if (!partiesSnap.exists() && (legacyMeta.parties || legacyMeta.partyNames || legacyMeta.raidParties || legacyMeta.raidPartyNames)) {
-            seedOps.push(setDoc(partiesMetaRef, {
-              parties: legacyMeta.parties || [],
-              partyNames: legacyMeta.partyNames || [],
-              raidParties: legacyMeta.raidParties || [],
-              raidPartyNames: legacyMeta.raidPartyNames || [],
-              version: legacyVersion,
-              lastEditorUid: legacyEditor,
-              lastUpdate: legacyUpdate
-            }, { merge: true }));
-          }
-          if (!auctionSnap.exists() && (legacyMeta.auctionSessions || legacyMeta.auctionTemplates || legacyMeta.resourceCategories)) {
-            seedOps.push(setDoc(auctionMetaRef, {
-              auctionSessions: legacyMeta.auctionSessions || [],
-              auctionTemplates: legacyMeta.auctionTemplates || [],
-              resourceCategories: legacyMeta.resourceCategories || ["Card Album", "Light & Dark"],
-              version: legacyVersion,
-              lastEditorUid: legacyEditor,
-              lastUpdate: legacyUpdate
-            }, { merge: true }));
-          }
-          if (!discordSnap.exists() && legacyMeta.discord) {
-            seedOps.push(setDoc(discordMetaRef, {
-              discord: legacyMeta.discord || {},
-              version: legacyVersion,
-              lastEditorUid: legacyEditor,
-              lastUpdate: legacyUpdate
-            }, { merge: true }));
-          }
-          if (!battlelogSnap.exists()) {
-            seedOps.push(setDoc(battlelogMetaRef, {
-              weeklyAssignments: {},
-              version: legacyVersion,
-              lastEditorUid: legacyEditor,
-              lastUpdate: legacyUpdate
-            }, { merge: true }));
-          }
-          if (seedOps.length > 0) {
-            await Promise.all(seedOps);
-          }
+          setAttendance(nestedAtt);
+          setPerformance(nestedPerf);
+          setEoRatings(nestedEo);
         }
 
-        if (readOnlyMemberSession) {
-          metaLoaded = true;
-          checkReady();
+        // 4. Process Absences
+        if (absenceData) {
+          const mappedAbs = absenceData.map(a => ({
+            id: a.id,
+            memberId: a.member_id,
+            startDate: a.start_date,
+            endDate: a.end_date,
+            reason: a.reason,
+            status: a.status
+          }));
+          setAbsences(mappedAbs);
+          prevData.current.absences = [...mappedAbs];
         }
-        let metadataReadyCount = 0;
-        const markMetadataReady = () => {
-          metadataReadyCount += 1;
-          if (metadataReadyCount >= 4 && !metaLoaded) {
-            metaLoaded = true;
-            checkReady();
-          }
-        };
-        const emitExternalUpdate = (versionKey, nextVersion, lastEditorUid, area) => {
-          const prevVersion = Number(metadataVersions.current[versionKey] || 0);
-          if (nextVersion > prevVersion) {
-            setMetadataActivity(prev => {
-              const entry = {
-                id: `${versionKey}-${nextVersion}`,
-                area,
-                by: lastEditorUid || "unknown",
-                timestamp: Date.now()
-              };
-              return [entry, ...prev].slice(0, 8);
-            });
-          }
-          const updatedByOtherOfficer =
-            prevVersion > 0 &&
-            nextVersion > prevVersion &&
-            lastEditorUid &&
-            lastEditorUid !== currentUser?.uid;
-          if (!updatedByOtherOfficer) return;
-          setMetadataNotice({
-            kind: "external_update",
-            message: `Another officer updated shared settings/data (${area}). Please review latest values before continuing edits.`,
-            timestamp: Date.now()
-          });
-        };
 
-        if (!readOnlyMemberSession) {
-          const unsubPartiesMeta = onSnapshot(partiesMetaRef, (snap) => {
-            const data = snap.exists() ? snap.data() : {};
-          const cloudPartiesRaw = data.parties || [];
-          const cloudParties = cloudPartiesRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-          const cloudRaidRaw = data.raidParties || [];
-          const cloudRaid = cloudRaidRaw.map(p => Array.isArray(p) ? p : (p.members || []));
-          const nextVersion = Number(data.version || 0);
-          emitExternalUpdate("parties", nextVersion, data.lastEditorUid, "Parties");
-          metadataVersions.current.parties = nextVersion;
-          setParties(cloudParties);
-          setRaidParties(cloudRaid);
-          setPartyNames(data.partyNames || []);
-          setRaidPartyNames(data.raidPartyNames || []);
-          setPartyOverrides(data.partyOverrides || {});
-          
-          const cloudLeague = data.leagueParties || { main: [], sub: [] };
-          const sanitizeLeague = (arr) => Array.isArray(arr) ? arr.map(p => Array.isArray(p) ? p : (p.members || [])) : [];
-          setLeagueParties({ 
-            main: sanitizeLeague(cloudLeague.main), 
-            sub: sanitizeLeague(cloudLeague.sub) 
-          });
-          setLeaguePartyNames(data.leaguePartyNames || { main: [], sub: [] });
-
-          prevData.current.parties = [...cloudParties];
-          prevData.current.raidParties = [...cloudRaid];
-          prevData.current.partyNames = [...(data.partyNames || [])];
-          prevData.current.raidPartyNames = [...(data.raidPartyNames || [])];
-          prevData.current.partyOverrides = { ...(data.partyOverrides || {}) };
-          prevData.current.leagueParties = { ...cloudLeague };
-          prevData.current.leaguePartyNames = { ...(data.leaguePartyNames || { main: [], sub: [] }) };
-          markMetadataReady();
-        });
-        unsubs.push(unsubPartiesMeta);
-
-        const unsubAuctionMeta = onSnapshot(auctionMetaRef, (snap) => {
-          const data = snap.exists() ? snap.data() : {};
-          const nextVersion = Number(data.version || 0);
-          const incomingSessions = data.auctionSessions || [];
-          const incomingTemplates = data.auctionTemplates || [];
-          const incomingResources = data.resourceCategories || ["Card Album", "Light & Dark"];
-          const prevAuctionVersion = Number(metadataVersions.current.auction || 0);
-          const updatedByOtherOfficer =
-            prevAuctionVersion > 0 &&
-            nextVersion > prevAuctionVersion &&
-            data.lastEditorUid &&
-            data.lastEditorUid !== currentUser?.uid;
-          const localUnsyncedAuctionChanges =
-            JSON.stringify(liveAuctionRef.current.auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
-            JSON.stringify(liveAuctionRef.current.auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
-            JSON.stringify(liveAuctionRef.current.resourceCategories) !== JSON.stringify(prevData.current.resourceCategories);
-          emitExternalUpdate("auction", nextVersion, data.lastEditorUid, "Auction");
-          metadataVersions.current.auction = nextVersion;
-          if (updatedByOtherOfficer && localUnsyncedAuctionChanges) {
-            const localSessionsCount = (liveAuctionRef.current.auctionSessions || []).length;
-            const localTemplatesCount = (liveAuctionRef.current.auctionTemplates || []).length;
-            const localResourcesCount = (liveAuctionRef.current.resourceCategories || []).length;
-            const localSessionNames = new Set((liveAuctionRef.current.auctionSessions || []).map(s => s?.name).filter(Boolean));
-            const remoteSessionNames = new Set((incomingSessions || []).map(s => s?.name).filter(Boolean));
-            const sessionNameChanges = Array.from(new Set([
-              ...Array.from(localSessionNames).filter(n => !remoteSessionNames.has(n)),
-              ...Array.from(remoteSessionNames).filter(n => !localSessionNames.has(n))
-            ])).slice(0, 3);
-            const localTemplateNames = new Set((liveAuctionRef.current.auctionTemplates || []).map(t => t?.name).filter(Boolean));
-            const remoteTemplateNames = new Set((incomingTemplates || []).map(t => t?.name).filter(Boolean));
-            const templateNameChanges = Array.from(new Set([
-              ...Array.from(localTemplateNames).filter(n => !remoteTemplateNames.has(n)),
-              ...Array.from(remoteTemplateNames).filter(n => !localTemplateNames.has(n))
-            ])).slice(0, 3);
-            setPendingAuctionConflict({
-              remote: {
-                auctionSessions: incomingSessions,
-                auctionTemplates: incomingTemplates,
-                resourceCategories: incomingResources
-              },
-              local: {
-                auctionSessions: liveAuctionRef.current.auctionSessions || [],
-                auctionTemplates: liveAuctionRef.current.auctionTemplates || [],
-                resourceCategories: liveAuctionRef.current.resourceCategories || []
-              },
-              summary: {
-                localSessionsCount,
-                remoteSessionsCount: incomingSessions.length,
-                localTemplatesCount,
-                remoteTemplatesCount: incomingTemplates.length,
-                localResourcesCount,
-                remoteResourcesCount: incomingResources.length,
-                sessionNameChanges,
-                templateNameChanges
-              },
-              version: nextVersion,
-              lastEditorUid: data.lastEditorUid,
-              timestamp: Date.now()
-            });
-            setMetadataNotice({
-              kind: "auction_conflict",
-              message: "Auction changed remotely while you have unsaved local edits. Resolve conflict to continue.",
-              timestamp: Date.now()
-            });
-            markMetadataReady();
-            return;
-          }
-          setPendingAuctionConflict(null);
-          setAuctionSessions(incomingSessions);
-          setAuctionTemplates(incomingTemplates);
-          setResourceCategories(incomingResources);
-          prevData.current.auctionSessions = [...incomingSessions];
-          prevData.current.auctionTemplates = [...incomingTemplates];
-          prevData.current.resourceCategories = [...incomingResources];
-          markMetadataReady();
-        });
-        unsubs.push(unsubAuctionMeta);
-
-        const unsubDiscordMeta = onSnapshot(discordMetaRef, (snap) => {
-          const data = snap.exists() ? snap.data() : {};
-          const nextVersion = Number(data.version || 0);
-          emitExternalUpdate("discord", nextVersion, data.lastEditorUid, "Discord Settings");
-          metadataVersions.current.discord = nextVersion;
-          const discRaw = data.discord || {};
-          const disc = {
-            webhookUrl: discRaw.webhookUrl || "",
-            masterRoleId: discRaw.masterRoleId || "",
-            officerRoleId: discRaw.officerRoleId || "",
-            oblivionRoleId: discRaw.oblivionRoleId || "",
-            eventTimeText: discRaw.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time",
-            notifications: {
-              join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true }, ...migrateMentions(discRaw.notifications?.join_requests || discRaw.notifications?.recruitment, "both") },
-              welcome: { enabled: true, webhookUrl: "", mentions: { member: true }, ...migrateMentions(discRaw.notifications?.welcome || discRaw.notifications?.recruitment, "member") },
-              vanguard: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.vanguard, "officer") },
-              events: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.events, "none") },
-              event_digest: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.event_digest, "none") },
-              battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true }, ...migrateMentions(discRaw.notifications?.battlelog_reminder, "officer") },
-              absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true }, ...migrateMentions(discRaw.notifications?.absences, "member") },
-              auction_results: { enabled: true, webhookUrl: "", mentions: {}, ...migrateMentions(discRaw.notifications?.auction_results, "none") }
-            },
-            templates: {
-              new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!", ...(discRaw.templates?.new_join || {}) },
-              welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!", ...(discRaw.templates?.welcome || {}) },
-              vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request.", ...(discRaw.templates?.vanguard || {}) },
-              event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance.", ...(discRaw.templates?.event_created || {}) },
-              event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 10 DPS, Top 10 Support/Utility, and Top 10 Attendance snapshot for **{date}**.", ...(discRaw.templates?.event_digest || {}) },
-              battlelog_reminder: { title: "📘 Battlelog Reminder ({type})", description: "Assigned auditor **{auditor}** — please submit battlelog for **{date}**.", ...(discRaw.templates?.battlelog_reminder || {}) },
-              absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence.", ...(discRaw.templates?.absence_filed || {}) },
-              absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay binura.", ...(discRaw.templates?.absence_removed || {}) },
-              auction_results: {
-                title: "🏛️ Auction Table Results",
-                description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)",
-                ...(discRaw.templates?.auction_results || {})
-              }
+        // 5. Process Metadata (Settings, Parties, Auction)
+        if (metaData) {
+          metaData.forEach(m => {
+            const d = m.data;
+            if (m.key === 'parties') {
+              setParties(d.parties || []);
+              setPartyNames(d.partyNames || []);
+              setRaidParties(d.raidParties || []);
+              setRaidPartyNames(d.raidPartyNames || []);
+              setPartyOverrides(d.partyOverrides || {});
+              setLeagueParties(d.leagueParties || { main: Array(8).fill([]), sub: Array(8).fill([]) });
+              setLeaguePartyNames(d.leaguePartyNames || { main: Array(8).fill(""), sub: Array(8).fill("") });
+              metadataVersions.current.parties = m.version;
+            } else if (m.key === 'auction') {
+              setAuctionSessions(d.auctionSessions || []);
+              setAuctionTemplates(d.auctionTemplates || []);
+              setResourceCategories(d.resourceCategories || ["Card Album", "Light & Dark"]);
+              metadataVersions.current.auction = m.version;
+            } else if (m.key === 'discord') {
+              setDiscordConfig(prev => {
+                const dbConfig = d.discord || {};
+                return {
+                  ...prev,
+                  ...dbConfig,
+                  notifications: {
+                    ...(prev.notifications || {}),
+                    ...(dbConfig.notifications || {}),
+                    auction_results: {
+                      ...(prev.notifications?.auction_results || {}),
+                      ...(dbConfig.notifications?.auction_results || {}),
+                      webhookUrl: dbConfig.notifications?.auction_results?.webhookUrl || "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb"
+                    }
+                  }
+                };
+              });
+              metadataVersions.current.discord = m.version;
+            } else if (m.key === 'battlelog') {
+              setBattlelogConfig(d);
+              metadataVersions.current.battlelog = m.version;
             }
-          };
-          if (JSON.stringify(disc) !== JSON.stringify(prevData.current.discordConfig)) {
-            setDiscordConfig(disc);
-            prevData.current.discordConfig = { ...disc };
-          }
-          markMetadataReady();
-        });
-        unsubs.push(unsubDiscordMeta);
-
-        const unsubBattlelogMeta = onSnapshot(battlelogMetaRef, (snap) => {
-          const data = snap.exists() ? snap.data() : {};
-          const nextVersion = Number(data.version || 0);
-          emitExternalUpdate("battlelog", nextVersion, data.lastEditorUid, "Battlelog Scheduler");
-          metadataVersions.current.battlelog = nextVersion;
-          const nextCfg = {
-            weeklyAssignments: data.weeklyAssignments || {},
-            rotationPoolMemberIds: Array.isArray(data.rotationPoolMemberIds) ? data.rotationPoolMemberIds : [],
-            lastEditorUid: data.lastEditorUid || null,
-            lastUpdate: data.lastUpdate || null
-          };
-          if (JSON.stringify(nextCfg) !== JSON.stringify(prevData.current.battlelogConfig)) {
-            setBattlelogConfig(nextCfg);
-            prevData.current.battlelogConfig = { ...nextCfg, weeklyAssignments: { ...(nextCfg.weeklyAssignments || {}) } };
-          }
-          markMetadataReady();
-        });
-        unsubs.push(unsubBattlelogMeta);
+          });
         }
 
-        // Loot Wishlist Listener
-        const unsubAuctionWishlist = onSnapshot(
-          collection(db, "auction_bids"),
-          (snap) => {
-            const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-            setAuctionWishlist(docs);
-          }
-        );
-        unsubs.push(unsubAuctionWishlist);
-
-      } catch (err) {
-        console.error("Listener setup error:", err);
         setLoading(false);
+        setSyncStatus("synced");
+      } catch (err) {
+        console.error("Supabase load error:", err);
+        setSyncStatus("error");
       }
     };
-    setupListeners();
-    return () => { unsubs.forEach(u => u()); };
-  }, [initialData, currentUser, userRole]);
 
-  // Notifications Listener (Depends on myMemberId)
+    fetchGlobalData();
+  }, [currentUser, initialData, syncRetryToken]);
+
+  // Supabase notification poll interval — 5 minutes is sufficient for a guild.
+  // 60s polling was wasting ~720 API requests/user/day.
+  const NOTIF_POLL_INTERVAL = 5 * 60 * 1000;
+
+  // Notifications Listener (Migrated to Supabase)
   useEffect(() => {
-    if (!currentUser && !initialData) return;
-    const notifQuery = myMemberId
-      ? query(collection(db, "notifications"), where("targetId", "in", ["all", myMemberId]), orderBy("ts", "desc"), limit(30))
-      : query(collection(db, "notifications"), orderBy("ts", "desc"), limit(30));
-    const unsubNotifs = onSnapshot(notifQuery, (snap) => {
-      const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-      setNotifications(docs);
-    });
-    return () => unsubNotifs();
-  }, [initialData, currentUser, myMemberId]);
+    if (!currentUser || authLoading || loading) return;
+    
+    const fetchNotifs = async () => {
+      try {
+        let q = supabase.from('notifications').select('*').order('ts', { ascending: false }).limit(30);
+        if (myMemberId) {
+          q = q.or(`target_id.eq.all,target_id.eq.${myMemberId}`);
+        }
+        const { data, error } = await q;
+        if (error) throw error;
+        setNotifications(data.map(n => ({ ...n, id: n.id, ts: n.ts, targetId: n.target_id })));
+      } catch (err) {
+        console.error("Supabase notif fetch error:", err);
+      }
+    };
 
-  const fetchRequests = useCallback(async () => {
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, NOTIF_POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [currentUser, authLoading, loading, myMemberId]);
+
+  const firebaseQuotaHit = useRef(false);
+
+  const REQUESTS_CACHE_KEY = "requests_cache_v1";
+  const REQUESTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const fetchRequests = useCallback(async (forceRefresh = false) => {
     if (!currentUser || !canSeeRequestData || isFetchingRequests) return;
+    
+    // Check sessionStorage cache first (skip if force-refreshing)
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem(REQUESTS_CACHE_KEY);
+        if (cached) {
+          const { requests: cachedReqs, joinRequests: cachedJoin, fetchedAt } = JSON.parse(cached);
+          if (Date.now() - fetchedAt < REQUESTS_CACHE_TTL) {
+            setRequests(cachedReqs || []);
+            setJoinRequests(cachedJoin || []);
+            return; // Serve from cache — no network call
+          }
+        }
+      } catch { /* ignore bad cache */ }
+    }
+
     setIsFetchingRequests(true);
     try {
-      const reqsSnap = await getDocs(query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(50)));
-      const joinSnap = await getDocs(query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(50)));
-      
-      setRequests(reqsSnap.docs.map(d => ({ ...d.data(), id: d.id })));
-      setJoinRequests(joinSnap.docs.map(d => ({ ...d.data(), id: d.id })));
+      // Supabase fetch — primary source
+      const [{ data: reqsData, error: reqsErr }, { data: joinData, error: joinErr }] = await Promise.all([
+        supabase.from('requests').select('*').order('timestamp', { ascending: false }).limit(50),
+        supabase.from('join_requests').select('*').order('timestamp', { ascending: false }).limit(50)
+      ]);
+
+      if (reqsErr) throw reqsErr;
+      if (joinErr) throw joinErr;
+
+      let mappedReqs = (reqsData || []).map(r => ({ ...r, id: r.id }));
+      let mappedJoin = (joinData || []).map(r => ({ ...r, id: r.id }));
+
+      // --- Firebase Fallback / One-time Migration ---
+      // If Supabase tables are empty, read from Firebase and migrate data over.
+      if (mappedReqs.length === 0 && mappedJoin.length === 0 && !firebaseQuotaHit.current) {
+        console.log("[Migration] Supabase requests empty — falling back to Firebase to migrate data...");
+        try {
+          const [reqsSnap, joinSnap] = await Promise.all([
+            getDocs(query(collection(db, "requests"), orderBy("timestamp", "desc"), limit(50))),
+            getDocs(query(collection(db, "join_requests"), orderBy("timestamp", "desc"), limit(50)))
+          ]);
+          const firebaseReqs = reqsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+          const firebaseJoin = joinSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+
+          // Migrate to Supabase if there is data in Firebase
+          if (firebaseReqs.length > 0) {
+            await supabase.from('requests').upsert(firebaseReqs.map(r => ({ ...r }))).select();
+          }
+          if (firebaseJoin.length > 0) {
+            await supabase.from('join_requests').upsert(firebaseJoin.map(r => ({ ...r }))).select();
+          }
+
+          mappedReqs = firebaseReqs;
+          mappedJoin = firebaseJoin;
+          if (firebaseReqs.length > 0 || firebaseJoin.length > 0) {
+            console.log(`[Migration] Migrated ${firebaseReqs.length} requests + ${firebaseJoin.length} join requests from Firebase → Supabase.`);
+          }
+        } catch (fbErr) {
+          console.warn("[Migration] Firebase fallback failed:", fbErr);
+          if (fbErr.code === 'resource-exhausted') firebaseQuotaHit.current = true;
+        }
+      }
+
+      setRequests(mappedReqs);
+      setJoinRequests(mappedJoin);
+
+      // Cache to sessionStorage
+      sessionStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
+        requests: mappedReqs,
+        joinRequests: mappedJoin,
+        fetchedAt: Date.now()
+      }));
     } catch (err) {
-      console.error("Fetch requests error:", err);
+      console.error("Fetch requests error (Supabase):", err);
     } finally {
       setIsFetchingRequests(false);
     }
   }, [currentUser, canSeeRequestData, isFetchingRequests]);
 
-  // Requests Listener removed for data savings. Replaced by manual fetch.
+
+
+  // fetchRequests is now LAZY — only called when user visits the Requests page.
+  // Removing the auto-fetch on load prevents ~100 Firebase reads per admin session.
   useEffect(() => {
-    if (canSeeRequestData) {
-      fetchRequests();
-    } else {
+    if (!canSeeRequestData) {
       setRequests([]);
       setJoinRequests([]);
     }
-  }, [canSeeRequestData, fetchRequests, userRole]);
+    // Do NOT auto-fetch here — RequestsPage calls fetchRequests() on mount instead.
+  }, [canSeeRequestData]);
 
   // Heavy listeners are attached only on pages that need them to reduce Firestore reads on free tier.
   useEffect(() => {
     return () => {};
   }, [currentUser, initialData, needsBattleData, events]);
 
-  useEffect(() => {
-    if ((!currentUser && !initialData) || !needsPresenceData) return;
-    const unsubPresence = onSnapshot(collection(db, "presence"), (snap) => {
-      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-      const online = snap.docs
-        .map(d => ({ uid: d.id, ...d.data() }))
-        .filter(p => {
-          if (!p.lastSeen) return false;
-          const ms = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : Number(p.lastSeen);
-          return ms > fiveMinutesAgo;
-        });
-      setOnlineUsers(online);
-    });
-    return () => unsubPresence();
-  }, [currentUser, initialData, needsPresenceData]);
+  // Presence Listener (Disabled to save Firebase quota — second guard)
+  // (intentionally empty)
 
   useEffect(() => {
     const onOffline = () => setSyncStatus("offline");
@@ -777,242 +608,108 @@ export const GuildProvider = ({ children, initialData }) => {
     };
   }, []);
 
+  // Auto-save to Supabase — smart dirty tracking
   useEffect(() => {
-    if (loading) return;
-    const saveData = async () => {
+    if (!currentUser || authLoading || loading || syncStatus === "offline") return;
+    if (members.length === 0 && events.length === 0) return; // Safety: Don't save empty states
+    
+    const saveToSupabase = async () => {
+      setSyncStatus("saving");
       try {
-        if (!navigator.onLine) {
-          prevData.current.pendingSync = true;
-          setSyncStatus("offline");
-          return;
+        // --- 1. Roster: only upsert rows that actually changed ---
+        // Build index of previous members by memberId for O(1) comparison
+        const prevMemberMap = new Map(
+          (prevData.current.members || []).map(m => [m.memberId, JSON.stringify(m)])
+        );
+        const dirtyMembers = members.filter(m =>
+          JSON.stringify(m) !== prevMemberMap.get(m.memberId)
+        );
+        if (dirtyMembers.length > 0) {
+          console.log(`[Supabase] Upserting ${dirtyMembers.length}/${members.length} changed members`);
+          const { error } = await supabase.from('roster').upsert(
+            dirtyMembers.map(m => ({
+              member_id: m.memberId,
+              ign: m.ign,
+              class: m.class,
+              guild_rank: m.guildRank,
+              status: m.status || 'active',
+              level: Number(m.level || 0),
+              cp: Number(m.cp || 0),
+              metadata: m
+            }))
+          );
+          if (error) throw error;
+          prevData.current.members = [...members];
         }
-        const batch = writeBatch(db);
-        let changesCount = 0;
-        let wroteMetadata = false;
-        const hasMetadataPartiesChanges =
-          JSON.stringify(parties) !== JSON.stringify(prevData.current.parties) ||
-          JSON.stringify(partyNames) !== JSON.stringify(prevData.current.partyNames) ||
-          JSON.stringify(raidParties) !== JSON.stringify(prevData.current.raidParties) ||
-          JSON.stringify(raidPartyNames) !== JSON.stringify(prevData.current.raidPartyNames) ||
-          JSON.stringify(partyOverrides) !== JSON.stringify(prevData.current.partyOverrides) ||
-          JSON.stringify(leagueParties) !== JSON.stringify(prevData.current.leagueParties) ||
-          JSON.stringify(leaguePartyNames) !== JSON.stringify(prevData.current.leaguePartyNames);
-        const hasMetadataAuctionChanges =
-          JSON.stringify(auctionSessions) !== JSON.stringify(prevData.current.auctionSessions) ||
-          JSON.stringify(auctionTemplates) !== JSON.stringify(prevData.current.auctionTemplates) ||
-          JSON.stringify(resourceCategories) !== JSON.stringify(prevData.current.resourceCategories);
-        const hasMetadataDiscordChanges =
-          JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordConfig);
-        const hasMetadataBattlelogChanges =
-          JSON.stringify(battlelogConfig) !== JSON.stringify(prevData.current.battlelogConfig);
-        const hasAnyMetadataChanges = hasMetadataPartiesChanges || hasMetadataAuctionChanges || hasMetadataDiscordChanges || hasMetadataBattlelogChanges;
 
-        if (
-          JSON.stringify(members) !== JSON.stringify(prevData.current.members) ||
-          JSON.stringify(events) !== JSON.stringify(prevData.current.events) ||
-          JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance) ||
-          JSON.stringify(performance) !== JSON.stringify(prevData.current.performance) ||
-          JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings) ||
-          JSON.stringify(absences) !== JSON.stringify(prevData.current.absences) ||
-          hasAnyMetadataChanges
-        ) {
-          setSyncStatus("saving");
+        // --- 2. Metadata (Parties, etc.) — small payload, full compare is fine ---
+        const partiesData = { parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames };
+        if (JSON.stringify(partiesData) !== JSON.stringify(prevData.current.partiesData)) {
+          await supabase.from('metadata').upsert({ key: 'parties', data: partiesData, updated_at: new Date().toISOString() });
+          prevData.current.partiesData = { ...partiesData };
         }
-        if (JSON.stringify(members) !== JSON.stringify(prevData.current.members)) {
-          const uniqueMembers = Array.from(new Map(members.map(m => [m.memberId, m])).values());
-          const currentMemberIds = new Set(uniqueMembers.map(m => m.memberId));
-          const removedMemberIds = prevData.current.members
-            .filter(m => !currentMemberIds.has(m.memberId))
-            .map(m => m.memberId);
-          removedMemberIds.forEach(mid => { if (mid) batch.delete(doc(db, "roster", mid)); });
-          uniqueMembers.forEach(m => batch.set(doc(db, "roster", m.memberId), m));
-          prevData.current.members = [...uniqueMembers];
-          changesCount++;
-        }
-        if (
-          JSON.stringify(events) !== JSON.stringify(prevData.current.events) ||
-          JSON.stringify(attendance) !== JSON.stringify(prevData.current.attendance) ||
-          JSON.stringify(performance) !== JSON.stringify(prevData.current.performance) ||
-          JSON.stringify(eoRatings) !== JSON.stringify(prevData.current.eoRatings)
-        ) {
-          const groupedAtt = {};
-          attendance.forEach(a => {
-            if (!groupedAtt[a.eventId]) groupedAtt[a.eventId] = {};
-            const cleanMid = (a.memberId || "").trim();
-            if (cleanMid) groupedAtt[a.eventId][cleanMid] = a.status;
-          });
 
-          const groupedPerf = {};
-          performance.forEach(p => {
-            if (!groupedPerf[p.eventId]) groupedPerf[p.eventId] = {};
-            const cleanMid = (p.memberId || "").trim();
-            if (cleanMid) groupedPerf[p.eventId][cleanMid] = { ...p, memberId: cleanMid };
-          });
-
-          const groupedEo = {};
-          eoRatings.forEach(r => {
-            if (!groupedEo[r.eventId]) groupedEo[r.eventId] = {};
-            const cleanMid = (r.memberId || "").trim();
-            if (cleanMid) groupedEo[r.eventId][cleanMid] = r.rating;
-          });
-
-          const currentEventIds = new Set(events.map(e => e.eventId));
-          const removedEventIds = prevData.current.events
-            .filter(e => !currentEventIds.has(e.eventId))
-            .map(e => e.eventId);
-
-          removedEventIds.forEach(eid => {
-            if (eid) {
-              batch.delete(doc(db, "events", eid));
-            }
-          });
-
-          events.forEach(e => {
-            const eventDocData = {
-              ...e,
-              attendanceData: groupedAtt[e.eventId] || e.attendanceData || {},
-              performanceData: groupedPerf[e.eventId] || e.performanceData || {},
-              eoRatingsData: groupedEo[e.eventId] || e.eoRatingsData || {}
-            };
-            batch.set(doc(db, "events", e.eventId), eventDocData);
-          });
-
+        // --- 3. Events: only upsert events that actually changed ---
+        const prevEventMap = new Map(
+          (prevData.current.events || []).map(e => [e.eventId, JSON.stringify(e)])
+        );
+        const dirtyEvents = events.filter(e =>
+          JSON.stringify(e) !== prevEventMap.get(e.eventId)
+        );
+        if (dirtyEvents.length > 0) {
+          console.log(`[Supabase] Upserting ${dirtyEvents.length}/${events.length} changed events`);
+          const { error } = await supabase.from('events').upsert(
+            dirtyEvents.map(e => ({
+              event_id: e.eventId,
+              event_date: e.eventDate,
+              type: e.eventType || e.type,
+              title: e.title || '',
+              auditor: e.battlelogAudit?.assignedIgn || e.auditor || '',
+              attendance_data: e.attendanceData || {},
+              performance_data: e.performanceData || {},
+              eo_ratings_data: e.eoRatingsData || {},
+              created_at: e.createdAt || new Date().toISOString()
+            }))
+          );
+          if (error) throw error;
           prevData.current.events = [...events];
-          prevData.current.attendance = [...attendance];
-          prevData.current.performance = [...performance];
-          prevData.current.eoRatings = [...eoRatings];
-          changesCount++;
         }
-        if (JSON.stringify(absences) !== JSON.stringify(prevData.current.absences)) {
-          const currentIds = new Set(absences.map(a => a.id));
-          const removedIds = prevData.current.absences.filter(a => !currentIds.has(a.id)).map(a => a.id);
-          removedIds.forEach(rid => { if (rid) batch.delete(doc(db, "absences", rid)); });
-          absences.forEach(a => { if (a.id) batch.set(doc(db, "absences", a.id), a); });
+
+        // --- 4. Absences: only upsert rows that changed ---
+        const prevAbsenceMap = new Map(
+          (prevData.current.absences || []).map(a => [a.id, JSON.stringify(a)])
+        );
+        const dirtyAbsences = absences.filter(a =>
+          a.id && JSON.stringify(a) !== prevAbsenceMap.get(a.id)
+        );
+        if (dirtyAbsences.length > 0) {
+          console.log(`[Supabase] Upserting ${dirtyAbsences.length}/${absences.length} changed absences`);
+          const { error } = await supabase.from('absences').upsert(
+            dirtyAbsences.map(a => ({
+              id: a.id,
+              member_id: a.memberId,
+              start_date: a.startDate,
+              end_date: a.endDate,
+              reason: a.reason,
+              status: a.status || 'pending'
+            }))
+          );
+          if (error) throw error;
           prevData.current.absences = [...absences];
-          changesCount++;
-        }
-        if (changesCount > 0) {
-          await batch.commit();
-        }
-        const runMetadataSave = async (docId, baseVersion, payload) => {
-          const metadataRef = doc(db, "metadata", docId);
-          return runTransaction(db, async (tx) => {
-            const snap = await tx.get(metadataRef);
-            const remote = snap.exists() ? snap.data() : {};
-            const remoteVersion = Number(remote.version || 0);
-            if (remoteVersion !== baseVersion) {
-              const isSelfConflict = !remote.lastEditorUid || remote.lastEditorUid === currentUser?.uid;
-              if (!isSelfConflict) {
-                throw new Error("META_VERSION_CONFLICT");
-              }
-              metadataVersions.current[docId] = remoteVersion;
-            }
-            const updatedVersion = remoteVersion + 1;
-            tx.set(metadataRef, { ...payload, version: updatedVersion }, { merge: true });
-            return updatedVersion;
-          });
-        };
-
-        if (hasMetadataPartiesChanges) {
-          const wrappedParties = parties.map(p => ({ members: p }));
-          const wrappedRaids = raidParties.map(p => ({ members: p }));
-          const nextVersion = await runMetadataSave("parties", Number(metadataVersions.current.parties || 0), {
-            parties: wrappedParties,
-            partyNames,
-            raidParties: wrappedRaids,
-            raidPartyNames,
-            partyOverrides,
-            leagueParties: {
-              main: leagueParties.main.map(p => ({ members: p })),
-              sub: leagueParties.sub.map(p => ({ members: p }))
-            },
-            leaguePartyNames,
-            lastUpdate: new Date().toISOString(),
-            lastEditorUid: currentUser?.uid || "unknown"
-          });
-          metadataVersions.current.parties = nextVersion;
-          localStorage.setItem('guild_parties', JSON.stringify({ data: parties }));
-          localStorage.setItem('guild_partyNames', JSON.stringify({ data: partyNames }));
-          localStorage.setItem('guild_raidParties', JSON.stringify({ data: raidParties }));
-          localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: raidPartyNames }));
-          localStorage.setItem('guild_partyOverrides', JSON.stringify({ data: partyOverrides }));
-          localStorage.setItem('guild_leagueParties', JSON.stringify({ data: leagueParties }));
-          localStorage.setItem('guild_leaguePartyNames', JSON.stringify({ data: leaguePartyNames }));
-          
-          prevData.current.parties = [...parties];
-          prevData.current.partyNames = [...partyNames];
-          prevData.current.raidParties = [...raidParties];
-          prevData.current.raidPartyNames = [...raidPartyNames];
-          prevData.current.partyOverrides = { ...partyOverrides };
-          prevData.current.leagueParties = { ...leagueParties };
-          prevData.current.leaguePartyNames = { ...leaguePartyNames };
-          wroteMetadata = true;
-        }
-        if (hasMetadataAuctionChanges) {
-          const nextVersion = await runMetadataSave("auction", Number(metadataVersions.current.auction || 0), {
-            auctionSessions,
-            auctionTemplates,
-            resourceCategories,
-            lastUpdate: new Date().toISOString(),
-            lastEditorUid: currentUser?.uid || null
-          });
-          metadataVersions.current.auction = nextVersion;
-          prevData.current.auctionSessions = [...auctionSessions];
-          prevData.current.auctionTemplates = [...auctionTemplates];
-          prevData.current.resourceCategories = [...resourceCategories];
-          wroteMetadata = true;
-        }
-        if (hasMetadataDiscordChanges) {
-          const nextVersion = await runMetadataSave("discord", Number(metadataVersions.current.discord || 0), {
-            discord: discordConfig,
-            lastUpdate: new Date().toISOString(),
-            lastEditorUid: currentUser?.uid || null
-          });
-          metadataVersions.current.discord = nextVersion;
-          prevData.current.discordConfig = { ...discordConfig };
-          wroteMetadata = true;
-        }
-        if (hasMetadataBattlelogChanges) {
-          const nextVersion = await runMetadataSave("battlelog", Number(metadataVersions.current.battlelog || 0), {
-            weeklyAssignments: battlelogConfig?.weeklyAssignments || {},
-            rotationPoolMemberIds: Array.isArray(battlelogConfig?.rotationPoolMemberIds) ? battlelogConfig.rotationPoolMemberIds : [],
-            lastUpdate: new Date().toISOString(),
-            lastEditorUid: currentUser?.uid || null
-          });
-          metadataVersions.current.battlelog = nextVersion;
-          prevData.current.battlelogConfig = {
-            weeklyAssignments: { ...(battlelogConfig?.weeklyAssignments || {}) },
-            rotationPoolMemberIds: Array.isArray(battlelogConfig?.rotationPoolMemberIds) ? [...battlelogConfig.rotationPoolMemberIds] : [],
-            lastEditorUid: battlelogConfig?.lastEditorUid || null,
-            lastUpdate: battlelogConfig?.lastUpdate || null
-          };
-          wroteMetadata = true;
         }
 
-        if (changesCount > 0 || wroteMetadata) {
-          prevData.current.pendingSync = false;
-          setSyncStatus("synced");
-        }
+        setSyncStatus("synced");
       } catch (err) {
-        prevData.current.pendingSync = true;
-        setSyncStatus(navigator.onLine ? "error" : "offline");
-        if (err?.message === "META_VERSION_CONFLICT") {
-          setMetadataNotice({
-            kind: "save_conflict",
-            message: "Your save was blocked because newer shared changes exist. Latest metadata has been loaded.",
-            timestamp: Date.now()
-          });
-          showToast("Another officer saved changes first. Reloaded latest metadata to avoid overwrite.", "warning");
-          return;
-        }
-        console.error("Firebase save error:", err);
+        console.error("Supabase save error:", err);
+        setSyncStatus("error");
       }
     };
-    const burstCount = Number(saveBurstRef.current.count || 1);
-    const debounceMs = burstCount >= 5 ? 2200 : burstCount >= 3 ? 1600 : 1000;
-    const timeout = setTimeout(saveData, debounceMs);
-    return () => clearTimeout(timeout);
-  }, [members, events, attendance, performance, absences, parties, partyNames, eoRatings, auctionSessions, auctionTemplates, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, discordConfig, battlelogConfig, resourceCategories, currentUser?.uid, loading, syncRetryToken]);
+
+    // 8 second debounce — batches rapid edits to reduce Supabase write bandwidth.
+    const timer = setTimeout(saveToSupabase, 8000);
+    return () => clearTimeout(timer);
+  }, [members, events, absences, parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, auctionSessions, auctionTemplates, resourceCategories]);
+
 
   useEffect(() => {
     if (loading) return;
@@ -1050,6 +747,7 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [leaguePartyNames, loading]);
 
   const sendNotification = async (targetId, title, message, type = "info") => {
+    if (firebaseQuotaHit.current) return;
     const notif = {
       targetId,
       title,
@@ -1058,8 +756,15 @@ export const GuildProvider = ({ children, initialData }) => {
       ts: new Date().toISOString(),
       readBy: []
     };
-    await setDoc(doc(collection(db, "notifications")), notif);
-    showToast("Notification sent", "success");
+    try {
+      await setDoc(doc(collection(db, "notifications")), notif);
+      showToast("Notification sent", "success");
+    } catch(err) {
+      console.error(err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
+    }
   };
 
    const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
@@ -1168,14 +873,21 @@ export const GuildProvider = ({ children, initialData }) => {
       content = mentionParts.join(" ");
 
       const formData = new FormData();
-      formData.append('file', blob, fileName);
+      formData.append('files[0]', blob, fileName);
       formData.append('payload_json', JSON.stringify({
         content,
         embeds: [{
           title: discordConfig.templates?.[category]?.title || "Results Attachment",
           description: finalDesc,
           color: 0x6382e6,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          image: {
+            url: `attachment://${fileName}`
+          }
+        }],
+        attachments: [{
+          id: 0,
+          filename: fileName
         }]
       }));
 
@@ -1194,15 +906,25 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const markNotifRead = async (id) => {
+    if (firebaseQuotaHit.current) return;
     try {
       const n = notifications.find(x => x.id === id);
       if (n && n.targetId !== "all") {
         await setDoc(doc(db, "notifications", id), { ...n, isRead: true });
       }
-    } catch(err) { console.error(err); }
+    } catch(err) {
+      console.error(err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
+    }
   };
 
   const resetDatabase = async () => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Database reset unavailable.", "error");
+      return;
+    }
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -1221,6 +943,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Database reset successfully", "success");
     } catch (err) {
       console.error("Reset error:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
       showToast("Error resetting database", "error");
     } finally {
       setLoading(false);
@@ -1253,53 +978,6 @@ export const GuildProvider = ({ children, initialData }) => {
     };
   };
 
-  const restoreBackupSnapshot = async (payload, mode = "replace") => {
-    if (!isArchitect) throw new Error("FORBIDDEN");
-    if (!payload || typeof payload !== "object") throw new Error("INVALID_PAYLOAD");
-    const roster = Array.isArray(payload.roster) ? payload.roster : [];
-    const eventsData = Array.isArray(payload.events) ? payload.events : [];
-    const absencesData = Array.isArray(payload.absences) ? payload.absences : [];
-    const metadata = payload.metadata || {};
-
-    if (mode === "replace") {
-      const [oldRoster, oldEvents, oldAbsences] = await Promise.all([
-        getDocs(collection(db, "roster")),
-        getDocs(collection(db, "events")),
-        getDocs(collection(db, "absences"))
-      ]);
-      const clearBatch = writeBatch(db);
-      oldRoster.docs.forEach(d => clearBatch.delete(doc(db, "roster", d.id)));
-      oldEvents.docs.forEach(d => clearBatch.delete(doc(db, "events", d.id)));
-      oldAbsences.docs.forEach(d => clearBatch.delete(doc(db, "absences", d.id)));
-      await clearBatch.commit();
-    }
-
-    const writeInChunks = async (ops) => {
-      for (let i = 0; i < ops.length; i += 400) {
-        const b = writeBatch(db);
-        ops.slice(i, i + 400).forEach(fn => fn(b));
-        await b.commit();
-      }
-    };
-
-    const ops = [];
-    roster.forEach(m => {
-      if (m?.memberId) ops.push((b) => b.set(doc(db, "roster", m.memberId), m));
-    });
-    eventsData.forEach(e => {
-      if (e?.eventId) ops.push((b) => b.set(doc(db, "events", e.eventId), e));
-    });
-    absencesData.forEach(a => {
-      if (a?.id) ops.push((b) => b.set(doc(db, "absences", a.id), a));
-    });
-    await writeInChunks(ops);
-
-    await Promise.all([
-      setDoc(doc(db, "metadata", "parties"), metadata.parties || {}, { merge: true }),
-      setDoc(doc(db, "metadata", "auction"), metadata.auction || {}, { merge: true }),
-      setDoc(doc(db, "metadata", "discord"), metadata.discord || {}, { merge: true })
-    ]);
-  };
   const resetMonthlyScores = async () => {
     setLoading(true);
     try {
@@ -1348,10 +1026,170 @@ export const GuildProvider = ({ children, initialData }) => {
     return { totalBucketDocs: ops.length };
   };
   
+  const bootstrapMyRole = async () => {
+    if (!currentUser) return;
+    try {
+      showToast("Bootstrapping your role in Supabase...", "info");
+      const { error } = await supabase.from('user_roles').upsert({
+        uid: currentUser.uid,
+        role: 'architect',
+        email: currentUser.email
+      });
+      if (error) throw error;
+      showToast("You are now an official Architect in Supabase!", "success");
+      setUserRole("architect"); // Update local state immediately
+    } catch (err) {
+      console.error("Bootstrap failed:", err);
+      showToast("Bootstrap failed: " + err.message, "error");
+    }
+  };
+
+  const migrateLocalStorageToSupabase = async () => {
+    try {
+      showToast("Syncing local cache to Supabase...", "info");
+      
+      const partiesData = {
+        parties: JSON.parse(localStorage.getItem('guild_parties') || "[]"),
+        partyNames: JSON.parse(localStorage.getItem('guild_partyNames') || "[]"),
+        raidParties: JSON.parse(localStorage.getItem('guild_raidParties') || "[]"),
+        raidPartyNames: JSON.parse(localStorage.getItem('guild_raidPartyNames') || "[]"),
+        partyOverrides: JSON.parse(localStorage.getItem('guild_partyOverrides') || "{}"),
+        leagueParties: JSON.parse(localStorage.getItem('guild_leagueParties') || "{}"),
+        leaguePartyNames: JSON.parse(localStorage.getItem('guild_leaguePartyNames') || "{}")
+      };
+
+      // Cleanup nested data if it was wrapped in { data: ... }
+      const unwrap = (obj) => obj?.data !== undefined ? obj.data : obj;
+      const cleanParties = {
+        parties: unwrap(partiesData.parties),
+        partyNames: unwrap(partiesData.partyNames),
+        raidParties: unwrap(partiesData.raidParties),
+        raidPartyNames: unwrap(partiesData.raidPartyNames),
+        partyOverrides: unwrap(partiesData.partyOverrides),
+        leagueParties: unwrap(partiesData.leagueParties),
+        leaguePartyNames: unwrap(partiesData.leaguePartyNames)
+      };
+
+      await supabase.from('metadata').upsert({
+        key: 'parties',
+        data: cleanParties,
+        updated_at: new Date().toISOString()
+      });
+
+      showToast("Local cache synced successfully!", "success");
+      setSyncStatus("synced");
+    } catch (err) {
+      console.error("Local sync failed:", err);
+      showToast("Sync failed: " + err.message, "error");
+    }
+  };
+
+  const fetchFirebaseMetadataOnly = async () => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Cannot fetch recovery data.", "error");
+      return;
+    }
+    try {
+      showToast("Fetching settings and parties...", "info");
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db: fdb } = await import("../firebase");
+      
+      const keys = ['parties', 'auction', 'discord', 'battlelog'];
+      const results = {};
+      
+      for (const key of keys) {
+        const snap = await getDoc(doc(fdb, "metadata", key));
+        if (snap.exists()) results[key] = snap.data();
+      }
+
+      const payload = {
+        ...results,
+        isMetadataOnly: true,
+        exportedAt: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `OBLIVION_METADATA_RECOVERY.json`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Metadata backup downloaded!", "success");
+    } catch (err) {
+      console.error("Metadata fetch failed:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
+      showToast("Fetch failed: " + err.message, "error");
+    }
+  };
+
+  const fetchFirebaseDirect = async () => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Cannot fetch emergency data.", "error");
+      return;
+    }
+    try {
+      showToast("Starting emergency Firebase fetch...", "info");
+      const { collection, getDocs, query, limit } = await import("firebase/firestore");
+      const { db: fdb } = await import("../firebase");
+      
+      const mSnap = await getDocs(query(collection(fdb, "members"), limit(1000)));
+      const members = mSnap.docs.map(d => ({ ...d.data(), memberId: d.id }));
+      
+      const eSnap = await getDocs(query(collection(fdb, "events"), limit(100)));
+      const events = eSnap.docs.map(d => ({ ...d.data(), eventId: d.id }));
+
+      const aSnap = await getDocs(query(collection(fdb, "absences"), limit(500)));
+      const absences = aSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+
+      const payload = {
+        members,
+        events,
+        absences,
+        parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
+        auctionSessions, auctionTemplates, resourceCategories,
+        discordConfig, battlelogConfig,
+        exportedAt: new Date().toISOString(),
+        isEmergencyFetch: true
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `OBLIVION_EMERGENCY_RECOVERY_${new Date().toISOString().split('T')[0]}.json`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Emergency backup downloaded!", "success");
+    } catch (err) {
+      console.error("Emergency fetch failed:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
+      showToast("Fetch failed: " + err.message, "error");
+    }
+  };
+
   const migrateNestingToEvents = async () => {
     if (!isArchitect) return;
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Optimization unavailable.", "error");
+      return;
+    }
     try {
+      showToast("Starting optimization... Please wait.", "info");
       const eventsSnap = await getDocs(collection(db, "events"));
+      
+      // Optimization: Instead of fetching ALL documents from these huge collections,
+      // we only fetch if the events actually need them.
+      // But for a full migration, we need them once. 
+      // We'll fetch them and then suggest the user delete the legacy collections.
       const attSnap = await getDocs(collection(db, "attendance"));
       const perfSnap = await getDocs(collection(db, "performance"));
       const eoSnap = await getDocs(collection(db, "eoRatings"));
@@ -1367,12 +1205,17 @@ export const GuildProvider = ({ children, initialData }) => {
         const eid = eventDoc.id;
         const eventData = eventDoc.data();
         
-        if (!eventData.attendanceData || !eventData.performanceData) {
+        // Only update if not already optimized or if we have new legacy data to pull
+        const hasAtt = attMap.has(eid);
+        const hasPerf = perfMap.has(eid);
+        const hasEo = eoMap.has(eid);
+
+        if (hasAtt || hasPerf || hasEo) {
           const updatedData = {
             ...eventData,
-            attendanceData: attMap.get(eid) || {},
-            performanceData: perfMap.get(eid) || {},
-            eoRatingsData: eoMap.get(eid) || {}
+            attendanceData: { ...(eventData.attendanceData || {}), ...(attMap.get(eid) || {}) },
+            performanceData: { ...(eventData.performanceData || {}), ...(perfMap.get(eid) || {}) },
+            eoRatingsData: { ...(eventData.eoRatingsData || {}), ...(eoMap.get(eid) || {}) }
           };
           batch.set(doc(db, "events", eid), updatedData);
           count++;
@@ -1381,13 +1224,16 @@ export const GuildProvider = ({ children, initialData }) => {
 
       if (count > 0) {
         await batch.commit();
-        showToast(`Migrated ${count} events to optimized format!`, "success");
+        showToast(`Successfully optimized ${count} events!`, "success");
       } else {
         showToast("All events are already optimized.", "info");
       }
     } catch (err) {
       console.error("Migration error:", err);
-      showToast("Migration failed", "error");
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
+      showToast("Migration failed: " + err.message, "error");
     }
   };
   
@@ -1433,6 +1279,10 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const submitJoinRequest = async (data) => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Cannot submit registration.", "error");
+      return false;
+    }
     try {
       const exists = members.some(m => m.memberId?.toLowerCase() === data.uid.toLowerCase());
       if (exists) {
@@ -1470,6 +1320,9 @@ export const GuildProvider = ({ children, initialData }) => {
       return true;
     } catch(err) {
       console.error(err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
       showToast("Failed to submit registration", "error");
       return false;
     }
@@ -1532,6 +1385,10 @@ export const GuildProvider = ({ children, initialData }) => {
   };
 
   const approveJoinRequest = async (requestId) => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Cannot approve registration.", "error");
+      return false;
+    }
     try {
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
@@ -1607,6 +1464,9 @@ export const GuildProvider = ({ children, initialData }) => {
       return true;
     } catch(err) {
       console.error(err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
       showToast("Failed to approve registration", "error");
       return false;
     }
@@ -1614,31 +1474,45 @@ export const GuildProvider = ({ children, initialData }) => {
 
   const rejectJoinRequest = async (requestId) => {
     try {
-      const r = joinRequests.find(x => x.id === requestId);
-      if (!r) return;
-      await setDoc(doc(db, "join_requests", requestId), { ...r, status: "rejected" });
-      showToast(`Registration rejected`, "info");
+      const { error } = await supabase
+        .from('join_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+      if (error) throw error;
+      setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast('Registration rejected', 'info');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to reject registration", "error");
+      showToast('Failed to reject registration', 'error');
       return false;
     }
   };
 
   const deleteJoinRequest = async (requestId) => {
     try {
-      await deleteDoc(doc(db, "join_requests", requestId));
-      showToast("Registration record deleted", "success");
+      const { error } = await supabase
+        .from('join_requests')
+        .delete()
+        .eq('id', requestId);
+      if (error) throw error;
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast('Registration record deleted', 'success');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to delete record", "error");
+      showToast('Failed to delete record', 'error');
       return false;
     }
   };
 
   const submitRequest = async (memberId, newData) => {
+    if (firebaseQuotaHit.current) {
+      showToast("Firebase quota exceeded. Cannot submit request.", "error");
+      return false;
+    }
     try {
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
@@ -1669,6 +1543,9 @@ export const GuildProvider = ({ children, initialData }) => {
       return true;
     } catch(err) {
       console.error(err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
       showToast("Failed to submit request", "error");
       return false;
     }
@@ -1677,73 +1554,103 @@ export const GuildProvider = ({ children, initialData }) => {
   const approveRequest = async (requestId) => {
     try {
       const r = requests.find(x => x.id === requestId);
-      if (!r) return;
+      if (!r) return false;
 
-      // Update Roster in Firestore
-      await setDoc(doc(db, "roster", r.memberId), { 
-        ...members.find(x => x.memberId === r.memberId), 
-        ...r.newData 
+      // Update Roster in Supabase
+      const existingMember = members.find(x => x.memberId === r.memberId);
+      const updatedMember = { ...(existingMember || {}), ...r.newData };
+      const { error: rosterErr } = await supabase.from('roster').upsert({
+        member_id: r.memberId,
+        ign: updatedMember.ign || existingMember?.ign,
+        class: updatedMember.class || existingMember?.class,
+        guild_rank: updatedMember.guildRank || existingMember?.guildRank,
+        status: updatedMember.status || 'active',
+        level: Number(updatedMember.level || 0),
+        cp: Number(updatedMember.cp || 0),
+        metadata: updatedMember
       });
-      
-      // Update Request Status
-      await setDoc(doc(db, "requests", requestId), { ...r, status: "approved" });
+      if (rosterErr) throw rosterErr;
 
-      showToast(`Request approved for ${r.requesterIgn}`, "success");
+      // Update member in local state
+      setMembers(prev => prev.map(m => m.memberId === r.memberId ? { ...m, ...r.newData } : m));
+
+      // Update request status in Supabase
+      const { error: reqErr } = await supabase
+        .from('requests')
+        .update({ status: 'approved' })
+        .eq('id', requestId);
+      if (reqErr) throw reqErr;
+
+      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: 'approved' } : x));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast(`Request approved for ${r.requesterIgn}`, 'success');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to approve request", "error");
+      showToast('Failed to approve request', 'error');
       return false;
     }
   };
 
   const rejectRequest = async (requestId) => {
     try {
-      const r = requests.find(x => x.id === requestId);
-      if (!r) return;
-      await setDoc(doc(db, "requests", requestId), { ...r, status: "rejected" });
-      
-      showToast(`Request rejected`, "info");
+      const { error } = await supabase
+        .from('requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+      if (error) throw error;
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast('Request rejected', 'info');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to reject request", "error");
+      showToast('Failed to reject request', 'error');
       return false;
     }
   };
 
   const deleteRequest = async (requestId) => {
     try {
-      await deleteDoc(doc(db, "requests", requestId));
-      showToast("Request deleted from history", "success");
+      const { error } = await supabase
+        .from('requests')
+        .delete()
+        .eq('id', requestId);
+      if (error) throw error;
+      setRequests(prev => prev.filter(r => r.id !== requestId));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast('Request deleted from history', 'success');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to delete request", "error");
+      showToast('Failed to delete request', 'error');
       return false;
     }
   };
 
   const clearProcessedRequests = async () => {
     try {
-      const processed = requests.filter(r => r.status !== "pending");
-      const batch = writeBatch(db);
-      processed.forEach(r => {
-        batch.delete(doc(db, "requests", r.id));
-      });
-      await batch.commit();
-      setRequests(prev => prev.filter(r => r.status === "pending"));
-      showToast("Processed history cleared", "success");
+      const processedIds = requests.filter(r => r.status !== 'pending').map(r => r.id);
+      if (processedIds.length === 0) return true;
+      const { error } = await supabase
+        .from('requests')
+        .delete()
+        .in('id', processedIds);
+      if (error) throw error;
+      setRequests(prev => prev.filter(r => r.status === 'pending'));
+      sessionStorage.removeItem("requests_cache_v1");
+      showToast('Processed history cleared', 'success');
       return true;
     } catch(err) {
       console.error(err);
-      showToast("Failed to clear history", "error");
+      showToast('Failed to clear history', 'error');
       return false;
     }
   };
 
   const migrateMemberData = async (oldId, newId) => {
     if (!oldId || !newId) return { success: false, message: "Invalid IDs provided." };
+    if (firebaseQuotaHit.current) return { success: false, message: "Firebase quota exceeded. Cannot migrate data." };
     const batch = writeBatch(db);
     let count = 0;
     
@@ -1852,6 +1759,7 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [auctionSessions, members]);
 
   const submitWishlistRequest = async (memberId, resourceType, metadata = {}) => {
+    if (firebaseQuotaHit.current) return false;
     try {
       const bidRef = doc(db, "auction_bids", memberId);
       const snap = await getDoc(bidRef);
@@ -1869,11 +1777,15 @@ export const GuildProvider = ({ children, initialData }) => {
       return true;
     } catch (err) {
       console.error("Wishlist submission failed:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
       return false;
     }
   };
 
   const updateWishlistMetadata = async (memberId, resourceType, metadata) => {
+    if (firebaseQuotaHit.current) return;
     try {
       const bidRef = doc(db, "auction_bids", memberId);
       const snap = await getDoc(bidRef);
@@ -1885,10 +1797,14 @@ export const GuildProvider = ({ children, initialData }) => {
       await setDoc(bidRef, { memberId, bids: updatedBids });
     } catch (err) {
       console.error("Wishlist metadata update failed:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
     }
   };
 
   const removeWishlistRequest = async (memberId, resourceType) => {
+    if (firebaseQuotaHit.current) return;
     try {
       const bidRef = doc(db, "auction_bids", memberId);
       const snap = await getDoc(bidRef);
@@ -1898,47 +1814,23 @@ export const GuildProvider = ({ children, initialData }) => {
       await setDoc(bidRef, { memberId, bids: updatedBids });
     } catch (err) {
       console.error("Wishlist removal failed:", err);
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded')) {
+        firebaseQuotaHit.current = true;
+      }
     }
   };
 
-  const fetchHistoricalData = async () => {
-    if (historicalEvents.length > 0 || isLoadingHistory) return;
-    setIsLoadingHistory(true);
-    try {
-      const fortyFiveDaysAgo = new Date();
-      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
-      const pastCutoff = fortyFiveDaysAgo.toISOString().split("T")[0];
-
-      // Fetch older events
-      const eventsSnap = await getDocs(query(collection(db, "events"), where("eventDate", "<", pastCutoff)));
-      const docs = eventsSnap.docs.map(d => d.data());
-      
-      const nestedAtt = [];
-      const nestedPerf = [];
-      const nestedEo = [];
-      
-      docs.forEach(e => {
-        if (e.attendanceData) {
-          Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
-        }
-        if (e.performanceData) {
-          Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
-        }
-        if (e.eoRatingsData) {
-          Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
-        }
-      });
-
-      setHistoricalEvents(docs);
-      setHistoricalAttendance(nestedAtt);
-      setHistoricalPerformance(nestedPerf);
-      setHistoricalEoRatings(nestedEo);
-    } catch (err) {
-      console.error("Error fetching historical data:", err);
-    } finally {
-      setIsLoadingHistory(false);
-    }
+  // DISABLED: fetchHistoricalData previously read historical events from Firebase.
+  // All event data is now fetched from Supabase (45-day rolling window + full import).
+  // Calling this was burning up to 500+ Firebase reads per visit to Reports/Profile pages.
+  // If historical data before the Supabase import is needed, it should be imported
+  // into Supabase first using the Import Tool, then this function can remain a no-op.
+  const fetchHistoricalData = async (_startDate = null, _endDate = null) => {
+    // No-op: Supabase is now the source of truth for event data.
+    // Re-enable only after migrating all historical events to Supabase.
+    return;
   };
+
 
   const value = {
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
@@ -1967,11 +1859,14 @@ export const GuildProvider = ({ children, initialData }) => {
     battlelogConfig, setBattlelogConfig,
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
-    resetDatabase, exportBackupSnapshot, restoreBackupSnapshot, backfillBattleBuckets, estimateBattleBucketBackfill, migrateNestingToEvents,
+    resetDatabase, exportBackupSnapshot,
+    migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole,
     resetMonthlyScores,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,
-    fetchRequests, isFetchingRequests
+    fetchRequests, isFetchingRequests,
+    isOfflineMode, setIsOfflineMode,
+    firebaseQuotaHit
   };
 
   return (

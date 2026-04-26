@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGuild } from '../context/GuildContext';
 import { MemberAvatar } from '../components/common/MemberAvatar';
 import { writeAuditLog } from '../utils/audit';
@@ -18,6 +18,12 @@ function RequestsPage() {
   const [subTab, setSubTab] = useState("profile"); // profile, join, reactivation
   const [statusFilter, setStatusFilter] = useState("all"); // all, pending, approved, rejected
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // Fetch requests from Firebase only when this page is actually opened.
+  // This was previously triggered on every app load for all admins/officers.
+  useEffect(() => {
+    fetchRequests();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingRequests = requests.filter(r => r.status === "pending");
   const pendingJoin = joinRequests.filter(r => r.status === "pending" && r.requestType !== "reactivation");

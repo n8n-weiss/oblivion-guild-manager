@@ -367,6 +367,8 @@ function AuctionBuilder() {
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
     sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig,
+    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData,
+    isOfflineMode,
     memberLootStats, auctionWishlist,
     members, auctionSessions, setAuctionSessions
   } = useGuild();
@@ -578,6 +580,19 @@ function AuctionBuilder() {
     () => (session?.members || []).map(sm => membersById.get(sm.memberId)).filter(Boolean),
     [session, membersById]
   );
+
+  const exportSessionToJSON = () => {
+    if (!session) return;
+    const data = JSON.stringify(session, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `AUCTION_DRAFT_${session.name}_${session.date}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("JSON Draft exported! Keep this file to import later.", "success");
+  };
 
   const exportTableToImage = async () => {
     const element = document.getElementById('auction-table-export');
@@ -1280,7 +1295,50 @@ function AuctionBuilder() {
     <>
       {/* SESSIONS LIST VIEW */}
       {view === "sessions" && (
-        <div>
+        <div className="animate-fade-in">
+        {isOfflineMode && (
+          <div className="card mb-4" style={{ 
+            background: "rgba(224,80,80,0.1)", border: "2px solid var(--red)", 
+            display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", 
+            borderRadius: 12, boxShadow: "0 0 20px rgba(224,80,80,0.1)" 
+          }}>
+            <div style={{ fontSize: 24 }}>🚨</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, color: "var(--red)", fontSize: 14, letterSpacing: 1 }}>RESCUE MODE ACTIVE (QUOTA EXHAUSTED)</div>
+              <p className="text-xs text-muted" style={{ marginTop: 4 }}>
+                The database is currently locked. Your changes are being saved <strong>locally in your browser</strong>. 
+                Please export your session as a JSON file before closing this tab to ensure your data is safe.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn btn-sm" style={{ background: "var(--red)", color: "white" }} onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = (e) => {
+                  const file = e.target.files[0];
+                  const reader = new FileReader();
+                  reader.onload = (re) => {
+                    try {
+                      const data = JSON.parse(re.target.result);
+                      setAuctionSessions(prev => {
+                        const filtered = prev.filter(s => s.id !== data.id);
+                        return [...filtered, data];
+                      });
+                      showToast("Session imported locally!", "success");
+                    } catch (err) {
+                      showToast("Invalid JSON file", "error");
+                    }
+                  };
+                  reader.readAsText(file);
+                };
+                input.click();
+              }}>
+                📤 Import JSON
+              </button>
+            </div>
+          </div>
+        )}
       <div className="page-header">
         <h1 className="page-title">📜 Auction Builder</h1>
         <p className="page-subtitle">Distribute resources per member per session</p>

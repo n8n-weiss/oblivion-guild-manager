@@ -97,7 +97,10 @@ function LoginPage() {
 
         // A. Check Join Requests first (New Applications)
         const qJoin = query(collection(db, "join_requests"), where("status", "==", "approved"), where("uid", "==", finalPass));
-        const snapJoin = await getDocs(qJoin);
+        const snapJoin = await getDocs(qJoin).catch(err => {
+          if (err.code === "resource-exhausted") return { empty: true, docs: [] };
+          throw err;
+        });
         let matchFound = false;
         let userData = null;
 
@@ -120,7 +123,10 @@ function LoginPage() {
         // B. Check Roster if no join request match (Legacy/Imported Members)
         if (!matchFound) {
           const qRoster = query(collection(db, "roster"), where("memberId", "==", finalPass));
-          const snapRoster = await getDocs(qRoster);
+          const snapRoster = await getDocs(qRoster).catch(err => {
+            if (err.code === "resource-exhausted") return { empty: true, docs: [] };
+            throw err;
+          });
           
           if (!snapRoster.empty) {
             const m = snapRoster.docs[0].data();

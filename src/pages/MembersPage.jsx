@@ -8,7 +8,8 @@ import StatePanel from '../components/common/StatePanel';
 import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers = [] } = useGuild();
+  const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers } = useGuild();
+  const onlineUsers = Array.isArray(_onlineUsers) ? _onlineUsers : [];
   const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
   const MEMBERS_PRESETS_KEY = "members_view_presets_v1";
   const MEMBERS_TABLE_UI_KEY = "members_table_ui_v1";
