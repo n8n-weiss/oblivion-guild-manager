@@ -605,13 +605,31 @@ function AuctionBuilder() {
       
       const canvas = await html2canvas(element, {
         backgroundColor: bgColor, 
-        scale: 2, // Higher resolution
+        scale: 2,
         logging: false,
         useCORS: true,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
         onclone: (clonedDoc) => {
-          // Adjust cloned element if needed (e.g. ensure scroll containers are expanded or hidden)
           const el = clonedDoc.getElementById('auction-table-export');
-          if (el) el.style.maxHeight = 'none'; // Ensure everything is visible
+          if (el) {
+            el.style.width = element.scrollWidth + 'px';
+            el.style.height = 'auto';
+            el.style.maxHeight = 'none';
+            el.style.maxWidth = 'none';
+            el.style.overflow = 'visible';
+            el.style.display = 'block';
+            
+            const all = el.querySelectorAll('*');
+            all.forEach(node => {
+              node.style.overflow = 'visible';
+              node.style.maxHeight = 'none';
+              node.style.maxWidth = 'none';
+              // Hide scrollbars in the screenshot
+              node.style.scrollbarWidth = 'none';
+              node.style.msOverflowStyle = 'none';
+            });
+          }
         }
       });
       
@@ -646,13 +664,29 @@ function AuctionBuilder() {
       scale: 2,
       logging: false,
       useCORS: true,
+      width: element.scrollWidth,
+      height: element.scrollHeight,
       onclone: (clonedDoc) => {
         const el = clonedDoc.getElementById('auction-table-export');
         if (el) {
+          el.style.width = element.scrollWidth + 'px';
+          el.style.height = 'auto';
           el.style.maxHeight = 'none';
+          el.style.maxWidth = 'none';
+          el.style.overflow = 'visible';
+          el.style.display = 'block';
           el.style.background = '#1a2035';
           el.style.padding = '20px';
           el.style.borderRadius = '0';
+
+          const all = el.querySelectorAll('*');
+          all.forEach(node => {
+            node.style.overflow = 'visible';
+            node.style.maxHeight = 'none';
+            node.style.maxWidth = 'none';
+            node.style.scrollbarWidth = 'none';
+            node.style.msOverflowStyle = 'none';
+          });
         }
       }
     });
@@ -2262,8 +2296,8 @@ function AuctionBuilder() {
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
             Review image and message before posting to Discord.
           </div>
-          <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "rgba(0,0,0,0.25)" }}>
-            <img src={discordPreview.previewUrl} alt="Auction preview" style={{ width: "100%", display: "block", maxHeight: 260, objectFit: "contain" }} />
+          <div style={{ border: "1px solid var(--border)", borderRadius: 10, background: "rgba(0,0,0,0.25)", overflow: "hidden" }}>
+            <img src={discordPreview.previewUrl} alt="Auction preview" style={{ width: "100%", height: "auto", display: "block" }} />
           </div>
           <div style={{ background: "rgba(99,130,230,0.08)", border: "1px solid rgba(99,130,230,0.25)", borderRadius: 10, padding: 10 }}>
             <div style={{ fontSize: 10, color: "var(--accent)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Message Preview</div>
