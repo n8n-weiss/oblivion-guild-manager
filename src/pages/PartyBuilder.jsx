@@ -273,7 +273,7 @@ function PartyBuilder() {
         style={{ ...dropTargetStyle("bench"), padding: 12 }}
         onDragOver={e => { e.preventDefault(); setDragOver("bench"); }}
         onDragLeave={() => setDragOver(null)}
-        onDrop={() => onDrop("bench")}
+        onDrop={(e) => { e.preventDefault(); onDrop("bench"); }}
       >
         {bench.length === 0 && <div className="text-xs text-muted" style={{ textAlign: "center", padding: "12px 0" }}>All members are assigned</div>}
         {bench.length > 0 && (
@@ -426,7 +426,7 @@ function PartyBuilder() {
                     style={dropTargetStyle(i)}
                     onDragOver={e => { e.preventDefault(); setDragOver(i); }}
                     onDragLeave={() => setDragOver(null)}
-                    onDrop={() => onDrop(i)}
+                    onDrop={(e) => { e.preventDefault(); onDrop(i); }}
                   >
                     <div className="flex items-center justify-between mb-1" style={{ gap: 6 }}>
                       {editingName === i ? (
@@ -524,7 +524,7 @@ function PartyBuilder() {
                     }}
                     onDragOver={e => { e.preventDefault(); setDragOver(raidKey); }}
                     onDragLeave={() => setDragOver(null)}
-                    onDrop={() => onDrop(raidKey)}
+                    onDrop={(e) => { e.preventDefault(); onDrop(raidKey); }}
                   >
                     {/* Raid header */}
                     <div className="flex items-center justify-between mb-4">
@@ -721,7 +721,7 @@ function PartyBuilder() {
                       style={{ ...dropTargetStyle(dropKey), border: "1px solid rgba(240,192,64,0.2)" }}
                       onDragOver={e => { e.preventDefault(); setDragOver(dropKey); }}
                       onDragLeave={() => setDragOver(null)}
-                      onDrop={() => onDrop(dropKey)}
+                      onDrop={(e) => { e.preventDefault(); onDrop(dropKey); }}
                     >
                       <div className="flex items-center justify-between mb-2">
                         {editingName === dropKey ? (
@@ -793,7 +793,7 @@ function PartyBuilder() {
                       style={{ ...dropTargetStyle(dropKey), border: "1px solid rgba(99,130,230,0.2)" }}
                       onDragOver={e => { e.preventDefault(); setDragOver(dropKey); }}
                       onDragLeave={() => setDragOver(null)}
-                      onDrop={() => onDrop(dropKey)}
+                      onDrop={(e) => { e.preventDefault(); onDrop(dropKey); }}
                     >
                       <div className="flex items-center justify-between mb-2">
                         {editingName === dropKey ? (

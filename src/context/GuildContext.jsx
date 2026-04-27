@@ -63,7 +63,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
   const [isFetchingRequests, setIsFetchingRequests] = useState(false);
-  const [auctionWishlist] = useState([]);
+  const [auctionWishlist, setAuctionWishlist] = useState([]);
   const [historicalEvents, setHistoricalEvents] = useState([]);
   const [historicalAttendance, setHistoricalAttendance] = useState([]);
   const [historicalPerformance, setHistoricalPerformance] = useState([]);
@@ -450,7 +450,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
       const headers = getAuthHeaders();
 
-      const [rosterRes, eventsRes, absenceRes, metaRes] = await Promise.all([
+      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/roster?select=*`, {
           headers
         }),
@@ -462,6 +462,9 @@ export const GuildProvider = ({ children, initialData }) => {
         }),
         fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, {
           headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, {
+          headers
         })
       ]);
 
@@ -469,14 +472,14 @@ export const GuildProvider = ({ children, initialData }) => {
       const eventsData = await eventsRes.json().catch(() => []);
       const absenceData = await absenceRes.json().catch(() => []);
       const metaData = await metaRes.json().catch(() => []);
+      const bidsData = await bidsRes.json().catch(() => []);
 
       if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
 
-      processFetchedData(rosterData, eventsData, absenceData, metaData);
+      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData);
 
-      // Save to Cache
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-        data: { rosterData, eventsData, absenceData, metaData },
+        data: { rosterData, eventsData, absenceData, metaData, bidsData },
         fetchedAt: Date.now()
       }));
 
@@ -493,7 +496,7 @@ export const GuildProvider = ({ children, initialData }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- GLOBAL_CACHE_TTL and processFetchedData are stable constants; adding them would not change behavior
   }, [showToast, getAuthHeaders]);
 
-  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData) => {
+  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData) => {
     if (rosterData) {
       const mappedMembers = rosterData.map(r => ({ 
         ...r,
@@ -582,6 +585,14 @@ export const GuildProvider = ({ children, initialData }) => {
           metadataVersions.current.battlelog = m.version;
         }
       });
+    }
+
+    if (bidsData && Array.isArray(bidsData)) {
+      const mappedBids = bidsData.map(b => ({
+        id: b.member_id,
+        bids: b.bids || []
+      }));
+      setAuctionWishlist(mappedBids);
     }
   }, []);
 
@@ -1656,6 +1667,12 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       if (!upsertRes.ok) throw new Error(`Wishlist upsert failed: ${upsertRes.status}`);
 
+      setAuctionWishlist(prev => {
+        const existing = prev.find(p => p.id === memberId);
+        if (existing) return prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p);
+        return [...prev, { id: memberId, bids: updatedBids }];
+      });
+
       return true;
     } catch (err) {
       console.error("Wishlist submission failed:", err);
@@ -1685,6 +1702,8 @@ export const GuildProvider = ({ children, initialData }) => {
         },
         body: JSON.stringify({ member_id: memberId, bids: updatedBids })
       });
+
+      setAuctionWishlist(prev => prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p));
     } catch (err) {
       console.error("Wishlist metadata update failed:", err);
     }
@@ -1710,6 +1729,8 @@ export const GuildProvider = ({ children, initialData }) => {
         },
         body: JSON.stringify({ member_id: memberId, bids: updatedBids })
       });
+
+      setAuctionWishlist(prev => prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p));
     } catch (err) {
       console.error("Wishlist removal failed:", err);
     }
