@@ -110,7 +110,7 @@ const ProfilePerformanceChartCard = React.memo(function ProfilePerformanceChartC
     <div className="card">
       <div className="card-title">📈 Performance Chart</div>
       <div style={{ height: 240, width: "100%", marginTop: 10 }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={1}>
+        <ResponsiveContainer width="99%" height={240} minWidth={1} minHeight={1}>
           <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
@@ -620,6 +620,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             </span>
           </div>
         </div>
+        
+        <div style={{ flex: 1 }} />
+        
         <div className="flex gap-2">
           {isOwnProfile && !showAbsenceForm && (
             <button className="btn btn-primary btn-sm" onClick={() => setShowAbsenceForm(true)}>

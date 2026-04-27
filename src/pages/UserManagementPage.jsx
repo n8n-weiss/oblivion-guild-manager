@@ -9,7 +9,7 @@ import Icon from '../components/ui/icons';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function UserManagementPage() {
-  const { currentUser, setPage, showToast, members, isAdmin, isArchitect, resetDatabase, migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, firebaseQuotaHit } = useGuild();
+  const { currentUser, setPage, showToast, members, isAdmin, isArchitect, resetDatabase, migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles, firebaseQuotaHit } = useGuild();
   const RESET_TOKEN = "DELETE";
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
@@ -37,7 +37,7 @@ function UserManagementPage() {
       }
     };
     loadUsers();
-  }, []);
+  }, [showToast, firebaseQuotaHit]);
 
   const syncSelfRegisteredUsers = async () => {
     try {
@@ -357,6 +357,22 @@ function UserManagementPage() {
               style={{ border: "1px solid var(--red)", color: "var(--red)", background: "transparent" }}
             >
               <Icon name="save" size={12} /> 🚨 Full Firebase Recovery
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={bootstrapMyRole}
+              style={{ border: "1px solid var(--gold)", color: "var(--gold)", background: "rgba(240,192,64,0.1)" }}
+            >
+              <Icon name="user" size={12} /> 👑 Sync My Permissions (Promote to Architect)
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={migrateUserRoles}
+              style={{ border: "1px solid var(--accent)", color: "var(--accent)", background: "rgba(99,130,230,0.1)" }}
+            >
+              <Icon name="users" size={12} /> 🛡️ Sync All System Roles (Firebase → Supabase)
             </button>
           </div>
           

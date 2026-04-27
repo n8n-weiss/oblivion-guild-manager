@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { db, auth } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where, orderBy, limit, Timestamp, onSnapshot, writeBatch, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { firebaseConfig } from '../firebase';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where, orderBy, limit, Timestamp, onSnapshot, writeBatch, runTransaction, serverTimestamp, deleteField } from 'firebase/firestore';
 import { supabase } from '../supabase';
 import { resetMonthlyData } from '../services/guildService';
 
@@ -63,8 +65,22 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch { return ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]; }
   });
   const [eoRatings, setEoRatings] = useState([]);
-  const [auctionSessions, setAuctionSessions] = useState([]);
-  const [auctionTemplates, setAuctionTemplates] = useState([]);
+  const [auctionSessions, setAuctionSessions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_auctionSessions');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : (parsed.data || []);
+    } catch { return []; }
+  });
+  const [auctionTemplates, setAuctionTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_auctionTemplates');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : (parsed.data || []);
+    } catch { return []; }
+  });
   const [notifications, setNotifications] = useState([]);
   const [requests, setRequests] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
@@ -106,7 +122,15 @@ export const GuildProvider = ({ children, initialData }) => {
       }
     }
   });
-  const [resourceCategories, setResourceCategories] = useState(["Card Album", "Light & Dark"]);
+  const [resourceCategories, setResourceCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('guild_resourceCategories');
+      const defaults = ["Card Album", "Light & Dark"];
+      if (!saved) return defaults;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : (parsed.data || defaults);
+    } catch { return ["Card Album", "Light & Dark"]; }
+  });
   const [onlineUsers, setOnlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity, setMetadataActivity] = useState([]); // recent shared metadata updates
@@ -228,17 +252,17 @@ export const GuildProvider = ({ children, initialData }) => {
   const isStatusActive = (myProfile?.status || "active") === "active";
   
   const isArchitect =
-    (currentUser?.email?.includes("rcapa") || currentUser?.email?.includes("weiss")) ||
+    (currentUser?.email?.includes("weiss")) ||
     myRank === "System Architect" ||
     myRank === "System Architect (Creator)" ||
     myRank === "Creator" ||
     userRole === "architect";
-  const hasAdminRank = ["Guild Master", "Vice Guild Master", "Commander"].includes(myRank) || isArchitect;
+  const hasAdminRank = ["Guild Master", "Vice Guild Master", "Commander"].includes(myRank) || isArchitect || currentUser?.email?.includes("oblidopest") || currentUser?.email?.includes("rcapa");
   const hasOfficerRank = ["Charisma Baby", "Baby Charisma", "Officer"].includes(myRank) || hasAdminRank;
 
   const isAdmin = (userRole === "admin" || userRole === "architect" || hasAdminRank) && (isStatusActive || isArchitect);
   const isOfficer = (isAdmin || userRole === "officer" || hasOfficerRank) && (isStatusActive || isArchitect);
-  const isMember = (userRole === "member") && (isStatusActive || isArchitect);
+  const isMember = (userRole === "member" || !userRole) && !isAdmin && !isOfficer && !isArchitect;
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
   // Auth Listener (Bridge Mode: Firebase Auth -> Supabase Data)
@@ -350,9 +374,9 @@ export const GuildProvider = ({ children, initialData }) => {
         // --- FIREBASE RESCUE REMOVED (Quota Protection) ---
 
         console.log("Starting Supabase data fetch...");
-        const fortyFiveDaysAgo = new Date();
-        fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
-        const cutoffDate = fortyFiveDaysAgo.toISOString().split("T")[0];
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
 
         // 1. Fetch all data in parallel
         const [
@@ -381,6 +405,7 @@ export const GuildProvider = ({ children, initialData }) => {
             eventId: e.event_id,
             eventDate: e.event_date,
             type: e.type,
+            eventType: e.type, // Mapping for backward compatibility with UI components
             title: e.title,
             auditor: e.auditor,
             attendanceData: e.attendance_data,
@@ -518,8 +543,17 @@ export const GuildProvider = ({ children, initialData }) => {
       if (reqsErr) throw reqsErr;
       if (joinErr) throw joinErr;
 
-      let mappedReqs = (reqsData || []).map(r => ({ ...r, id: r.id }));
-      let mappedJoin = (joinData || []).map(r => ({ ...r, id: r.id }));
+      let mappedReqs = (reqsData || []).map(r => ({ 
+        ...r, 
+        memberId: r.member_id,
+        oldData: r.old_data,
+        newData: r.new_data
+      }));
+      let mappedJoin = (joinData || []).map(r => ({ 
+        ...r, 
+        accountEmail: r.email,
+        ...(r.metadata || {})
+      }));
 
       // --- Firebase Fallback / One-time Migration ---
       // If Supabase tables are empty, read from Firebase and migrate data over.
@@ -535,10 +569,31 @@ export const GuildProvider = ({ children, initialData }) => {
 
           // Migrate to Supabase if there is data in Firebase
           if (firebaseReqs.length > 0) {
-            await supabase.from('requests').upsert(firebaseReqs.map(r => ({ ...r }))).select();
+            const mapped = firebaseReqs.map(r => ({
+              id: r.id || `req_${Math.random().toString(36).substr(2, 9)}`,
+              member_id: r.memberId || r.member_id,
+              old_data: r.oldData || r.old_data || {},
+              new_data: r.newData || r.new_data || {},
+              status: r.status || 'pending',
+              timestamp: r.timestamp ? (isNaN(new Date(r.timestamp).getTime()) ? Date.now() : new Date(r.timestamp).getTime()) : Date.now()
+            }));
+            await supabase.from('requests').upsert(mapped);
           }
           if (firebaseJoin.length > 0) {
-            await supabase.from('join_requests').upsert(firebaseJoin.map(r => ({ ...r }))).select();
+            const mapped = firebaseJoin.map(r => ({
+              id: r.id || `join_${Math.random().toString(36).substr(2, 9)}`,
+              ign: r.ign,
+              class: r.class,
+              email: r.accountEmail || r.email,
+              status: r.status || 'pending',
+              timestamp: r.timestamp ? (isNaN(new Date(r.timestamp).getTime()) ? Date.now() : new Date(r.timestamp).getTime()) : Date.now(),
+              metadata: { 
+                activatedAt: r.activatedAt, 
+                requestType: r.requestType,
+                guild: r.guild 
+              }
+            }));
+            await supabase.from('join_requests').upsert(mapped);
           }
 
           mappedReqs = firebaseReqs;
@@ -1033,48 +1088,53 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
-  const backfillBattleBuckets = async () => {
-    const [eventsSnap] = await Promise.all([
-      getDocs(collection(db, "events"))
-    ]);
-    const eventMonthMap = new Map();
-    eventsSnap.docs.forEach((d) => {
-      const ev = d.data();
-      if (ev?.eventId) eventMonthMap.set(ev.eventId, String(ev?.eventDate || "").slice(0, 7));
-    });
-    const ops = [];
-    eventsSnap.docs.forEach((d) => {
-      const e = d.data();
-      const eventId = e.eventId;
-      const month = eventMonthMap.get(eventId);
-      if (!eventId || !month) return;
-      if (e.attendanceData) ops.push((b) => b.set(doc(db, "attendanceBuckets", `${month}_${eventId}`), { eventId, month, members: e.attendanceData }, { merge: true }));
-      if (e.performanceData) ops.push((b) => b.set(doc(db, "performanceBuckets", `${month}_${eventId}`), { eventId, month, members: e.performanceData }, { merge: true }));
-      if (e.eoRatingsData) ops.push((b) => b.set(doc(db, "eoRatingsBuckets", `${month}_${eventId}`), { eventId, month, ratings: e.eoRatingsData }, { merge: true }));
-    });
-    for (let i = 0; i < ops.length; i += 400) {
-      const b = writeBatch(db);
-      ops.slice(i, i + 400).forEach(fn => fn(b));
-      await b.commit();
-    }
-    return { totalBucketDocs: ops.length };
-  };
   
   const bootstrapMyRole = async () => {
     if (!currentUser) return;
     try {
       showToast("Bootstrapping your role in Supabase...", "info");
+      const isWeiss = currentUser.email?.includes("weiss");
+      const targetRole = isWeiss ? 'architect' : 'admin';
       const { error } = await supabase.from('user_roles').upsert({
         uid: currentUser.uid,
-        role: 'architect',
+        role: targetRole,
         email: currentUser.email
       });
       if (error) throw error;
-      showToast("You are now an official Architect in Supabase!", "success");
-      setUserRole("architect"); // Update local state immediately
+      showToast(`You are now an official ${targetRole.toUpperCase()} in Supabase!`, "success");
+      setUserRole(targetRole); // Update local state immediately
     } catch (err) {
       console.error("Bootstrap failed:", err);
       showToast("Bootstrap failed: " + err.message, "error");
+    }
+  };
+
+  const migrateUserRoles = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    try {
+      showToast("Fetching roles from Firebase...", "info");
+      const rolesSnap = await getDocs(collection(db, "userroles"));
+      const roles = rolesSnap.docs.map(d => ({
+        uid: d.id,
+        ...d.data()
+      }));
+      
+      showToast(`Migrating ${roles.length} roles to Supabase...`, "info");
+      const mapped = roles.map(r => ({
+        uid: r.uid,
+        email: r.email,
+        role: r.role || 'member',
+        member_id: r.memberId || r.member_id,
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase.from('user_roles').upsert(mapped);
+      if (error) throw error;
+      
+      showToast(`Successfully synced ${roles.length} user roles!`, "success");
+    } catch (err) {
+      console.error("Roles sync failed:", err);
+      showToast("Sync failed: " + err.message, "error");
     }
   };
 
@@ -1104,13 +1164,42 @@ export const GuildProvider = ({ children, initialData }) => {
         leaguePartyNames: unwrap(partiesData.leaguePartyNames)
       };
 
-      await supabase.from('metadata').upsert({
-        key: 'parties',
-        data: cleanParties,
-        updated_at: new Date().toISOString()
-      });
+      const auctionData = {
+        auctionSessions: JSON.parse(localStorage.getItem('guild_auctionSessions') || "[]"),
+        auctionTemplates: JSON.parse(localStorage.getItem('guild_auctionTemplates') || "[]"),
+        resourceCategories: JSON.parse(localStorage.getItem('guild_resourceCategories') || "[]")
+      };
 
-      showToast("Local cache synced successfully!", "success");
+      const discordData = {
+        discord: JSON.parse(localStorage.getItem('guild_discordConfig') || "{}")
+      };
+
+      const battlelogData = JSON.parse(localStorage.getItem('guild_battlelogConfig') || "{}");
+
+      await Promise.all([
+        supabase.from('metadata').upsert({
+          key: 'parties',
+          data: cleanParties,
+          updated_at: new Date().toISOString()
+        }),
+        supabase.from('metadata').upsert({
+          key: 'auction',
+          data: unwrap(auctionData),
+          updated_at: new Date().toISOString()
+        }),
+        supabase.from('metadata').upsert({
+          key: 'discord',
+          data: unwrap(discordData),
+          updated_at: new Date().toISOString()
+        }),
+        supabase.from('metadata').upsert({
+          key: 'battlelog',
+          data: unwrap(battlelogData),
+          updated_at: new Date().toISOString()
+        })
+      ]);
+
+      showToast("Local cache (Parties & Auction) synced to Supabase!", "success");
       setSyncStatus("synced");
     } catch (err) {
       console.error("Local sync failed:", err);
@@ -1169,13 +1258,48 @@ export const GuildProvider = ({ children, initialData }) => {
       const aSnap = await getDocs(query(collection(fdb, "absences"), limit(1000)));
       const absences = aSnap.docs.map(d => ({ ...d.data(), id: d.id }));
 
+      const metaSnap = await getDocs(collection(fdb, "metadata"));
+      const firebaseMetadata = {};
+      metaSnap.forEach(d => { 
+        firebaseMetadata[d.id] = d.data(); 
+        console.log(`[Firebase Recovery] Found metadata doc: ${d.id}`, d.data());
+      });
+      
+      const auctionMeta = firebaseMetadata.auction || {};
+      const discordMeta = firebaseMetadata.discord || {};
+      const partiesMeta = firebaseMetadata.parties || {};
+      const battlelogMeta = firebaseMetadata.battlelog || {};
+
+      if (Object.keys(firebaseMetadata).length === 0) {
+        console.warn("[Firebase Recovery] No metadata found in 'metadata' collection. Trying direct fetch...");
+        // Fallback: Try fetching specifically if getDocs failed
+        const keys = ['parties', 'auction', 'discord', 'battlelog', 'auctions', 'discords', 'metadata_guild'];
+        for (const key of keys) {
+          const snap = await getDoc(doc(fdb, "metadata", key));
+          if (snap.exists()) {
+            firebaseMetadata[key] = snap.data();
+            console.log(`[Firebase Recovery] Direct fetch success for ${key}`, snap.data());
+          }
+        }
+      }
+
       const payload = {
         members,
         events,
         absences,
-        parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
-        auctionSessions, auctionTemplates, resourceCategories,
-        discordConfig, battlelogConfig,
+        // Sync from Firebase metadata docs if found, otherwise fallback to current state
+        parties: partiesMeta.parties || parties,
+        partyNames: partiesMeta.partyNames || partyNames,
+        raidParties: partiesMeta.raidParties || raidParties,
+        raidPartyNames: partiesMeta.raidPartyNames || raidPartyNames,
+        partyOverrides: partiesMeta.partyOverrides || partyOverrides,
+        leagueParties: partiesMeta.leagueParties || leagueParties,
+        leaguePartyNames: partiesMeta.leaguePartyNames || leaguePartyNames,
+        auctionSessions: auctionMeta.auctionSessions || auctionSessions,
+        auctionTemplates: auctionMeta.auctionTemplates || auctionTemplates,
+        resourceCategories: auctionMeta.resourceCategories || resourceCategories,
+        discordConfig: discordMeta.discord || discordConfig,
+        battlelogConfig: battlelogMeta || battlelogConfig,
         exportedAt: new Date().toISOString(),
         isEmergencyFetch: true
       };
@@ -1260,25 +1384,6 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
   
-  const estimateBattleBucketBackfill = async () => {
-    if (!isArchitect) throw new Error("FORBIDDEN");
-    const [eventsSnap] = await Promise.all([getDocs(collection(db, "events"))]);
-    let attendanceEligible = 0;
-    let performanceEligible = 0;
-    let eoEligible = 0;
-    eventsSnap.docs.forEach((d) => {
-      const e = d.data();
-      if (e.attendanceData) attendanceEligible += 1;
-      if (e.performanceData) performanceEligible += 1;
-      if (e.eoRatingsData) eoEligible += 1;
-    });
-    return {
-      attendanceEligible,
-      performanceEligible,
-      eoEligible,
-      totalBucketDocs: attendanceEligible + performanceEligible + eoEligible
-    };
-  };
 
   const resolveAuctionConflict = (action) => {
     if (!pendingAuctionConflict) return;
@@ -1843,16 +1948,51 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
-  // DISABLED: fetchHistoricalData previously read historical events from Firebase.
-  // All event data is now fetched from Supabase (45-day rolling window + full import).
-  // Calling this was burning up to 500+ Firebase reads per visit to Reports/Profile pages.
-  // If historical data before the Supabase import is needed, it should be imported
-  // into Supabase first using the Import Tool, then this function can remain a no-op.
-  const fetchHistoricalData = async (_startDate = null, _endDate = null) => {
-    // No-op: Supabase is now the source of truth for event data.
-    // Re-enable only after migrating all historical events to Supabase.
-    return;
-  };
+  const fetchHistoricalData = React.useCallback(async (startDate = null, endDate = null) => {
+    try {
+      setIsLoadingHistory(true);
+      let query = supabase.from('events').select('*');
+      if (startDate) query = query.gte('event_date', startDate);
+      if (endDate) query = query.lte('event_date', endDate);
+      
+      const { data: eventsData, error } = await query.order('event_date', { ascending: false });
+      if (error) throw error;
+
+      if (eventsData) {
+        const mappedEvents = eventsData.map(e => ({
+          eventId: e.event_id,
+          eventDate: e.event_date,
+          type: e.type,
+          eventType: e.type, // Backward compatibility
+          title: e.title,
+          auditor: e.auditor,
+          attendanceData: e.attendance_data,
+          performanceData: e.performance_data,
+          eoRatingsData: e.eo_ratings_data
+        }));
+
+        const nestedAtt = [];
+        const nestedPerf = [];
+        const nestedEo = [];
+        
+        mappedEvents.forEach(e => {
+          if (e.attendanceData) Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
+          if (e.performanceData) Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
+          if (e.eoRatingsData) Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
+        });
+
+        setHistoricalEvents(mappedEvents);
+        setHistoricalAttendance(nestedAtt);
+        setHistoricalPerformance(nestedPerf);
+        setHistoricalEoRatings(nestedEo);
+      }
+    } catch (err) {
+      console.error("Fetch historical data failed:", err);
+      showToast("Failed to load historical data", "error");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [showToast]);
 
 
   const value = {
@@ -1883,7 +2023,7 @@ export const GuildProvider = ({ children, initialData }) => {
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
     resetDatabase, exportBackupSnapshot,
-    migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole,
+    migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles,
     resetMonthlyScores,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,

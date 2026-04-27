@@ -66,6 +66,29 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read BOOLEAN DEFAULT FALSE
 );
 
+-- 7. Profile Update Requests
+CREATE TABLE IF NOT EXISTS requests (
+    id TEXT PRIMARY KEY,
+    member_id TEXT REFERENCES roster(member_id) ON DELETE CASCADE,
+    old_data JSONB,
+    new_data JSONB,
+    status TEXT DEFAULT 'pending',
+    timestamp BIGINT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 8. Join/Application Requests
+CREATE TABLE IF NOT EXISTS join_requests (
+    id TEXT PRIMARY KEY,
+    ign TEXT,
+    class TEXT,
+    email TEXT,
+    status TEXT DEFAULT 'pending',
+    timestamp BIGINT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
 -- DISABLE RLS FOR INITIAL MIGRATION
 ALTER TABLE roster DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events DISABLE ROW LEVEL SECURITY;
@@ -73,3 +96,5 @@ ALTER TABLE absences DISABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE metadata DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE requests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE join_requests DISABLE ROW LEVEL SECURITY;

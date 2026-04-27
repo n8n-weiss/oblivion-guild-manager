@@ -79,12 +79,24 @@ const SupabaseMigration = () => {
       // 4. Migrate Metadata
       const metaKeys = [
         { key: 'parties', data: { parties: data.parties, partyNames: data.partyNames, raidParties: data.raidParties, raidPartyNames: data.raidPartyNames, partyOverrides: data.partyOverrides, leagueParties: data.leagueParties, leaguePartyNames: data.leaguePartyNames } },
-        { key: 'auction', data: { auctionSessions: data.auctionSessions, auctionTemplates: data.auctionTemplates, resourceCategories: data.resourceCategories } },
+        { key: 'auction', data: { 
+          auctionSessions: data.auctionSessions || data.auctions?.auctionSessions || [], 
+          auctionTemplates: data.auctionTemplates || data.auctions?.auctionTemplates || [], 
+          resourceCategories: data.resourceCategories || data.auctions?.resourceCategories || ["Card Album", "Light & Dark"] 
+        } },
         { key: 'discord', data: { discord: data.discordConfig } },
         { key: 'battlelog', data: { ...data.battlelogConfig } }
       ];
 
       for (const m of metaKeys) {
+        // Skip if data is basically empty to prevent overwriting existing Supabase data with nulls
+        const hasData = Object.values(m.data).some(v => Array.isArray(v) ? v.length > 0 : (v && Object.keys(v).length > 0));
+        
+        if (!hasData) {
+          addLog(`Skipping empty metadata: ${m.key}`);
+          continue;
+        }
+
         addLog(`Migrating metadata: ${m.key}...`);
         const { error } = await supabase.from('metadata').upsert({
           key: m.key,

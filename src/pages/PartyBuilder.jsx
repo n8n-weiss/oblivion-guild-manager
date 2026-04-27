@@ -53,7 +53,7 @@ function PartyBuilder() {
   }, [sourceMode, activeMembers, members, attendance, partyOverrides]);
 
   // ── PARTY MODE ────────────────────────────────────────────────
-  const assignedPartyIds = useMemo(() => new Set(parties.flatMap(p => p.map(m => m.memberId))), [parties]);
+  const assignedPartyIds = useMemo(() => new Set((parties || []).flatMap(p => Array.isArray(p) ? p.map(m => m.memberId) : [])), [parties]);
   const partyBench = useMemo(() => poolMembers.filter(m => !assignedPartyIds.has(m.memberId)), [poolMembers, assignedPartyIds]);
   const partyBenchDPS = useMemo(() => partyBench.filter(m => m.role === "DPS"), [partyBench]);
   const partyBenchSUP = useMemo(() => partyBench.filter(m => m.role !== "DPS"), [partyBench]);
@@ -70,7 +70,7 @@ function PartyBuilder() {
   const resetParties = () => setParties([]);
 
   // ── RAID MODE ─────────────────────────────────────────────────
-  const assignedRaidIds = useMemo(() => new Set(raidParties.flatMap(r => r.map(m => m.memberId))), [raidParties]);
+  const assignedRaidIds = useMemo(() => new Set((raidParties || []).flatMap(r => Array.isArray(r) ? r.map(m => m.memberId) : [])), [raidParties]);
   const raidBench = useMemo(() => poolMembers.filter(m => !assignedRaidIds.has(m.memberId)), [poolMembers, assignedRaidIds]);
   const raidBenchDPS = useMemo(() => raidBench.filter(m => m.role === "DPS"), [raidBench]);
   const raidBenchSUP = useMemo(() => raidBench.filter(m => m.role !== "DPS"), [raidBench]);
@@ -97,8 +97,8 @@ function PartyBuilder() {
 
   // ── LEAGUE MODE ───────────────────────────────────────────────
   const assignedLeagueIds = useMemo(() => {
-    const mainIds = (leagueParties.main || []).flatMap(p => p.map(m => m.memberId));
-    const subIds = (leagueParties.sub || []).flatMap(p => p.map(m => m.memberId));
+    const mainIds = (leagueParties.main || []).flatMap(p => Array.isArray(p) ? p.map(m => m.memberId) : []);
+    const subIds = (leagueParties.sub || []).flatMap(p => Array.isArray(p) ? p.map(m => m.memberId) : []);
     return new Set([...mainIds, ...subIds]);
   }, [leagueParties]);
   
@@ -407,7 +407,8 @@ function PartyBuilder() {
 
           {hasParties && (
             <div className="party-grid">
-              {parties.map((party, i) => {
+              {(parties || []).map((party, i) => {
+                if (!Array.isArray(party)) return null;
                 const dpsC = party.filter(m => m.role === "DPS").length;
                 const supC = party.filter(m => m.role !== "DPS").length;
                 const name = partyNames[i] || `Party ${i + 1}`;
@@ -442,7 +443,7 @@ function PartyBuilder() {
                       <span className="text-xs" style={{ color: "var(--accent)" }}>{supC} Support</span>
                       <span className="text-xs text-muted">· {party.length}/5</span>
                     </div>
-                    {party.map((m) => (
+                    {Array.isArray(party) && party.map((m) => (
                       <div className="party-member" key={m.memberId}
                         draggable
                         onDragStart={() => onDragStart(m.memberId, i)}
@@ -497,7 +498,8 @@ function PartyBuilder() {
           {/* Raid cards */}
           {hasRaids && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {raidParties.map((raid, ri) => {
+              {(raidParties || []).map((raid, ri) => {
+                if (!Array.isArray(raid)) return null;
                 const raidKey = `raid:${ri}`;
                 const dps = raid.filter(m => m.role === "DPS");
                 const sup = raid.filter(m => m.role !== "DPS");
@@ -585,7 +587,7 @@ function PartyBuilder() {
                             <div style={{ flex: 1, height: 1, background: "rgba(224,92,138,0.2)" }} />
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {dps.map(m => (
+                            {Array.isArray(dps) && dps.map(m => (
                               <div key={m.memberId}
                                 draggable
                                 onDragStart={() => onDragStart(m.memberId, raidKey)}
@@ -618,7 +620,7 @@ function PartyBuilder() {
                             <div style={{ flex: 1, height: 1, background: "rgba(99,130,230,0.2)" }} />
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {sup.map(m => (
+                            {Array.isArray(sup) && sup.map(m => (
                               <div key={m.memberId}
                                 draggable
                                 onDragStart={() => onDragStart(m.memberId, raidKey)}
@@ -702,6 +704,7 @@ function PartyBuilder() {
 
               <div className="league-grid">
                 {(leagueParties.main || []).map((party, i) => {
+                  if (!Array.isArray(party)) return null;
                   const dropKey = `league:main:${i}`;
                   const name = (leaguePartyNames.main && leaguePartyNames.main[i]) || LEAGUE_MAIN_NAMES[i];
                   return (
@@ -730,7 +733,7 @@ function PartyBuilder() {
                       </div>
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {party.map(m => (
+                        {Array.isArray(party) && party.map(m => (
                           <div className="party-member" key={m.memberId}
                             draggable
                             onDragStart={() => onDragStart(m.memberId, dropKey)}
@@ -773,6 +776,7 @@ function PartyBuilder() {
 
               <div className="league-grid">
                 {(leagueParties.sub || []).map((party, i) => {
+                  if (!Array.isArray(party)) return null;
                   const dropKey = `league:sub:${i}`;
                   const name = (leaguePartyNames.sub && leaguePartyNames.sub[i]) || LEAGUE_SUB_NAMES[i];
                   return (
@@ -801,7 +805,7 @@ function PartyBuilder() {
                       </div>
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {party.map(m => (
+                        {Array.isArray(party) && party.map(m => (
                           <div className="party-member" key={m.memberId}
                             draggable
                             onDragStart={() => onDragStart(m.memberId, dropKey)}
