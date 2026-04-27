@@ -219,9 +219,9 @@ function RequestsPage() {
               visiblePending.map((r, idx) => {
                 const mIndex = members.findIndex(m => m.memberId === r.memberId);
                 const changes = [];
-                if (r.oldData.ign !== r.newData.ign) changes.push({ label: 'IGN', old: r.oldData.ign, new: r.newData.ign });
-                if (r.oldData.class !== r.newData.class) changes.push({ label: 'Class', old: r.oldData.class, new: r.newData.class });
-                if (r.oldData.role !== r.newData.role) changes.push({ label: 'Role', old: r.oldData.role, new: r.newData.role });
+                if (r.oldData?.ign !== r.newData?.ign) changes.push({ label: 'IGN', old: r.oldData?.ign || "—", new: r.newData?.ign || "—" });
+                if (r.oldData?.class !== r.newData?.class) changes.push({ label: 'Class', old: r.oldData?.class || "—", new: r.newData?.class || "—" });
+                if (r.oldData?.role !== r.newData?.role) changes.push({ label: 'Role', old: r.oldData?.role || "—", new: r.newData?.role || "—" });
 
                 return (
                   <div key={r.id} className="card animate-slide-up" style={{ animationDelay: `${idx * 0.1}s`, padding: 0, overflow: 'hidden' }}>
@@ -314,11 +314,11 @@ function RequestsPage() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
                         <div style={{ background: 'var(--bg-deepest)', padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
                           <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Job Class</div>
-                          <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700 }}>{r.jobClass}</div>
+                          <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700 }}>{r.jobClass || r.class || "—"}</div>
                         </div>
                         <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.03)' }}>
                           <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Combat Role</div>
-                          <div style={{ fontSize: 14, color: 'var(--accent)', fontWeight: 700 }}>{r.role}</div>
+                          <div style={{ fontSize: 14, color: 'var(--accent)', fontWeight: 700 }}>{r.role || "—"}</div>
                         </div>
                       </div>
 
@@ -411,8 +411,8 @@ function RequestsPage() {
                         </td>
                         <td style={{ color: 'var(--text-secondary)' }}>
                           {isJoin
-                            ? `${r.jobClass} | ${r.role}${r.status === "approved" ? ` | ${r.accountStatus === "activated" ? "Account Activated" : "Account Pending Activation"}` : ""}`
-                            : `${r.newData.ign} | ${r.newData.class}`}
+                            ? `${r.jobClass || r.class || "—"} | ${r.role || "—"}${r.status === "approved" ? ` | ${r.accountStatus === "activated" ? "Account Activated" : "Account Pending Activation"}` : ""}`
+                            : `${r.newData?.ign || "—"} | ${r.newData?.class || "—"}`}
                         </td>
                         <td style={{ color: 'var(--text-muted)' }}>
                           {new Date(r.timestamp).toLocaleDateString()}

@@ -283,7 +283,10 @@ export const GuildProvider = ({ children, initialData }) => {
             setUserRole(data.role);
             setMyMemberId(data.member_id || null);
           } else {
-            // No role in Supabase yet? No problem, default to member for now
+            // Shadow user: Registered in Auth but no role in Supabase yet
+            console.log("Anchoring shadow user to Supabase...");
+            const defaultRole = { uid: user.uid, email: user.email, role: 'member' };
+            await supabase.from('user_roles').upsert(defaultRole);
             setUserRole("member");
             setMyMemberId(null);
           }
@@ -364,123 +367,123 @@ export const GuildProvider = ({ children, initialData }) => {
   }, []);
 
   // Data Loading from Supabase
+  const fetchGlobalData = useCallback(async () => {
+    try {
+      setSyncStatus("loading");
+      console.log("Starting Supabase data fetch...");
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
+
+      const [
+        { data: rosterData },
+        { data: eventsData },
+        { data: absenceData },
+        { data: metaData }
+      ] = await Promise.all([
+        supabase.from('roster').select('*'),
+        supabase.from('events').select('*').gte('event_date', cutoffDate),
+        supabase.from('absences').select('*'),
+        supabase.from('metadata').select('*')
+      ]);
+      console.log("Supabase fetch completed. Data received:", { rosterData, eventsData, absenceData, metaData });
+
+      if (rosterData) {
+        const mappedMembers = rosterData.map(r => ({ 
+          ...r,
+          ...r.metadata, 
+          memberId: r.member_id,
+          guildRank: r.guild_rank,
+          isDonator: r.is_donator
+        }));
+        setMembers(mappedMembers);
+        prevData.current.members = [...mappedMembers];
+      }
+
+      if (eventsData) {
+        const mappedEvents = eventsData.map(e => ({
+          eventId: e.event_id,
+          eventDate: e.event_date,
+          type: e.type,
+          eventType: e.type,
+          title: e.title,
+          auditor: e.auditor,
+          attendanceData: e.attendance_data,
+          performanceData: e.performance_data,
+          eoRatingsData: e.eo_ratings_data
+        }));
+        const sorted = mappedEvents.sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
+        setEvents(sorted);
+        prevData.current.events = [...sorted];
+
+        const nestedAtt = [];
+        const nestedPerf = [];
+        const nestedEo = [];
+        mappedEvents.forEach(e => {
+          if (e.attendanceData) Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
+          if (e.performanceData) Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
+          if (e.eoRatingsData) Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
+        });
+        setAttendance(nestedAtt);
+        setPerformance(nestedPerf);
+        setEoRatings(nestedEo);
+      }
+
+      if (absenceData) {
+        const mappedAbs = absenceData.map(a => ({
+          id: a.id,
+          memberId: a.member_id,
+          startDate: a.start_date,
+          endDate: a.end_date,
+          reason: a.reason,
+          status: a.status
+        }));
+        setAbsences(mappedAbs);
+        prevData.current.absences = [...mappedAbs];
+      }
+
+      // 5. Process Metadata (Settings, Parties, Auction)
+      if (metaData) {
+        metaData.forEach(m => {
+          const d = m.data;
+          if (m.key === 'parties') {
+            setParties(d.parties || []);
+            setPartyNames(d.partyNames || []);
+            setRaidParties(d.raidParties || []);
+            setRaidPartyNames(d.raidPartyNames || []);
+            setPartyOverrides(d.partyOverrides || {});
+            setLeagueParties(d.leagueParties || { main: Array(8).fill([]), sub: Array(8).fill([]) });
+            setLeaguePartyNames(d.leaguePartyNames || { main: Array(8).fill(""), sub: Array(8).fill("") });
+            metadataVersions.current.parties = m.version;
+          } else if (m.key === 'auction') {
+            setAuctionSessions(d.auctionSessions || []);
+            setAuctionTemplates(d.auctionTemplates || []);
+            setResourceCategories(d.resourceCategories || ["Card Album", "Light & Dark"]);
+            metadataVersions.current.auction = m.version;
+          } else if (m.key === 'discord') {
+            const config = d.discord ? d.discord : d;
+            setDiscordConfig(config || {});
+            metadataVersions.current.discord = m.version;
+          } else if (m.key === 'battlelog') {
+            setBattlelogConfig(d);
+            metadataVersions.current.battlelog = m.version;
+          }
+        });
+      }
+
+      setLoading(false);
+      setSyncStatus("synced");
+    } catch (err) {
+      console.error("Supabase fetch failed:", err);
+      setSyncStatus("error");
+      showToast("Data sync failed. Check console for details.", "error");
+    }
+  }, [showToast]);
+
   useEffect(() => {
     if (!currentUser && !initialData) return;
-
-    const fetchGlobalData = async () => {
-      try {
-        setSyncStatus("loading");
-        
-        // --- FIREBASE RESCUE REMOVED (Quota Protection) ---
-
-        console.log("Starting Supabase data fetch...");
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
-
-        // 1. Fetch all data in parallel
-        const [
-          { data: rosterData },
-          { data: eventsData },
-          { data: absenceData },
-          { data: metaData }
-        ] = await Promise.all([
-          supabase.from('roster').select('*'),
-          supabase.from('events').select('*').gte('event_date', cutoffDate),
-          supabase.from('absences').select('*'),
-          supabase.from('metadata').select('*')
-        ]);
-        console.log("Supabase fetch completed. Data received:", { rosterData, eventsData, absenceData, metaData });
-
-        // 2. Process Roster
-        if (rosterData) {
-          const mappedMembers = rosterData.map(r => ({ ...r.metadata, memberId: r.member_id }));
-          setMembers(mappedMembers);
-          prevData.current.members = [...mappedMembers];
-        }
-
-        // 3. Process Events & Nested Data
-        if (eventsData) {
-          const mappedEvents = eventsData.map(e => ({
-            eventId: e.event_id,
-            eventDate: e.event_date,
-            type: e.type,
-            eventType: e.type, // Mapping for backward compatibility with UI components
-            title: e.title,
-            auditor: e.auditor,
-            attendanceData: e.attendance_data,
-            performanceData: e.performance_data,
-            eoRatingsData: e.eo_ratings_data
-          }));
-          const sorted = mappedEvents.sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
-          setEvents(sorted);
-          prevData.current.events = [...sorted];
-
-          const nestedAtt = [];
-          const nestedPerf = [];
-          const nestedEo = [];
-          mappedEvents.forEach(e => {
-            if (e.attendanceData) Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
-            if (e.performanceData) Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
-            if (e.eoRatingsData) Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
-          });
-          setAttendance(nestedAtt);
-          setPerformance(nestedPerf);
-          setEoRatings(nestedEo);
-        }
-
-        // 4. Process Absences
-        if (absenceData) {
-          const mappedAbs = absenceData.map(a => ({
-            id: a.id,
-            memberId: a.member_id,
-            startDate: a.start_date,
-            endDate: a.end_date,
-            reason: a.reason,
-            status: a.status
-          }));
-          setAbsences(mappedAbs);
-          prevData.current.absences = [...mappedAbs];
-        }
-
-        // 5. Process Metadata (Settings, Parties, Auction)
-        if (metaData) {
-          metaData.forEach(m => {
-            const d = m.data;
-            if (m.key === 'parties') {
-              setParties(d.parties || []);
-              setPartyNames(d.partyNames || []);
-              setRaidParties(d.raidParties || []);
-              setRaidPartyNames(d.raidPartyNames || []);
-              setPartyOverrides(d.partyOverrides || {});
-              setLeagueParties(d.leagueParties || { main: Array(8).fill([]), sub: Array(8).fill([]) });
-              setLeaguePartyNames(d.leaguePartyNames || { main: Array(8).fill(""), sub: Array(8).fill("") });
-              metadataVersions.current.parties = m.version;
-            } else if (m.key === 'auction') {
-              setAuctionSessions(d.auctionSessions || []);
-              setAuctionTemplates(d.auctionTemplates || []);
-              setResourceCategories(d.resourceCategories || ["Card Album", "Light & Dark"]);
-              metadataVersions.current.auction = m.version;
-            } else if (m.key === 'discord') {
-              setDiscordConfig(d.discord || {});
-              metadataVersions.current.discord = m.version;
-            } else if (m.key === 'battlelog') {
-              setBattlelogConfig(d);
-              metadataVersions.current.battlelog = m.version;
-            }
-          });
-        }
-
-        setLoading(false);
-        setSyncStatus("synced");
-      } catch (err) {
-        console.error("Supabase load error:", err);
-        setSyncStatus("error");
-      }
-    };
-
     fetchGlobalData();
-  }, [currentUser, initialData, syncRetryToken]);
+  }, [currentUser, fetchGlobalData, initialData]);
 
   // Supabase notification poll interval — 5 minutes is sufficient for a guild.
   // 60s polling was wasting ~720 API requests/user/day.
@@ -557,7 +560,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
       // --- Firebase Fallback / One-time Migration ---
       // If Supabase tables are empty, read from Firebase and migrate data over.
-      if (mappedReqs.length === 0 && mappedJoin.length === 0 && !firebaseQuotaHit.current) {
+      if ((mappedReqs.length === 0 || mappedJoin.length === 0) && !firebaseQuotaHit.current) {
         console.log("[Migration] Supabase requests empty — falling back to Firebase to migrate data...");
         try {
           const [reqsSnap, joinSnap] = await Promise.all([
@@ -868,10 +871,10 @@ export const GuildProvider = ({ children, initialData }) => {
        ? catConfig.webhookUrl 
        : discordConfig.webhookUrl;
 
-     if (!targetUrl || targetUrl.trim() === "") {
-       if (isAdmin) showToast(`Discord: No Webhook URL set for '${category || "global"}'.`, "error");
-       return;
-     }
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      if (isAdmin) showToast(`Discord: Invalid or missing Webhook URL.`, "error");
+      return;
+    }
 
      let finalTitle = title;
      let finalDesc = description;
@@ -1134,6 +1137,95 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast(`Successfully synced ${roles.length} user roles!`, "success");
     } catch (err) {
       console.error("Roles sync failed:", err);
+      showToast("Sync failed: " + err.message, "error");
+    }
+  };
+
+  const syncRosterFromFirebase = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    try {
+      showToast("Fetching roster from Firebase...", "info");
+      const { collection, getDocs } = await import("firebase/firestore");
+      const { db: fdb } = await import("../firebase");
+      
+      let snap = await getDocs(collection(fdb, "members"));
+      if (snap.empty) {
+        console.log("Collection 'members' empty, trying 'roster'...");
+        snap = await getDocs(collection(fdb, "roster"));
+      }
+      
+      const fbMembers = snap.docs.map(d => ({ ...d.data(), memberId: d.id }));
+
+      showToast(`Syncing ${fbMembers.length} members to Supabase...`, "info");
+      const mapped = fbMembers.map(m => ({
+        member_id: m.memberId,
+        ign: m.ign,
+        class: m.class,
+        role: m.role || 'DPS',
+        guild_rank: m.guildRank || 'Member',
+        status: m.status || 'active',
+        is_donator: !!m.isDonator,
+        level: Number(m.level || 0),
+        cp: Number(m.cp || 0),
+        metadata: m
+      }));
+
+      const { error } = await supabase.from('roster').upsert(mapped);
+      if (error) throw error;
+      showToast("Roster roles and ranks synced successfully!", "success");
+      fetchGlobalData();
+    } catch (err) {
+      console.error("Roster sync failed:", err);
+      showToast("Sync failed: " + err.message, "error");
+    }
+  };
+
+  const migrateRequestsFromFirebase = async () => {
+    if (!isArchitect) throw new Error("FORBIDDEN");
+    try {
+      showToast("Fetching all requests from Firebase...", "info");
+      const { collection, getDocs, query, orderBy, limit } = await import("firebase/firestore");
+      const { db: fdb } = await import("../firebase");
+      
+      const [reqsSnap, joinSnap] = await Promise.all([
+        getDocs(query(collection(fdb, "requests"), orderBy("timestamp", "desc"), limit(500))),
+        getDocs(query(collection(fdb, "join_requests"), orderBy("timestamp", "desc"), limit(500)))
+      ]);
+      
+      const firebaseReqs = reqsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+      const firebaseJoin = joinSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+      
+      showToast(`Found ${firebaseReqs.length + firebaseJoin.length} items. Syncing...`, "info");
+
+      if (firebaseReqs.length > 0) {
+        const mapped = firebaseReqs.map(r => ({
+          id: r.id || `req_${Math.random().toString(36).substr(2, 9)}`,
+          member_id: r.memberId || r.member_id,
+          old_data: r.oldData || r.old_data || {},
+          new_data: r.newData || r.new_data || {},
+          status: r.status || 'pending',
+          timestamp: r.timestamp ? (isNaN(new Date(r.timestamp).getTime()) ? Date.now() : new Date(r.timestamp).getTime()) : Date.now()
+        }));
+        await supabase.from('requests').upsert(mapped);
+      }
+
+      if (firebaseJoin.length > 0) {
+        const mapped = firebaseJoin.map(r => ({
+          id: r.id || `join_${Math.random().toString(36).substr(2, 9)}`,
+          ign: r.ign,
+          class: r.class,
+          email: r.accountEmail || r.email,
+          status: r.status || 'pending',
+          timestamp: r.timestamp ? (isNaN(new Date(r.timestamp).getTime()) ? Date.now() : new Date(r.timestamp).getTime()) : Date.now(),
+          metadata: r
+        }));
+        await supabase.from('join_requests').upsert(mapped);
+      }
+
+      showToast("All requests migrated successfully!", "success");
+      fetchRequests(); // Refresh the page state
+    } catch (err) {
+      console.error("Migration failed:", err);
       showToast("Sync failed: " + err.message, "error");
     }
   };
@@ -1563,14 +1655,21 @@ export const GuildProvider = ({ children, initialData }) => {
         status: "active",
         reactivatedAt: existingMember ? new Date().toISOString() : (existingMember?.reactivatedAt || null)
       };
-      await setDoc(doc(db, "roster", r.uid), newMember);
-      await setDoc(doc(db, "join_requests", requestId), {
-        ...r,
-        status: "approved",
-        accountStatus: "activated",
-        activatedAt: new Date().toISOString(),
-        accountEmail: portalEmail
-      });
+      // 1. Activate in Supabase Roster
+      const { error: rosterErr } = await supabase.from('roster').upsert(newMember);
+      if (rosterErr) throw rosterErr;
+
+      // 2. Mark request as approved in Supabase
+      const { error: reqErr } = await supabase.from('join_requests').update({ 
+        status: 'approved',
+        metadata: {
+          ...r,
+          accountStatus: "activated",
+          activatedAt: new Date().toISOString(),
+          accountEmail: portalEmail
+        }
+      }).eq('id', requestId);
+      if (reqErr) throw reqErr;
       if (r.requestType !== "reactivation") {
         sendDiscordEmbed(
           "🎉 New Member Joined!",
@@ -1589,6 +1688,8 @@ export const GuildProvider = ({ children, initialData }) => {
         );
       }
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
+      fetchGlobalData();
+      fetchRequests();
       return true;
     } catch(err) {
       console.error(err);
@@ -2023,7 +2124,7 @@ export const GuildProvider = ({ children, initialData }) => {
     resourceCategories, setResourceCategories,
     metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
     resetDatabase, exportBackupSnapshot,
-    migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles,
+    migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles, syncRosterFromFirebase, migrateRequestsFromFirebase,
     resetMonthlyScores,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,

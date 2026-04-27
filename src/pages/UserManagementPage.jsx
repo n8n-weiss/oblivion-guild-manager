@@ -9,7 +9,7 @@ import Icon from '../components/ui/icons';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 
 function UserManagementPage() {
-  const { currentUser, setPage, showToast, members, isAdmin, isArchitect, resetDatabase, migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles, firebaseQuotaHit } = useGuild();
+  const { currentUser, setPage, showToast, members, isAdmin, isArchitect, resetDatabase, migrateNestingToEvents, fetchFirebaseDirect, fetchFirebaseMetadataOnly, migrateLocalStorageToSupabase, bootstrapMyRole, migrateUserRoles, syncRosterFromFirebase, migrateRequestsFromFirebase, firebaseQuotaHit } = useGuild();
   const RESET_TOKEN = "DELETE";
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", role: "member", memberId: "" });
@@ -373,6 +373,22 @@ function UserManagementPage() {
               style={{ border: "1px solid var(--accent)", color: "var(--accent)", background: "rgba(99,130,230,0.1)" }}
             >
               <Icon name="users" size={12} /> 🛡️ Sync All System Roles (Firebase → Supabase)
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={syncRosterFromFirebase}
+              style={{ border: "1px solid var(--green)", color: "var(--green)", background: "rgba(64,201,122,0.1)" }}
+            >
+              <Icon name="users" size={12} /> 📋 Sync Member Roster (Roles & Ranks)
+            </button>
+
+            <button 
+              className="btn btn-sm" 
+              onClick={migrateRequestsFromFirebase}
+              style={{ border: "1px solid var(--accent2)", color: "var(--accent2)", background: "rgba(230,130,130,0.1)" }}
+            >
+              <Icon name="edit" size={12} /> 📝 Sync All Pending Requests (Firebase → Supabase)
             </button>
           </div>
           
