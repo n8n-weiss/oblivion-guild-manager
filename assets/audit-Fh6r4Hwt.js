@@ -1,0 +1,1 @@
+import{l as e,u as t}from"./firebase-BDScOhoH.js";import{n}from"./firebase-CHTi8nl8.js";async function r(r,i,a,o){try{await e(t(n,`auditlogs`),{userEmail:r,userName:i,action:a,details:o,timestamp:new Date().toISOString()})}catch(e){console.error(`Audit log error:`,e)}}export{r as t};
