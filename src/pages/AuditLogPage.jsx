@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import Icon from '../components/ui/icons';
-import { MemberAvatar } from '../components/common/MemberAvatar';
+import { supabase } from '../supabase';
 import { useGuild } from '../context/GuildContext';
-import { db } from '../firebase';
-import { collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
+import Icon from '../components/ui/icons';
 import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 import StatePanel from '../components/common/StatePanel';
 
-
 function AuditLogPage() {
-  const { isArchitect, showToast, migrateNestingToEvents } = useGuild();
-  const [isMigrating, setIsMigrating] = useState(false);
+  const { isArchitect, showToast } = useGuild();
   const CLEAR_TOKEN = "DELETE";
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,9 +18,14 @@ function AuditLogPage() {
   useEffect(() => {
     const loadLogs = async () => {
       try {
-        const q = query(collection(db, "auditlogs"), orderBy("timestamp", "desc"), limit(200));
-        const snap = await getDocs(q);
-        setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const { data, error } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(100);
+        
+        if (error) throw error;
+        setLogs(data || []);
       } catch (err) {
         console.error("Load audit log error:", err);
       } finally {
@@ -34,17 +35,12 @@ function AuditLogPage() {
     loadLogs();
   }, []);
 
-  const clearLogs = async () => {
-    setShowConfirmClear(true);
-  };
-
   const confirmClearLogs = async () => {
     setIsClearing(true);
     try {
-      const snap = await getDocs(collection(db, "auditlogs"));
-      const batch = writeBatch(db);
-      snap.docs.forEach(d => batch.delete(d.ref));
-      await batch.commit();
+      const { error } = await supabase.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+      
       setLogs([]);
       showToast("Audit logs cleared successfully", "success");
       setShowConfirmClear(false);
@@ -88,12 +84,12 @@ function AuditLogPage() {
     "user_delete": "var(--red)",
   };
 
-  const allUsers = [...new Set(logs.map(l => l.userName))];
+  const allUsers = [...new Set(logs.map(l => l.user_name))];
   const allActions = [...new Set(logs.map(l => l.action))];
 
   const filtered = logs.filter(l =>
     (filterAction === "All" || l.action === filterAction) &&
-    (filterUser === "All" || l.userName === filterUser)
+    (filterUser === "All" || l.user_name === filterUser)
   );
 
   const formatTime = (ts) => {
@@ -101,7 +97,7 @@ function AuditLogPage() {
     return d.toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  const actionLabel = (action) => action.replace(/_/g, " ").replace(/ \w/g, c => c.toUpperCase());
+  const actionLabel = (action) => (action || "").replace(/_/g, " ").replace(/ \w/g, c => c.toUpperCase());
 
   return (
     <div>
@@ -112,21 +108,7 @@ function AuditLogPage() {
         </div>
         {isArchitect && (
           <div className="flex gap-2">
-            <button 
-              className="btn btn-ghost btn-sm" 
-              onClick={async () => {
-                if (window.confirm("Migrate events to nested format? This optimizes data reads by 75%.")) {
-                  setIsMigrating(true);
-                  await migrateNestingToEvents();
-                  setIsMigrating(false);
-                }
-              }}
-              disabled={isMigrating}
-              style={{ border: "1px solid var(--accent2)", color: "var(--accent2)" }}
-            >
-              <Icon name="save" size={12} /> {isMigrating ? "Migrating..." : "Optimize Data Structure"}
-            </button>
-            <button className="btn btn-danger btn-sm" onClick={clearLogs} disabled={isClearing || logs.length === 0}>
+            <button className="btn btn-danger btn-sm" onClick={() => setShowConfirmClear(true)} disabled={isClearing || logs.length === 0}>
               <Icon name="trash" size={12} /> {isClearing ? "Clearing..." : "Clear All Logs"}
             </button>
           </div>
@@ -189,8 +171,8 @@ function AuditLogPage() {
             {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{log.userName}</span>
-                <span className="badge badge-support" style={{ fontSize: 9 }}>{log.userEmail?.split("@")[0]}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{log.user_name}</span>
+                <span className="badge badge-support" style={{ fontSize: 9 }}>{log.user_email?.split("@")[0]}</span>
                 <span style={{ fontSize: 12, padding: "2px 10px", borderRadius: 20, background: `${actionColors[log.action] || "var(--accent)"}18`, color: actionColors[log.action] || "var(--accent)", fontWeight: 700 }}>
                   {actionLabel(log.action)}
                 </span>

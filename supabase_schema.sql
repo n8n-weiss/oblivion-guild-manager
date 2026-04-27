@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS absences (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Audit Logs Table
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_email TEXT,
+    user_name TEXT,
+    action TEXT,
+    details TEXT,
+    timestamp TIMESTAMPTZ DEFAULT now()
+);
+
 -- 4. User Roles Table
 CREATE TABLE IF NOT EXISTS user_roles (
     uid TEXT PRIMARY KEY, -- Firebase Auth UID

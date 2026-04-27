@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { auth } from "./firebase";
-import { signOut } from "firebase/auth";
+import { supabase } from "./supabase";
 import { useGuild } from "./context/GuildContext";
 import { NAV_ITEMS, JOB_CLASSES } from "./utils/constants";
 
@@ -102,13 +101,9 @@ export default function App() {
     loading, authLoading, currentUser, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     page, setPage,
     toast, setToast, showToast,
-    members, events, attendance, performance, eoRatings, absences,
+    members, events, absences,
     notifications, requests, joinRequests, onlineUsers,
-    parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
-    auctionSessions, auctionTemplates, resourceCategories,
-    discordConfig, battlelogConfig,
-    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry,
-    isOfflineMode, migrateNestingToEvents
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -413,7 +408,7 @@ export default function App() {
 
 
   const handleSignOut = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     setPage("dashboard");
     showToast("Signed out successfully", "success");
   };
@@ -618,33 +613,7 @@ export default function App() {
           })}
         </div>
         <div className="sidebar-footer">
-          {isArchitect && (
-            <div style={{ padding: "10px", background: "rgba(224,80,80,0.1)", borderRadius: 10, border: "1px solid var(--red)", marginBottom: 12 }}>
-              <div style={{ fontSize: 9, fontWeight: 900, color: "var(--red)", marginBottom: 6, textAlign: "center", letterSpacing: 1 }}>DATABASE LOCKED</div>
-              <button 
-                className="btn btn-sm w-full" 
-                style={{ background: "var(--red)", color: "white", fontSize: 10 }}
-                onClick={() => {
-                  const payload = {
-                    members, events, attendance, performance, eoRatings, absences,
-                    parties, raidParties, partyNames, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
-                    auctionSessions, auctionTemplates, resourceCategories,
-                    discordConfig, battlelogConfig,
-                    exportedAt: new Date().toISOString()
-                  };
-                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `OBLIVION_EMERGENCY_BACKUP_${new Date().toLocaleDateString()}.json`;
-                  link.click();
-                  showToast("Emergency backup saved to your computer!", "success");
-                }}
-              >
-                📥 Save Work to File
-              </button>
-            </div>
-          )}
+
           {currentUser && (
             <div className="sidebar-user-profile">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>

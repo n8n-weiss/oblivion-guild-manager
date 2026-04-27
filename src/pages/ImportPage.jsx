@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useGuild } from '../context/GuildContext';
 import SupabaseMigration from '../components/admin/SupabaseMigration';
 import Icon from '../components/ui/icons';
@@ -16,7 +16,6 @@ function ImportPage() {
   const [defaultJoinDate, setDefaultJoinDate] = useState("");
   const [protectExistingData, setProtectExistingData] = useState(true);
   const [activeTab, setActiveTab] = useState("import");
-  const [backupMode, setBackupMode] = useState("replace");
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
 
   const handleFile = (e) => {
@@ -214,19 +213,6 @@ function ImportPage() {
       showToast("Backup export failed", "error");
     }
   };
-
-  const downloadJsonFile = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
 
   return (
     <div>

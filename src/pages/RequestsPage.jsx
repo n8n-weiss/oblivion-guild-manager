@@ -39,9 +39,9 @@ function RequestsPage() {
     const disc = normalizeDiscord(app.discord || "");
 
     allMembers.forEach(m => {
-      if ((m.memberId || "").toLowerCase() === id) matches.push(`UID Match (${m.ign})`);
-      if ((m.ign || "").toLowerCase() === ign) matches.push(`IGN Match (${m.memberId})`);
-      if (normalizeDiscord(m.discord || "") === disc) matches.push(`Discord Match (${m.ign})`);
+      if (id && (m.memberId || "").toLowerCase() === id) matches.push(`UID Match (${m.ign})`);
+      if (ign && (m.ign || "").toLowerCase() === ign) matches.push(`IGN Match (${m.memberId})`);
+      if (disc && normalizeDiscord(m.discord || "") === disc) matches.push(`Discord Match (${m.ign})`);
     });
 
     return [...new Set(matches)]; // Unique matches

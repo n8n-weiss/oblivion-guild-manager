@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { auth, db } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
-import Icon from '../components/ui/icons';
+import { supabase } from '../supabase';
 import { useGuild } from '../context/GuildContext';
 import { JOB_CLASSES } from '../utils/constants';
 import Modal from '../components/ui/Modal';
+import Icon from '../components/ui/icons';
 
 function LoginPage() {
   const MotionDiv = motion.div;
-  const { submitJoinRequest, submitReactivationRequest, members, joinRequests } = useGuild();
+  const { submitJoinRequest, submitReactivationRequest, members, joinRequests, showToast } = useGuild();
   const [tab, setTab] = useState("login"); // login, register
 
-  const [email, setEmail] = useState(() => localStorage.getItem("last_login_uid_v1") || "");
+  const [email, setEmail] = useState(() => localStorage.getItem("last_login_uid_v2") || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
@@ -43,6 +41,7 @@ function LoginPage() {
   const regFinalUid = buildOblUid(regUid);
   const regNormalizedDiscord = normalizeDiscord(regDiscord);
   const regPortalEmail = regNormalizedDiscord ? `${regNormalizedDiscord}@oblivion.com` : "";
+
   const existingMemberMatch = React.useMemo(() => {
     if (!regFinalUid && !regNormalizedDiscord) return null;
     return members.find((m) => {
@@ -77,108 +76,65 @@ function LoginPage() {
     
     setLoading(true);
     setError("");
-    setAuthNotice("Authenticating guild credentials...");
 
     try {
-      // 1. Primary Attempt: Standard sign-in
-      try {
-        await signInWithEmailAndPassword(auth, cleanEmail, password);
-        localStorage.setItem("last_login_uid_v1", cleanEmail);
-        return; // Redirect happens in App.jsx via Context update
-      } catch (authErr) {
-        // If it's a "user not found" or "wrong password", try the fallback setup
-        if (authErr.code !== 'auth/user-not-found' && authErr.code !== 'auth/wrong-password' && authErr.code !== 'auth/invalid-credential') {
-          throw authErr;
-        }
-        
-        // 2. Fallback Attempt: Check Join Requests or Roster for auto-creation
-        const cleanPass = password.toUpperCase().trim();
-        const finalPass = cleanPass.startsWith("OBL") ? cleanPass : "OBL" + cleanPass;
+      // 1. Primary Attempt: Standard Supabase Sign-in
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password
+      });
 
-        // A. Check Join Requests first (New Applications)
-        const qJoin = query(collection(db, "join_requests"), where("status", "==", "approved"), where("uid", "==", finalPass));
-        const snapJoin = await getDocs(qJoin).catch(err => {
-          if (err.code === "resource-exhausted") return { empty: true, docs: [] };
-          throw err;
-        });
-        let matchFound = false;
-        let userData = null;
+      if (!authErr) {
+        localStorage.setItem("last_login_uid_v2", cleanEmail);
+        return;
+      }
 
-        if (!snapJoin.empty) {
-          const r = snapJoin.docs[0].data();
-          const cleanDiscord = (r.discord || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-          const calculatedEmail = `${cleanDiscord}@oblivion.com`;
+      // 2. Fallback Attempt: Check Supabase Roster for auto-creation
+      const cleanPass = password.toUpperCase().trim();
+      const finalPass = cleanPass.startsWith("OBL") ? cleanPass : "OBL" + cleanPass;
 
-          if (cleanEmail === calculatedEmail) {
-            matchFound = true;
-            userData = {
-              memberId: finalPass,
-              email: calculatedEmail,
-              displayName: r.ign,
-              role: "member"
-            };
-          }
-        }
+      // Check Roster table in Supabase
+      const { data: rosterMatch } = await supabase
+        .from('roster')
+        .select('*')
+        .eq('member_id', finalPass)
+        .maybeSingle();
 
-        // B. Check Roster if no join request match (Legacy/Imported Members)
-        if (!matchFound) {
-          const qRoster = query(collection(db, "roster"), where("memberId", "==", finalPass));
-          const snapRoster = await getDocs(qRoster).catch(err => {
-            if (err.code === "resource-exhausted") return { empty: true, docs: [] };
-            throw err;
-          });
-          
-          if (!snapRoster.empty) {
-            const m = snapRoster.docs[0].data();
-            const cleanDiscord = (m.discord || m.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-            const calculatedEmail = `${cleanDiscord}@oblivion.com`;
+      if (rosterMatch) {
+        const cleanDiscord = (rosterMatch.discord || rosterMatch.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const calculatedEmail = `${cleanDiscord}@oblivion.com`;
 
-            if (cleanEmail === calculatedEmail) {
-              matchFound = true;
-              userData = {
-                memberId: finalPass,
-                email: calculatedEmail,
-                displayName: m.ign,
-                role: "member"
-              };
-            } else {
-              // Found the UID, but email mismatch. Show specific hint.
-              throw new Error(`Credential mismatch. For UID ${finalPass}, your portal email should be ${calculatedEmail}.`);
+        if (cleanEmail === calculatedEmail) {
+          const { error: signUpErr } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: password, // Use UID as initial password
+            options: {
+              data: {
+                display_name: rosterMatch.ign,
+                member_id: finalPass
+              }
             }
-          }
-        }
-
-        if (matchFound && userData) {
-          setAuthNotice("Setting up your portal account...");
-          const cred = await createUserWithEmailAndPassword(auth, cleanEmail, finalPass);
-          await setDoc(doc(db, "userroles", cred.user.uid), {
-            ...userData,
-            createdAt: new Date()
           });
-          localStorage.setItem("last_login_uid_v1", cleanEmail);
-          return;
-        }
 
-        // 3. Final Fallback: If no match found at all
-        throw new Error("Invalid credentials. If you are a new member, please sign up first. If you are a legacy member, ensure you are using your OBL+UID as password.");
-      }
-    } catch (err) {
-      console.error("Login sequence failed:", err);
-      if (err.code === 'permission-denied') {
-        setError("Portal Link Error: Security rules are blocking verification. Please contact an Officer.");
-      } else if (err.code === 'auth/network-request-failed') {
-        setError("Network error. Please check your connection.");
+          if (signUpErr) throw signUpErr;
+          
+          showToast("Account created! You can now sign in.", "success");
+          setError("Your account has been initialized. Please try signing in again.");
+        } else {
+          throw new Error(`Credential mismatch. For UID ${finalPass}, your portal email should be ${calculatedEmail}.`);
+        }
       } else {
-        setError(err.message || "Sign in failed.");
+        throw new Error("Invalid credentials. If you are a new member, please sign up first.");
       }
+
+    } catch (err) {
+      console.error("Login failed:", err);
+      setError(err.message || "Sign in failed.");
     } finally {
-      // This finally block ensures loading is cleared if we are still on this page
       setLoading(false);
       setAuthNotice("");
     }
   };
-
-
 
   const handleRegister = async () => {
     if (!regDiscord.trim() || !regIgn.trim() || !regUid.trim() || !regClass) {

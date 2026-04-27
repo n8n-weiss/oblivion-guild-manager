@@ -433,10 +433,6 @@ function EventsPage() {
     return { topDps, topSupport, topAttendance, hash: JSON.stringify(hashPayload) };
   }, [attendance, leaderboardSnapshot, members, performance]);
   
-  const currentDigest = React.useMemo(() => buildDigestSnapshot(selectedEvent), [buildDigestSnapshot, selectedEvent]);
-  const digestAlreadyPosted = !!selectedEvent?.digestMeta?.hash;
-  const digestIsUpdated = digestAlreadyPosted && selectedEvent?.digestMeta?.hash !== currentDigest?.hash;
-
   const postEventDigest = async (mode = "manual") => {
     if (!selectedEvent) return;
     const digest = buildDigestSnapshot(selectedEvent);

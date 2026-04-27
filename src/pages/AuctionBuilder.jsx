@@ -366,9 +366,7 @@ function AuctionBuilder() {
   const {
     auctionTemplates, setAuctionTemplates, showToast,
     resourceCategories, setResourceCategories,
-    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig,
-    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData,
-    isOfflineMode,
+    sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig, isOfflineMode,
     memberLootStats, auctionWishlist,
     members, auctionSessions, setAuctionSessions
   } = useGuild();
@@ -581,18 +579,7 @@ function AuctionBuilder() {
     [session, membersById]
   );
 
-  const exportSessionToJSON = () => {
-    if (!session) return;
-    const data = JSON.stringify(session, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `AUCTION_DRAFT_${session.name}_${session.date}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast("JSON Draft exported! Keep this file to import later.", "success");
-  };
+
 
   const exportTableToImage = async () => {
     const element = document.getElementById('auction-table-export');
@@ -1360,7 +1347,7 @@ function AuctionBuilder() {
                         return [...filtered, data];
                       });
                       showToast("Session imported locally!", "success");
-                    } catch (err) {
+                    } catch {
                       showToast("Invalid JSON file", "error");
                     }
                   };
