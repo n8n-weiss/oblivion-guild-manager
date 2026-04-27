@@ -28,6 +28,10 @@ function LoginPage() {
   const [regClass, setRegClass] = useState("");
   const [regRole, setRegRole] = useState("DPS");
   const [submitted, setSubmitted] = useState(false);
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffUid, setStaffUid] = useState("");
+  const [staffPass, setStaffPass] = useState("");
+
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -89,52 +93,141 @@ function LoginPage() {
         return;
       }
 
-      // 2. Fallback Attempt: Check Supabase Roster for auto-creation
+      // 2. Fallback Attempt: Check User Roles or Roster for auto-creation
       const cleanPass = password.toUpperCase().trim();
       const finalPass = cleanPass.startsWith("OBL") ? cleanPass : "OBL" + cleanPass;
 
-      // Check Roster table in Supabase
+      console.log("Login Attempt:", { email: cleanEmail, finalPass });
+      
+      // First, check if this email is already registered in User Management (staff)
+      const { data: roleMatch } = await supabase
+        .from('user_roles')
+        .select('*, roster(ign, guild_rank)')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      // SECURITY RULE: If they are staff, they MUST use their secret password. 
+      // We block the OBL auto-signup for staff accounts to prevent members from guessing their login.
+      if (roleMatch) {
+        throw new Error("Staff accounts require a secret password. Please Sign In with your custom credentials or contact the Architect.");
+      }
+
+      // If not in User Management, check Roster table for members
       const { data: rosterMatch } = await supabase
         .from('roster')
         .select('*')
         .eq('member_id', finalPass)
         .maybeSingle();
 
+
       if (rosterMatch) {
-        const cleanDiscord = (rosterMatch.discord || rosterMatch.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const calculatedEmail = `${cleanDiscord}@oblivion.com`;
+        const discordHandle = (rosterMatch.discord || rosterMatch.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const calculatedEmail = `${discordHandle}@oblivion.com`;
+        
+        const isStaff = ["Admin", "Officer", "Commander", "Vice Guild Master", "Guild Master", "System Architect (Creator)"].includes(rosterMatch.guild_rank);
 
-        if (cleanEmail === calculatedEmail) {
-          const { error: signUpErr } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password: password, // Use UID as initial password
-            options: {
-              data: {
-                display_name: rosterMatch.ign,
-                member_id: finalPass
-              }
-            }
-          });
-
-          if (signUpErr) throw signUpErr;
-          
-          showToast("Account created! You can now sign in.", "success");
-          setError("Your account has been initialized. Please try signing in again.");
+        if (cleanEmail === calculatedEmail || isStaff) {
+          await performAutoSignup(cleanEmail, password, rosterMatch.ign, finalPass);
+          return;
         } else {
           throw new Error(`Credential mismatch. For UID ${finalPass}, your portal email should be ${calculatedEmail}.`);
         }
       } else {
         throw new Error("Invalid credentials. If you are a new member, please sign up first.");
       }
-
     } catch (err) {
-      console.error("Login failed:", err);
-      setError(err.message || "Sign in failed.");
+      console.error("Login flow error:", err);
+      setError(err.message || "Login failed");
     } finally {
       setLoading(false);
       setAuthNotice("");
     }
   };
+  
+  const performAutoSignup = async (email, password, displayName, memberId) => {
+    const { error: signUpErr } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        data: {
+          display_name: displayName,
+          member_id: memberId
+        }
+      }
+    });
+
+    if (signUpErr) throw signUpErr;
+    
+    showToast("Account created! You can now sign in.", "success");
+    setError("Your account has been initialized. Please try signing in again.");
+    localStorage.setItem("last_login_uid_v2", email);
+  };
+
+  const handleStaffActivation = async () => {
+    const email = staffEmail.trim().toLowerCase();
+    const uid = staffUid.toUpperCase().trim();
+    const pass = staffPass.trim();
+    
+    if (!email || !uid || !pass) {
+      setError("Please fill in all staff activation fields.");
+      return;
+    }
+    if (pass.length < 6) {
+      setError("Secret password must be at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const finalUid = uid.startsWith("OBL") ? uid : "OBL" + uid;
+      
+      // 1. Verify in user_roles
+      const { data: roleMatch, error: roleErr } = await supabase
+        .from('user_roles')
+        .select('*, roster(ign)')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (roleErr) throw roleErr;
+      if (!roleMatch) {
+        throw new Error("This email is not registered as Staff. Please contact the Architect.");
+      }
+      if (roleMatch.member_id !== finalUid) {
+        throw new Error("UID verification failed. Make sure you enter your correct OBL UID.");
+      }
+
+      // 2. Perform SignUp
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password: pass,
+        options: {
+          data: {
+            display_name: roleMatch.roster?.ign || roleMatch.email.split('@')[0],
+            member_id: finalUid
+          }
+        }
+      });
+
+      if (signUpErr) {
+        if (signUpErr.message.includes("already registered")) {
+          throw new Error("Account already activated. Please Sign In normally.");
+        }
+        throw signUpErr;
+      }
+
+      showToast("Staff Access Secured! You can now Sign In with your secret password.", "success");
+      setTab("login");
+      setStaffEmail("");
+      setStaffUid("");
+      setStaffPass("");
+    } catch (err) {
+      setError(err.message || "Activation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const handleRegister = async () => {
     if (!regDiscord.trim() || !regIgn.trim() || !regUid.trim() || !regClass) {
@@ -267,10 +360,10 @@ function LoginPage() {
               <Icon name="edit" size={12} />
               Sign Up
             </button>
-
           </div>
 
-          {tab === "login" ? (
+          {tab === "login" && (
+
             <div key="tab-login" style={{ animation: "fade-in 0.4s ease-out" }}>
               <div style={{ fontFamily: "Cinzel,serif", fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Welcome</div>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>Sign in to access your OBLIVION Portal</div>
@@ -360,13 +453,11 @@ function LoginPage() {
                 onClick={handleLogin} disabled={loading}>
                 {loading ? "Signing in..." : "Sign In ⚔"}
               </button>
-              {loading && authNotice && (
-                <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)" }}>
-                  {authNotice}
-                </div>
-              )}
             </div>
-          ) : (
+          )}
+
+          {tab === "register" && (
+
             <div key="tab-register" style={{ animation: "fade-in 0.4s ease-out" }}>
               {submitted ? (
                 <div style={{ animation: "fade-in 0.5s ease-out", textAlign: "center", padding: "20px 0" }}>
@@ -467,6 +558,8 @@ function LoginPage() {
             </div>
           )}
         </MotionDiv>
+
+
 
         <MotionDiv 
           initial={{ opacity: 0 }}

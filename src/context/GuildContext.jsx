@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
+
 
 
 import { resetMonthlyData } from '../services/guildService';
@@ -115,14 +117,17 @@ export const GuildProvider = ({ children, initialData }) => {
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
   const [battlelogConfig, setBattlelogConfig] = useState({ weeklyAssignments: {}, rotationPoolMemberIds: [], lastEditorUid: null, lastUpdate: null });
 
-  const supabaseUrl = 'https://ngmgxqahznycnzuaraez.supabase.co';
-  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nbWd4cWFoem55Y256dWFyYWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDkwNDUsImV4cCI6MjA5MjY4NTA0NX0.YgdGYHa0bgGqKCFQ7-NaNLH7PTodBTNMk2JGRN07J4Y';
   const storageKey = `sb-ngmgxqahznycnzuaraez-auth-token`;
 
   const getAuthHeaders = useCallback(() => {
-    const sessionStr = localStorage.getItem(storageKey);
+    // Try both standard and project-specific storage keys
+    const projectKey = `sb-ngmgxqahznycnzuaraez-auth-token`;
+    const genericKey = `supabase.auth.token`;
+    
+    const sessionStr = localStorage.getItem(projectKey) || localStorage.getItem(genericKey);
     const session = sessionStr ? JSON.parse(sessionStr) : null;
     const token = session?.access_token || supabaseAnonKey;
+    
     return {
       'apikey': supabaseAnonKey,
       'Authorization': `Bearer ${token}`,
@@ -160,22 +165,44 @@ export const GuildProvider = ({ children, initialData }) => {
   const [leagueParties, setLeagueParties] = useState(() => {
     try {
       const saved = localStorage.getItem('guild_leagueParties');
-      if (!saved) return { main: Array(8).fill([]), sub: Array(8).fill([]) };
+      const emptyState = { 
+        main: Array.from({ length: 8 }, () => []), 
+        sub: Array.from({ length: 8 }, () => []) 
+      };
+      if (!saved) return emptyState;
       const parsed = JSON.parse(saved);
-      const data = parsed.data || { main: Array(8).fill([]), sub: Array(8).fill([]) };
+      const data = parsed.data || emptyState;
       // Sanitize
-      const sanitize = (arr) => Array.isArray(arr) ? arr.map(p => Array.isArray(p) ? p : (p.members || [])) : Array(8).fill([]);
+      const sanitize = (arr) => Array.isArray(arr) ? arr.map(p => Array.isArray(p) ? p : (p.members || [])) : Array.from({ length: 8 }, () => []);
       return { main: sanitize(data.main), sub: sanitize(data.sub) };
-    } catch { return { main: Array(8).fill([]), sub: Array(8).fill([]) }; }
+    } catch { 
+      return { 
+        main: Array.from({ length: 8 }, () => []), 
+        sub: Array.from({ length: 8 }, () => []) 
+      }; 
+    }
   });
 
   const [leaguePartyNames, setLeaguePartyNames] = useState(() => {
     try {
       const saved = localStorage.getItem('guild_leaguePartyNames');
-      if (!saved) return { main: Array(8).fill(""), sub: Array(8).fill("") };
+      const emptyNames = { 
+        main: Array.from({ length: 8 }, () => ""), 
+        sub: Array.from({ length: 8 }, () => "") 
+      };
+      if (!saved) return emptyNames;
       const parsed = JSON.parse(saved);
-      return parsed.data || { main: Array(8).fill(""), sub: Array(8).fill("") };
-    } catch { return { main: Array(8).fill(""), sub: Array(8).fill("") }; }
+      const data = parsed.data || emptyNames;
+      return { 
+        main: Array.isArray(data.main) ? data.main : Array.from({ length: 8 }, () => ""), 
+        sub: Array.isArray(data.sub) ? data.sub : Array.from({ length: 8 }, () => "") 
+      };
+    } catch { 
+      return { 
+        main: Array.from({ length: 8 }, () => ""), 
+        sub: Array.from({ length: 8 }, () => "") 
+      }; 
+    }
   });
 
   // Refs for tracking changes (to avoid unnecessary writes)
@@ -190,8 +217,8 @@ export const GuildProvider = ({ children, initialData }) => {
     partyNames: [],
     raidPartyNames: [],
     partyOverrides: {},
-    leagueParties: { main: Array(8).fill([]), sub: Array(8).fill([]) },
-    leaguePartyNames: { main: Array(8).fill(""), sub: Array(8).fill("") },
+    leagueParties: { main: Array.from({ length: 8 }, () => []), sub: Array.from({ length: 8 }, () => []) },
+    leaguePartyNames: { main: Array.from({ length: 8 }, () => ""), sub: Array.from({ length: 8 }, () => "") },
     eoRatings: [],
     auctionSessions: [],
     auctionTemplates: [],
@@ -202,6 +229,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0, battlelog: 0 });
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
+  const roleFetchedRef = useRef(false); // Prevents duplicate user_roles queries on login
 
   const showToast = useCallback((message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
@@ -257,31 +285,134 @@ export const GuildProvider = ({ children, initialData }) => {
     const initAuth = async () => {
       try {
         setAuthLoading(true);
-        const headers = getAuthHeaders();
-        const sessionStr = localStorage.getItem(storageKey);
-        const session = sessionStr ? JSON.parse(sessionStr) : null;
-        const user = session?.user;
+        console.log("Initializing Auth with getSession()...");
+        
+        const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+        
+        if (sessionErr) throw sessionErr;
 
-        if (user) {
+        if (session) {
+          const user = session.user;
+          console.log("Session found for user:", user.email);
           setCurrentUser(user);
           
-          const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${user.id}&select=*`, {
-            headers
-          });
-          const roles = await roleRes.json();
-          if (roles && roles[0]) {
-            setUserRole(roles[0].role);
-            setMyMemberId(roles[0].member_id || null);
+          // Skip if SIGNED_IN handler already fetched the role
+          if (!roleFetchedRef.current) {
+            roleFetchedRef.current = true;
+            const headers = getAuthHeaders();
+            const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${user.id}&select=*`, {
+              headers
+            });
+            
+            if (roleRes.ok) {
+              const roles = await roleRes.json();
+              if (roles && roles[0]) {
+                console.log("User role found:", roles[0].role);
+                setUserRole(roles[0].role);
+                setMyMemberId(roles[0].member_id || null);
+              } else {
+                // Only perform auto-linking if no manual role exists in user_roles
+                const identifier = user.email.split('@')[0].toLowerCase();
+                const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster?or=(discord.ilike.${identifier},ign.ilike.${identifier})&select=*`, { headers });
+                
+                if (rosterRes.ok) {
+                  const rosterMatch = await rosterRes.json();
+                  if (rosterMatch && rosterMatch[0]) {
+                    const m = rosterMatch[0];
+                    const rank = m.guild_rank || "";
+                    
+                    let newRole = 'member';
+                    if (rank.toLowerCase().includes('architect')) newRole = 'architect';
+                    else if (['Admin', 'Guild Master', 'Vice Guild Master'].includes(rank)) newRole = 'admin';
+                    else if (['Officer', 'Commander', 'Charisma Baby'].includes(rank)) newRole = 'officer';
+                    
+                    console.log(`Auto-assigning role: ${newRole} for ${user.email} (Matched via roster)`);
+                    
+                    await fetch(`${supabaseUrl}/rest/v1/user_roles`, {
+                      method: 'POST',
+                      headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+                      body: JSON.stringify({
+                        uid: user.id,
+                        email: user.email,
+                        role: newRole,
+                        member_id: m.member_id,
+                        updated_at: new Date().toISOString()
+                      })
+                    });
+                    
+                    setUserRole(newRole);
+                    setMyMemberId(m.member_id);
+                  } else {
+                    setUserRole('member');
+                  }
+                }
+              }
+            }
+
+
+          } else {
+            const errBody = await roleRes.text();
+            console.error("Role fetch failed status:", roleRes.status, "Body:", errBody);
           }
+
+        } else {
+          console.log("No active session found.");
+          setCurrentUser(null);
         }
       } catch (err) {
-        console.warn("Native Auth check failed:", err);
+        console.error("Auth initialization failed:", err);
       } finally {
         setAuthLoading(false);
       }
     };
     initAuth();
-  }, []);
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log("Auth state change event:", _event);
+      if (session) {
+        setCurrentUser(session.user);
+
+        // On actual sign-in (not the initial session load which initAuth handles),
+        // fetch the role immediately to avoid the race condition where userRole
+        // stays null and the user is briefly redirected to the member profile page.
+        if (_event === "SIGNED_IN" && !roleFetchedRef.current) {
+          roleFetchedRef.current = true;
+          try {
+            const headers = getAuthHeaders();
+            const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${session.user.id}&select=*`, { headers });
+            if (roleRes.ok) {
+              const roles = await roleRes.json();
+              if (roles && roles[0]) {
+                // Staff account: has an explicit role + member_id
+                setUserRole(roles[0].role);
+                setMyMemberId(roles[0].member_id || null);
+              } else {
+                // Regular member: use metadata member_id stored during auto-signup
+                const metaMemberId = session.user.user_metadata?.member_id || null;
+                if (metaMemberId) {
+                  setUserRole('member');
+                  setMyMemberId(metaMemberId);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn("Role fetch on SIGNED_IN failed:", err);
+          }
+        }
+
+      } else {
+        // Reset on sign out so re-login fetches fresh role
+        roleFetchedRef.current = false;
+        setCurrentUser(null);
+        setUserRole(null);
+        setMyMemberId(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [getAuthHeaders]);
+
 
   // Data Loading from Supabase
   const GLOBAL_CACHE_KEY = "global_guild_data_v1";
@@ -332,10 +463,12 @@ export const GuildProvider = ({ children, initialData }) => {
         })
       ]);
 
-      const rosterData = await rosterRes.json();
-      const eventsData = await eventsRes.json();
-      const absenceData = await absenceRes.json();
-      const metaData = await metaRes.json();
+      const rosterData = await rosterRes.json().catch(() => []);
+      const eventsData = await eventsRes.json().catch(() => []);
+      const absenceData = await absenceRes.json().catch(() => []);
+      const metaData = await metaRes.json().catch(() => []);
+
+      if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
 
       processFetchedData(rosterData, eventsData, absenceData, metaData);
 
@@ -345,17 +478,17 @@ export const GuildProvider = ({ children, initialData }) => {
         fetchedAt: Date.now()
       }));
 
-      setLoading(false);
       setSyncStatus("synced");
-      prevData.current.isFetching = false;
       console.log("Global fetch completed total:", Date.now() - t0, "ms");
     } catch (err) {
       console.error("Supabase fetch failed:", err);
       setSyncStatus("error");
+      showToast("Data sync failed. Some data may be missing.", "error");
+    } finally {
+      setLoading(false);
       prevData.current.isFetching = false;
-      showToast("Data sync failed. Check console for details.", "error");
     }
-  }, [showToast]);
+  }, [showToast, getAuthHeaders]);
 
   const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData) => {
     if (rosterData) {
@@ -363,9 +496,11 @@ export const GuildProvider = ({ children, initialData }) => {
         ...r,
         ...r.metadata, 
         memberId: r.member_id,
+        discord: r.discord || r.metadata?.discord || "",
         guildRank: r.guild_rank,
         isDonator: r.is_donator
       }));
+
       setMembers(mappedMembers);
       prevData.current.members = [...mappedMembers];
     }
@@ -421,8 +556,14 @@ export const GuildProvider = ({ children, initialData }) => {
           setRaidParties(d.raidParties || []);
           setRaidPartyNames(d.raidPartyNames || []);
           setPartyOverrides(d.partyOverrides || {});
-          setLeagueParties(d.leagueParties || { main: Array(8).fill([]), sub: Array(8).fill([]) });
-          setLeaguePartyNames(d.leaguePartyNames || { main: Array(8).fill(""), sub: Array(8).fill("") });
+          setLeagueParties(d.leagueParties || { 
+            main: Array.from({ length: 8 }, () => []), 
+            sub: Array.from({ length: 8 }, () => []) 
+          });
+          setLeaguePartyNames(d.leaguePartyNames || { 
+            main: Array.from({ length: 8 }, () => ""), 
+            sub: Array.from({ length: 8 }, () => "") 
+          });
           metadataVersions.current.parties = m.version;
         } else if (m.key === 'auction') {
           setAuctionSessions(d.auctionSessions || []);
@@ -574,12 +715,15 @@ export const GuildProvider = ({ children, initialData }) => {
             member_id: m.memberId,
             ign: m.ign,
             class: m.class,
+            role: m.role || 'DPS',
+            discord: m.discord || '',
             guild_rank: m.guildRank,
             status: m.status || 'active',
             level: Number(m.level || 0),
             cp: Number(m.cp || 0),
             metadata: m
           }));
+
 
           const res = await fetch(`${supabaseUrl}/rest/v1/roster`, {
             method: 'POST',
@@ -1170,12 +1314,15 @@ export const GuildProvider = ({ children, initialData }) => {
         member_id: newMember.memberId,
         ign: newMember.ign,
         class: newMember.class,
+        role: newMember.role || 'DPS',
+        discord: newMember.discord || '',
         guild_rank: newMember.guildRank,
         status: newMember.status,
         level: Number(newMember.level || 0),
         cp: Number(newMember.cp || 0),
         metadata: newMember
       };
+
       
       const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster`, {
         method: 'POST',
@@ -1332,12 +1479,15 @@ export const GuildProvider = ({ children, initialData }) => {
         member_id: r.member_id,
         ign: updatedMember.ign || existingMember?.ign,
         class: updatedMember.class || existingMember?.class,
+        role: updatedMember.role || existingMember?.role || 'DPS',
+        discord: updatedMember.discord || existingMember?.discord || '',
         guild_rank: updatedMember.guildRank || existingMember?.guildRank,
         status: updatedMember.status || 'active',
         level: Number(updatedMember.level || 0),
         cp: Number(updatedMember.cp || 0),
         metadata: updatedMember
       };
+
 
       const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster`, {
         method: 'POST',

@@ -125,22 +125,28 @@ function PartyBuilder() {
 
   const addMemberToLeague = (member, field, partyIdx) => {
     setLeagueParties(prev => {
-      // 1. Remove from ALL league parties first
-      const nextMain = (prev.main || []).map(p => p.filter(m => m.memberId !== member.memberId));
-      const nextSub = (prev.sub || []).map(p => p.filter(m => m.memberId !== member.memberId));
+      // 1. Ensure structure exists
+      const currentMain = Array.isArray(prev?.main) ? prev.main : Array.from({ length: 8 }, () => []);
+      const currentSub = Array.isArray(prev?.sub) ? prev.sub : Array.from({ length: 8 }, () => []);
+
+      // 2. Remove from ALL league parties first
+      const nextMain = currentMain.map(p => Array.isArray(p) ? p.filter(m => m.memberId !== member.memberId) : []);
+      const nextSub = currentSub.map(p => Array.isArray(p) ? p.filter(m => m.memberId !== member.memberId) : []);
       
       const targetList = field === "main" ? nextMain : nextSub;
       
-      // 2. Check capacity
+      // 3. Check capacity
       if (targetList[partyIdx] && targetList[partyIdx].length >= 5) {
         showToast("Party is full! (Max 5 members)", "error");
         return prev;
       }
       
-      // 3. Add to target
+      // 4. Add to target
       if (field === "main") {
+        if (!nextMain[partyIdx]) nextMain[partyIdx] = [];
         nextMain[partyIdx] = [...nextMain[partyIdx], member];
       } else {
+        if (!nextSub[partyIdx]) nextSub[partyIdx] = [];
         nextSub[partyIdx] = [...nextSub[partyIdx], member];
       }
       
@@ -148,7 +154,10 @@ function PartyBuilder() {
     });
   };
 
-  const resetLeague = () => setLeagueParties({ main: Array(8).fill([]), sub: Array(8).fill([]) });
+  const resetLeague = () => setLeagueParties({ 
+    main: Array.from({ length: 8 }, () => []), 
+    sub: Array.from({ length: 8 }, () => []) 
+  });
 
   // ── DRAG HANDLERS ─────────────────────────────────────────────
   const onDragStart = (memberId, from) => setDragging({ memberId, fromParty: from });

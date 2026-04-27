@@ -47,7 +47,9 @@ function ImportPage() {
             role: row.findIndex(c => ["role", "position"].includes(c.toLowerCase())),
             discord: row.findIndex(c => ["discord", "discord id", "discord username"].includes(c.toLowerCase())),
             joinDate: row.findIndex(c => ["join date", "joined", "joindate"].includes(c.toLowerCase())),
-            idCol: row.findIndex(c => c === "#" || c.toLowerCase() === "no" || c.toLowerCase() === "no.")
+            rank: row.findIndex(c => ["rank", "guild rank", "guildrank"].includes(c.toLowerCase())),
+            idCol: row.findIndex(c => c === "#" || c.toLowerCase() === "no" || c.toLowerCase() === "no."),
+            status: row.findIndex(c => ["status", "state", "condition"].includes(c.toLowerCase()))
           };
           const foundCount = Object.values(finds).filter(v => v !== -1).length;
           if (foundCount >= 3) {
@@ -97,13 +99,28 @@ function ImportPage() {
         const roleStr = mapping.role !== -1 ? (row[mapping.role] || "") : "";
         const discord = mapping.discord !== -1 ? (row[mapping.discord] || "") : "";
 
-        // Ensure the UID isn't just a word accidentally mapped
-        if (finalUid.length < 3 || /^(dps|support|role|ign|rank|status)$/i.test(finalUid)) continue;
+        // Ensure OBL prefix
+        if (finalUid && !finalUid.startsWith('OBL') && !finalUid.startsWith('TEMP-')) {
+          finalUid = 'OBL' + finalUid;
+        }
 
         const normalizedRole = roleStr.toLowerCase().includes("support") || roleStr.toLowerCase().includes("utility") ? "Support" : "DPS";
         const jd = mapping.joinDate !== -1 ? (row[mapping.joinDate] || defaultJoinDate) : defaultJoinDate;
+        const guildRank = mapping.rank !== -1 ? (row[mapping.rank] || "Member") : "Member";
+        
+        let status = "active";
+        if (mapping.status !== -1) {
+          const rawStatus = (row[mapping.status] || "").toLowerCase();
+          if (rawStatus === "left" || rawStatus === "archived" || rawStatus === "inactive") {
+            status = "left";
+          }
+        }
 
-        parsed.push({ memberId: finalUid, ign, class: cls, role: normalizedRole, discord, joinDate: jd });
+
+        parsed.push({ memberId: finalUid, ign, class: cls, role: normalizedRole, discord, joinDate: jd, guildRank, status });
+
+
+
       }
 
       if (parsed.length === 0) {
@@ -127,14 +144,17 @@ function ImportPage() {
         if (idx >= 0) {
           // Preserve app-managed fields (guildRank, status, etc.)
           if (protectExistingData) {
-            // "Smart Merge": Keep existing critical fields (approved by portal)
-            merged[idx] = { 
-              ...merged[idx], 
-              discord: p.discord || merged[idx].discord, 
-              joinDate: (p.joinDate && p.joinDate !== defaultJoinDate) ? p.joinDate : merged[idx].joinDate 
-              // Notice we SKIP p.ign, p.class, p.role
-            };
+            // "Smart Merge": Keep existing critical fields but update discord and rank from master CSV
+              merged[idx] = { 
+                ...merged[idx], 
+                discord: p.discord || merged[idx].discord, 
+                guildRank: p.guildRank || merged[idx].guildRank,
+                status: p.status || merged[idx].status,
+                joinDate: (p.joinDate && p.joinDate !== defaultJoinDate) ? p.joinDate : merged[idx].joinDate 
+              };
+
           } else {
+
             // "Overwrite Merge": CSV takes precedence
             merged[idx] = { ...merged[idx], ...p };
           }

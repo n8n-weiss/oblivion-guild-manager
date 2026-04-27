@@ -23,20 +23,28 @@ const SupabaseMigration = () => {
       if (data.members) {
         addLog(`Migrating ${data.members.length} members...`);
         const { error } = await supabase.from('roster').upsert(
-          data.members.map(m => ({
-            member_id: m.memberId,
-            ign: m.ign,
-            class: m.class,
-            guild_rank: m.guildRank,
-            status: m.status || 'active',
-            level: Number(m.level || 0),
-            cp: Number(m.cp || 0),
-            metadata: m
-          }))
+          data.members.map(m => {
+            let mid = String(m.memberId || "");
+            if (mid && !mid.startsWith('OBL')) mid = 'OBL' + mid;
+            
+            return {
+              member_id: mid,
+              ign: m.ign,
+              class: m.class,
+              guild_rank: m.guildRank,
+              role: m.role || 'DPS',
+              discord: m.discord || '',
+              status: m.status || 'active',
+              level: Number(m.level || 0),
+              cp: Number(m.cp || 0),
+              metadata: m
+            };
+          })
         );
         if (error) throw new Error(`Roster error: ${error.message}`);
         addLog("Roster migrated successfully.");
       }
+
 
       // 2. Migrate Events
       if (data.events) {
