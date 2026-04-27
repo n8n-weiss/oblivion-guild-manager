@@ -17,7 +17,6 @@ function LoginPage() {
   const [capsOn, setCapsOn] = useState(false);
   const [showForgotUid, setShowForgotUid] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
-  const [authNotice, setAuthNotice] = useState("");
   const [reactivateDiscord, setReactivateDiscord] = useState("");
   const [reactivateUid, setReactivateUid] = useState("");
   const [reactivateIgn, setReactivateIgn] = useState("");
@@ -140,7 +139,6 @@ function LoginPage() {
       setError(err.message || "Login failed");
     } finally {
       setLoading(false);
-      setAuthNotice("");
     }
   };
   
@@ -163,6 +161,7 @@ function LoginPage() {
     localStorage.setItem("last_login_uid_v2", email);
   };
 
+  // eslint-disable-next-line no-unused-vars -- Staff activation logic, to be wired to UI button
   const handleStaffActivation = async () => {
     const email = staffEmail.trim().toLowerCase();
     const uid = staffUid.toUpperCase().trim();
@@ -408,7 +407,6 @@ function LoginPage() {
                       onClick={() => {
                         localStorage.removeItem("last_login_uid_v1");
                         setEmail("");
-                        setAuthNotice("");
                         setError("");
                       }}
                       title="Clear remembered UID/email from this device"

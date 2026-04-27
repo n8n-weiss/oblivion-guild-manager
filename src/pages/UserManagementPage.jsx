@@ -27,6 +27,7 @@ function SystemMonitor({ supabase }) {
 
   React.useEffect(() => {
     if (open && !stats) fetchStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchStats and stats intentionally excluded: open is the only meaningful trigger; stats guards against refetching
   }, [open]);
 
   const usedBytes = stats?.total_bytes || 0;
@@ -153,6 +154,7 @@ function UserManagementPage() {
 
   useEffect(() => {
     loadUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount; loadUsers is stable
   }, [showToast]);
 
   const getIGN = (u) => members.find(m => m.memberId === u.member_id)?.ign || null;

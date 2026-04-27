@@ -344,6 +344,7 @@ function EventsPage() {
     };
 
     runReminders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- escalationHours is useState(12) and never changes; adding it would have no effect
   }, [events, sendDiscordEmbed, setEvents, currentUser]);
 
   const toggleAtt = (memberId, eventId) => {
@@ -536,6 +537,17 @@ function EventsPage() {
     };
   }) : [];
 
+  // Color-coded input style helper for battle log columns
+  const inputStyle = (accentColor) => ({
+    width: 60,
+    textAlign: "center",
+    padding: "4px 2px",
+    fontSize: 13,
+    borderColor: `${accentColor}55`,
+    boxShadow: "none",
+    background: `${accentColor}08`
+  });
+
   return (
     <div>
       <div className="page-header">
@@ -675,11 +687,33 @@ function EventsPage() {
                   Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>
                 </div>
                 <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                  <thead><tr>
-                    <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
-                    {selectedEvent.eventType === "Guild League" && <><th>CTF 1</th><th>CTF 2</th><th>CTF 3</th><th>Total</th><th>Kills</th><th>Assists</th><th>Perf</th><th>Score</th><th></th></>}
-                    {selectedEvent.eventType === "Emperium Overrun" && <th>Rating</th>}
-                  </tr></thead>
+                  <thead>
+                    {/* Group label row — Guild League only */}
+                    {selectedEvent.eventType === "Guild League" && (
+                      <tr style={{ fontSize: 9, letterSpacing: 1 }}>
+                        <th colSpan={3} style={{ zIndex: 30, background: "transparent", border: "none", paddingBottom: 2 }}></th>
+                        <th colSpan={4} style={{ background: "rgba(99,130,230,0.08)", color: "#6382E6", borderBottom: "2px solid rgba(99,130,230,0.35)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>⚔ CTF</th>
+                        <th colSpan={2} style={{ background: "rgba(239,68,68,0.07)", color: "#ef4444", borderBottom: "2px solid rgba(239,68,68,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>☠ Combat</th>
+                        <th colSpan={1} style={{ background: "rgba(168,85,247,0.07)", color: "#a855f7", borderBottom: "2px solid rgba(168,85,247,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>★ Perf</th>
+                        <th colSpan={2} style={{ background: "transparent", border: "none", paddingBottom: 2 }}></th>
+                      </tr>
+                    )}
+                    <tr>
+                      <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
+                      {selectedEvent.eventType === "Guild League" && <>
+                        <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 1</th>
+                        <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 2</th>
+                        <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 3</th>
+                        <th style={{ color: "#6382E6", fontSize: 11 }}>Total</th>
+                        <th style={{ color: "#ef4444", fontSize: 11 }}>Kills</th>
+                        <th style={{ color: "#f59e0b", fontSize: 11 }}>Assists</th>
+                        <th style={{ color: "#a855f7", fontSize: 11 }}>Perf</th>
+                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
+                        <th></th>
+                      </>}
+                      {selectedEvent.eventType === "Emperium Overrun" && <th>Rating</th>}
+                    </tr>
+                  </thead>
                   <tbody>
                     {evtMembers.map(m => {
                       const key = `${m.memberId}_${selectedEvent.eventId}`;
@@ -705,15 +739,25 @@ function EventsPage() {
                           </td>
                           {selectedEvent.eventType === "Guild League" && (
                             <>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
-                              <td style={{ fontWeight: 700 }}>{ctfTotal}</td>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
-                              <td><input type="number" className="form-input" style={{ width: 50 }} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
-                              <td style={{ fontWeight: 700, color: "var(--accent)" }}>{score}</td>
-                              <td><button className="btn btn-ghost btn-sm" onClick={() => savePerformance(m.memberId, selectedEvent.eventId)}><Icon name="save" size={12} /></button></td>
+                              {/* ── CTF inputs (blue) ── */}
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
+                              {/* CTF Total pill */}
+                              <td><span style={{ display: "inline-block", minWidth: 36, textAlign: "center", fontWeight: 800, fontSize: 13, color: "#6382E6", background: "rgba(99,130,230,0.12)", borderRadius: 6, padding: "3px 8px" }}>{ctfTotal}</span></td>
+                              {/* ── Combat inputs ── */}
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                              {/* ── Perf input (purple) ── */}
+                              <td><input type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
+                              {/* Score pill */}
+                              <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
+                              {/* Save button */}
+                              <td>
+                                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "3px 8px", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => savePerformance(m.memberId, selectedEvent.eventId)} title="Save scores">
+                                  <Icon name="save" size={11} /> Save
+                                </button>
+                              </td>
                             </>
                           )}
                           {selectedEvent.eventType === "Emperium Overrun" && (

@@ -347,13 +347,15 @@ export const GuildProvider = ({ children, initialData }) => {
                   }
                 }
               }
+            } else {
+              // roleRes is defined here — safe to read
+              const errBody = await roleRes.text();
+              console.error("Role fetch failed status:", roleRes.status, "Body:", errBody);
             }
 
-
-          } else {
-            const errBody = await roleRes.text();
-            console.error("Role fetch failed status:", roleRes.status, "Body:", errBody);
           }
+
+
 
         } else {
           console.log("No active session found.");
@@ -488,6 +490,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setLoading(false);
       prevData.current.isFetching = false;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- GLOBAL_CACHE_TTL and processFetchedData are stable constants; adding them would not change behavior
   }, [showToast, getAuthHeaders]);
 
   const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData) => {
@@ -616,6 +619,7 @@ export const GuildProvider = ({ children, initialData }) => {
     fetchNotifs();
     const interval = setInterval(fetchNotifs, NOTIF_POLL_INTERVAL);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- NOTIF_POLL_INTERVAL is a module constant; getAuthHeaders is stable; adding them would restart the poll interval unnecessarily
   }, [currentUser, authLoading, loading, myMemberId]);
 
   const REQUESTS_CACHE_KEY = "requests_cache_v1";
@@ -669,6 +673,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsFetchingRequests(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- REQUESTS_CACHE_TTL is a constant; getAuthHeaders is stable; excluded intentionally
   }, [currentUser, canSeeRequestData, isFetchingRequests]);
 
 
@@ -915,6 +920,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
     const timer = setTimeout(saveToSupabase, 8000);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- authLoading/currentUser/getAuthHeaders/loading/syncStatus excluded intentionally: adding them would re-trigger the 8s save debounce on every auth state change
   }, [members, events, absences, parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
 
@@ -1760,6 +1766,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsLoadingHistory(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- storageKey is a stable string derived from guild config; not reactive
   }, [showToast]);
 
 
