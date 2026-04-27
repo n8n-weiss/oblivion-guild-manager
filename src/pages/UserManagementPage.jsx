@@ -360,6 +360,24 @@ function UserManagementPage() {
             </button>
           </div>
           
+          <div style={{ marginTop: 20, padding: 16, background: "rgba(99,130,230,0.05)", borderRadius: 12, border: "1px solid var(--border)" }}>
+            <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 14, color: "var(--text-primary)" }}>🏁 Final Migration Steps:</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ background: "var(--accent)", color: "black", width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, flexShrink: 0 }}>1</div>
+                <div>Click <b>Optimize Data Structure (Nest)</b> above to prepare Firebase data (Required for Events & Battle Logs).</div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ background: "var(--accent)", color: "black", width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, flexShrink: 0 }}>2</div>
+                <div>Click <b>🚨 Full Firebase Recovery</b> to download the final JSON backup.</div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ background: "var(--accent)", color: "black", width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, flexShrink: 0 }}>3</div>
+                <div>Open the <b>Supabase Migration Tool</b> and paste the JSON to finish the move!</div>
+              </div>
+            </div>
+          </div>
+          
           <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(99,130,230,0.08)", borderRadius: 8, fontSize: 11, color: "var(--text-secondary)" }}>
             <b>Note:</b> Optimization will fetch all attendance/performance records and nest them into their respective events. This is required before exporting for Supabase.
           </div>

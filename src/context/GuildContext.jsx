@@ -1160,13 +1160,13 @@ export const GuildProvider = ({ children, initialData }) => {
       const { collection, getDocs, query, limit } = await import("firebase/firestore");
       const { db: fdb } = await import("../firebase");
       
-      const mSnap = await getDocs(query(collection(fdb, "members"), limit(1000)));
+      const mSnap = await getDocs(query(collection(fdb, "members"), limit(2000)));
       const members = mSnap.docs.map(d => ({ ...d.data(), memberId: d.id }));
       
-      const eSnap = await getDocs(query(collection(fdb, "events"), limit(100)));
+      const eSnap = await getDocs(query(collection(fdb, "events"), limit(1000)));
       const events = eSnap.docs.map(d => ({ ...d.data(), eventId: d.id }));
 
-      const aSnap = await getDocs(query(collection(fdb, "absences"), limit(500)));
+      const aSnap = await getDocs(query(collection(fdb, "absences"), limit(1000)));
       const absences = aSnap.docs.map(d => ({ ...d.data(), id: d.id }));
 
       const payload = {

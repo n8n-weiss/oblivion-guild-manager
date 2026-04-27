@@ -41,11 +41,12 @@ const SupabaseMigration = () => {
       // 2. Migrate Events
       if (data.events) {
         addLog(`Migrating ${data.events.length} events...`);
+        const validEvents = data.events.filter(e => e.eventId);
         const { error } = await supabase.from('events').upsert(
-          data.events.map(e => ({
+          validEvents.map(e => ({
             event_id: e.eventId,
-            event_date: e.eventDate,
-            type: e.type,
+            event_date: e.eventDate || new Date().toISOString().split('T')[0],
+            type: e.type || e.eventType || 'Other',
             title: e.title || '',
             auditor: e.auditor || '',
             attendance_data: e.attendanceData || {},
@@ -54,24 +55,25 @@ const SupabaseMigration = () => {
           }))
         );
         if (error) throw new Error(`Events error: ${error.message}`);
-        addLog("Events migrated successfully.");
+        addLog(`Events migrated successfully (${validEvents.length}/${data.events.length}).`);
       }
 
       // 3. Migrate Absences
       if (data.absences) {
         addLog(`Migrating ${data.absences.length} absences...`);
+        const validAbsences = data.absences.filter(a => a.id && a.memberId);
         const { error } = await supabase.from('absences').upsert(
-          data.absences.map(a => ({
+          validAbsences.map(a => ({
             id: a.id,
             member_id: a.memberId,
-            start_date: a.startDate,
-            end_date: a.endDate,
+            start_date: a.startDate || new Date().toISOString().split('T')[0],
+            end_date: a.endDate || new Date().toISOString().split('T')[0],
             reason: a.reason || '',
             status: a.status || 'pending'
           }))
         );
         if (error) throw new Error(`Absences error: ${error.message}`);
-        addLog("Absences migrated successfully.");
+        addLog(`Absences migrated successfully (${validAbsences.length}/${data.absences.length}).`);
       }
 
       // 4. Migrate Metadata
