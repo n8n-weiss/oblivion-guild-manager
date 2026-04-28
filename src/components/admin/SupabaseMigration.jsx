@@ -3,7 +3,7 @@ import { supabase } from '../../supabase';
 import { useGuild } from '../../context/GuildContext';
 
 const SupabaseMigration = () => {
-  const { showToast } = useGuild();
+  const { showToast, currentUser } = useGuild();
   const [status, setStatus] = useState('idle');
   const [log, setLog] = useState([]);
   const [jsonInput, setJsonInput] = useState('');
@@ -17,65 +17,102 @@ const SupabaseMigration = () => {
     setLog(["Starting migration..."]);
 
     try {
+      console.log("DEBUG: JSON Prefix:", jsonInput.substring(0, 100));
       const data = JSON.parse(jsonInput);
+      let wishlistEntries = [];
+      const membersList = data.members || data.roster || [];
+      console.log("DEBUG: JSON Top-Level Keys:", Object.keys(data));
+      if (membersList.length > 0) {
+        console.log("DEBUG: FULL FIRST MEMBER:", JSON.stringify(membersList[0], null, 2));
+      }
       
-      // 1. Migrate Roster
-      if (data.members) {
-        addLog(`Migrating ${data.members.length} members...`);
-        const { error } = await supabase.from('roster').upsert(
-          data.members.map(m => {
-            let mid = String(m.memberId || "");
-            if (mid && !mid.startsWith('OBL')) mid = 'OBL' + mid;
-            
-            return {
-              member_id: mid,
-              ign: m.ign,
-              class: m.class,
-              guild_rank: m.guildRank,
-              role: m.role || 'DPS',
-              discord: m.discord || '',
-              status: m.status || 'active',
-              level: Number(m.level || 0),
-              cp: Number(m.cp || 0),
-              metadata: m
-            };
-          })
-        );
-        if (error) throw new Error(`Roster error: ${error.message}`);
-        addLog("Roster migrated successfully.");
+      addLog("JSON parsed successfully.");
+      // 1. Migrate Roster & Extract Wishlists
+      if (membersList.length > 0) {
+        addLog(`Migrating ${membersList.length} members...`);
+        const rosterToUpsert = membersList.map(m => {
+          let mid = String(m.memberId || m.id || "");
+          if (mid && !mid.startsWith('OBL') && mid.length < 10) mid = 'OBL' + mid;
+          
+          // AGGRESSIVE EXTRACTION: Check multiple possible keys
+          const memberWishlist = m.wishlist || m.bids || m.loot || m.requests || 
+                                m.metadata?.wishlist || m.metadata?.bids || m.metadata?.loot;
+          
+          if (memberWishlist && (Array.isArray(memberWishlist) || typeof memberWishlist === 'object')) {
+            wishlistEntries.push({
+              id: mid,
+              bids: Array.isArray(memberWishlist) ? memberWishlist : [memberWishlist],
+              updated_at: new Date().toISOString()
+            });
+          }
+          return {
+            member_id: mid,
+            ign: m.ign,
+            class: m.class,
+            guild_rank: m.guildRank || m.guild_rank,
+            role: m.role || 'DPS',
+            discord: m.discord || '',
+            status: m.status || 'active',
+            level: Number(m.level || 0),
+            cp: Number(m.cp || 0),
+            metadata: m
+          };
+        });
+        const { error: rosterError } = await supabase.from('roster').upsert(rosterToUpsert);
+        if (rosterError) throw new Error(`Roster error: ${rosterError.message}`);
+        addLog(`Roster migrated successfully (${data.members.length}).`);
+        if (wishlistEntries.length > 0) {
+          addLog(`Extracting ${wishlistEntries.length} wishlists...`);
+          const { error: wishError } = await supabase.from('auction_bids').upsert(wishlistEntries);
+          if (!wishError) addLog(`Extracted ${wishlistEntries.length} wishlists.`);
+        }
       }
 
 
       // 2. Migrate Events
       if (data.events) {
         addLog(`Migrating ${data.events.length} events...`);
-        const validEvents = data.events.filter(e => e.eventId);
-        const { error } = await supabase.from('events').upsert(
-          validEvents.map(e => ({
-            event_id: e.eventId,
-            event_date: e.eventDate || new Date().toISOString().split('T')[0],
+        const validEvents = data.events.filter(e => e.eventId || e.event_id);
+        
+        // Fetch existing events to avoid overwriting good data with empty data
+        const { data: existingEvents } = await supabase.from('events').select('event_id, attendance_data, performance_data');
+        
+        const upsertData = validEvents.map(e => {
+          const eid = e.eventId || e.event_id;
+          const existing = existingEvents?.find(ex => ex.event_id === eid);
+          
+          const newAtt = e.attendance_data || e.attendanceData || {};
+          const newPerf = e.performance_data || e.performanceData || {};
+          const newEo = e.eo_ratings_data || e.eoRatingsData || {};
+
+          return {
+            event_id: eid,
+            event_date: e.event_date || e.eventDate || new Date().toISOString().split('T')[0],
             type: e.type || e.eventType || 'Other',
             title: e.title || '',
             auditor: e.auditor || '',
-            attendance_data: e.attendanceData || {},
-            performance_data: e.performanceData || {},
-            eo_ratings_data: e.eoRatingsData || {}
-          }))
-        );
+            // Smart Merge: Only use new data if it's not empty, otherwise preserve existing
+            attendance_data: Object.keys(newAtt).length > 0 ? newAtt : (existing?.attendance_data || {}),
+            performance_data: Object.keys(newPerf).length > 0 ? newPerf : (existing?.performance_data || {}),
+            eo_ratings_data: Object.keys(newEo).length > 0 ? newEo : (existing?.eo_ratings_data || {})
+          };
+        });
+
+        const { error } = await supabase.from('events').upsert(upsertData);
         if (error) throw new Error(`Events error: ${error.message}`);
-        addLog(`Events migrated successfully (${validEvents.length}/${data.events.length}).`);
+        addLog(`Events migrated successfully (${validEvents.length}).`);
       }
 
       // 3. Migrate Absences
       if (data.absences) {
         addLog(`Migrating ${data.absences.length} absences...`);
-        const validAbsences = data.absences.filter(a => a.id && a.memberId);
+        const validAbsences = data.absences.filter(a => a.id && (a.memberId || a.member_id));
         const { error } = await supabase.from('absences').upsert(
           validAbsences.map(a => ({
             id: a.id,
-            member_id: a.memberId,
-            start_date: a.startDate || new Date().toISOString().split('T')[0],
-            end_date: a.endDate || new Date().toISOString().split('T')[0],
+            member_id: a.member_id || a.memberId,
+            start_date: a.startDate || a.start_date || new Date().toISOString().split('T')[0],
+            end_date: a.endDate || a.end_date || new Date().toISOString().split('T')[0],
             reason: a.reason || '',
             status: a.status || 'pending'
           }))
@@ -84,7 +121,77 @@ const SupabaseMigration = () => {
         addLog(`Absences migrated successfully (${validAbsences.length}/${data.absences.length}).`);
       }
 
-      // 4. Migrate Metadata
+      // 4. Migrate Attendance (Separate Table)
+      const attendanceList = data.attendance || [];
+      if (attendanceList.length > 0) {
+        addLog(`Migrating ${attendanceList.length} top-level attendance records...`);
+        const { error } = await supabase.from('attendance').upsert(
+          attendanceList.map(a => ({
+            event_id: a.eventId || a.event_id,
+            member_id: a.memberId || a.member_id,
+            status: a.status || 'present'
+          }))
+        );
+        if (error) addLog(`Warning: Attendance table error: ${error.message}`);
+        else addLog(`${attendanceList.length} attendance records migrated.`);
+      }
+
+      // 5. Migrate Performance (Separate Table)
+      const performanceList = data.performance || [];
+      if (performanceList.length > 0) {
+        addLog(`Migrating ${performanceList.length} top-level performance records...`);
+        const { error } = await supabase.from('performance').upsert(
+          performanceList.map(p => ({
+            event_id: p.eventId || p.event_id,
+            member_id: p.memberId || p.member_id,
+            kills: p.kills || 0,
+            assists: p.assists || 0,
+            ctf1: p.ctf1 || p.ctfPoints || 0,
+            ctf2: p.ctf2 || 0,
+            ctf3: p.ctf3 || 0,
+            ctf_points: p.ctfPoints || 0,
+            performance_points: p.performancePoints || 0
+          }))
+        );
+        if (error) addLog(`Warning: Performance table error: ${error.message}`);
+        else addLog(`${performanceList.length} performance records migrated.`);
+      }
+
+      // 6. Migrate EO Ratings
+      const eoList = data.eoRatings || [];
+      if (eoList.length > 0) {
+        addLog(`Migrating ${eoList.length} EO ratings...`);
+        const { error } = await supabase.from('eo_ratings').upsert(
+          eoList.map(r => ({
+            event_id: r.eventId || r.event_id,
+            member_id: r.memberId || r.member_id,
+            rating: r.rating || 0
+          }))
+        );
+        if (error) addLog(`Warning: eo_ratings table error: ${error.message}`);
+      }
+
+      // 7. Migrate Auction Bids (Wishlist)
+      const wishlist = data.auctionBids || data.auction_bids || [];
+      if (wishlist.length > 0) {
+        addLog(`Migrating ${wishlist.length} wishlist entries...`);
+        const { error } = await supabase.from('auction_bids').upsert(
+          wishlist.map(w => {
+            let mid = String(w.id || w.memberId || w.member_id || "");
+            if (mid && !mid.startsWith('OBL') && mid.length < 10) mid = 'OBL' + mid;
+            
+            return {
+              id: mid,
+              bids: w.bids || [],
+              updated_at: w.updatedAt || new Date().toISOString()
+            };
+          })
+        );
+        if (error) addLog(`Warning: auction_bids table error: ${error.message}`);
+        else addLog(`${wishlist.length} wishlist entries migrated.`);
+      }
+
+      // 8. Migrate Metadata
       const metaKeys = [
         { key: 'parties', data: { parties: data.parties, partyNames: data.partyNames, raidParties: data.raidParties, raidPartyNames: data.raidPartyNames, partyOverrides: data.partyOverrides, leagueParties: data.leagueParties, leaguePartyNames: data.leaguePartyNames } },
         { key: 'auction', data: { 
@@ -97,13 +204,8 @@ const SupabaseMigration = () => {
       ];
 
       for (const m of metaKeys) {
-        // Skip if data is basically empty to prevent overwriting existing Supabase data with nulls
         const hasData = Object.values(m.data).some(v => Array.isArray(v) ? v.length > 0 : (v && Object.keys(v).length > 0));
-        
-        if (!hasData) {
-          addLog(`Skipping empty metadata: ${m.key}`);
-          continue;
-        }
+        if (!hasData) continue;
 
         addLog(`Migrating metadata: ${m.key}...`);
         const { error } = await supabase.from('metadata').upsert({
@@ -114,13 +216,11 @@ const SupabaseMigration = () => {
         if (error) throw new Error(`Meta ${m.key} error: ${error.message}`);
       }
 
-      // 5. Bootstrap Architect Role (The person running this is the first Architect)
+      // 8. Bootstrap Architect Role
       addLog("Bootstrapping Architect role...");
-      const user = JSON.parse(localStorage.getItem('firebase:authUser:' + Object.keys(localStorage).find(k => k.startsWith('firebase:authUser'))?.split(':')[2] || ''));
-      if (user || window.currentUserUID) {
-        const uid = user?.uid || window.currentUserUID;
+      if (currentUser?.id) {
         const { error } = await supabase.from('user_roles').upsert({
-          uid: uid,
+          uid: currentUser.id,
           role: 'architect',
           updated_at: new Date().toISOString()
         });
@@ -129,8 +229,24 @@ const SupabaseMigration = () => {
       }
 
       setStatus('done');
-      addLog("Migration COMPLETE! Reloading app in 3 seconds...");
+      addLog("Migration COMPLETE! Clearing cache and reloading...");
       showToast("Migration successful!", "success");
+      
+      // Clear cache to force fresh fetch after migration
+      sessionStorage.removeItem("global_guild_data_v2");
+      sessionStorage.setItem("global_guild_data_v2", JSON.stringify({
+        data: {
+          rosterData: data.members,
+          eventsData: data.events,
+          absenceData: data.absences,
+          metaData: data.metaData,
+          bidsData: wishlistEntries,
+          attendanceData: [],
+          performanceData: [],
+          eoRatingsData: []
+        },
+        fetchedAt: Date.now()
+      }));
       
       setTimeout(() => {
         window.location.reload();

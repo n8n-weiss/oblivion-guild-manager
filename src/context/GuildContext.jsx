@@ -283,14 +283,10 @@ export const GuildProvider = ({ children, initialData }) => {
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
   // Data Loading from Supabase
-  const GLOBAL_CACHE_KEY = "global_guild_data_v1";
+  const GLOBAL_CACHE_KEY = "global_guild_data_v3";
   const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
-  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData) => {
-    console.log("processFetchedData receiving:", { 
-      roster: Array.isArray(rosterData) ? rosterData.length : typeof rosterData,
-      events: Array.isArray(eventsData) ? eventsData.length : typeof eventsData 
-    });
+  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData) => {
     if (Array.isArray(rosterData)) {
       const mappedMembers = rosterData.map(r => ({ 
         ...r,
@@ -306,20 +302,71 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(eventsData)) {
-      const mappedEvents = eventsData.map(e => ({
-        eventId: e.event_id,
-        eventDate: e.event_date,
-        type: e.type,
-        eventType: e.type,
-        title: e.title,
-        auditor: e.auditor,
-        attendanceData: e.attendance_data,
-        performanceData: e.performance_data,
-        eoRatings: e.eo_ratings,
-        metadata: e.metadata
-      }));
+      const allAtt = Array.isArray(attendanceData) ? attendanceData.map(a => ({ ...a, memberId: a.member_id || a.memberId, eventId: a.event_id || a.eventId })) : [];
+      const allPerf = Array.isArray(performanceData) ? performanceData.map(p => ({ ...p, memberId: p.member_id || p.memberId, eventId: p.event_id || p.eventId })) : [];
+      const allEo = Array.isArray(eoRatingsData) ? eoRatingsData.map(r => ({ ...r, memberId: r.member_id || r.memberId, eventId: r.event_id || r.eventId })) : [];
+
+      const mappedEvents = eventsData.map(e => {
+        const eventId = e.event_id;
+        
+        // Flatten nested attendance if present
+        if (e.attendance_data && typeof e.attendance_data === 'object' && Object.keys(e.attendance_data).length > 0) {
+          Object.entries(e.attendance_data).forEach(([mId, status]) => {
+            if (!allAtt.find(a => a.eventId === eventId && a.memberId === mId)) {
+              allAtt.push({ eventId, memberId: mId, status });
+            }
+          });
+        }
+
+        // Flatten nested performance if present
+        if (e.performance_data && typeof e.performance_data === 'object' && Object.keys(e.performance_data).length > 0) {
+          Object.entries(e.performance_data).forEach(([mId, p]) => {
+            if (!allPerf.find(perf => perf.eventId === eventId && perf.memberId === mId)) {
+              allPerf.push({ 
+                eventId, 
+                memberId: mId, 
+                ...p,
+                kills: p.kills || 0,
+                assists: p.assists || 0,
+                ctf1: p.ctf1 || p.ctfPoints || 0,
+                ctfPoints: p.ctfPoints || 0,
+                performancePoints: p.performancePoints || 0
+              });
+            }
+          });
+        }
+
+        // Flatten nested EO ratings if present
+        if (e.eo_ratings_data && typeof e.eo_ratings_data === 'object' && Object.keys(e.eo_ratings_data).length > 0) {
+          Object.entries(e.eo_ratings_data).forEach(([mId, rating]) => {
+            if (!allEo.find(r => r.eventId === eventId && r.memberId === mId)) {
+              allEo.push({ eventId, memberId: mId, rating });
+            }
+          });
+        }
+
+        return {
+          eventId,
+          eventDate: e.event_date,
+          type: e.type,
+          eventType: e.type,
+          title: e.title,
+          auditor: e.auditor,
+          battlelogAudit: e.battlelog_audit || e.metadata?.battlelogAudit || null,
+          digestMeta: e.digest_meta || e.metadata?.digestMeta || null,
+          createdAt: e.created_at
+        };
+      });
+
       setEvents(mappedEvents);
+      setAttendance(allAtt);
+      setPerformance(allPerf);
+      setEoRatings(allEo);
+      
       prevData.current.events = [...mappedEvents];
+      prevData.current.attendance = [...allAtt];
+      prevData.current.performance = [...allPerf];
+      prevData.current.eoRatings = [...allEo];
     }
 
     if (Array.isArray(absenceData)) {
@@ -328,19 +375,27 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(metaData)) {
-      const parties = metaData.find(m => m.key === 'parties')?.value || [];
-      const raidParties = metaData.find(m => m.key === 'raidParties')?.value || [];
-      const partyNames = metaData.find(m => m.key === 'partyNames')?.value || [];
-      const raidPartyNames = metaData.find(m => m.key === 'raidPartyNames')?.value || [];
-      const partyOverrides = metaData.find(m => m.key === 'partyOverrides')?.value || {};
-      const leagueParties = metaData.find(m => m.key === 'leagueParties')?.value || { main: Array.from({ length: 8 }, () => []), sub: Array.from({ length: 8 }, () => []) };
-      const leaguePartyNames = metaData.find(m => m.key === 'leaguePartyNames')?.value || { main: Array.from({ length: 8 }, () => ""), sub: Array.from({ length: 8 }, () => "") };
-      const eoRatings = metaData.find(m => m.key === 'eoRatings')?.value || [];
-      const auctionSessions = metaData.find(m => m.key === 'auctionSessions')?.value || [];
-      const auctionTemplates = metaData.find(m => m.key === 'auctionTemplates')?.value || [];
-      const resourceCategories = metaData.find(m => m.key === 'resourceCategories')?.value || ["Card Album", "Light & Dark"];
-      const discordConfig = metaData.find(m => m.key === 'discordConfig')?.value || {};
-      const battlelogConfig = metaData.find(m => m.key === 'battlelogConfig')?.value || {};
+      const partiesGroup = metaData.find(m => m.key === 'parties')?.data || {};
+      const auctionGroup = metaData.find(m => m.key === 'auction')?.data || {};
+      const discordGroup = metaData.find(m => m.key === 'discord')?.data || {};
+      const battlelogGroup = metaData.find(m => m.key === 'battlelog')?.data || {};
+
+      const parties = Array.isArray(partiesGroup.parties) ? partiesGroup.parties : [];
+      const raidParties = Array.isArray(partiesGroup.raidParties) ? partiesGroup.raidParties : [];
+      const partyNames = Array.isArray(partiesGroup.partyNames) ? partiesGroup.partyNames : [];
+      const raidPartyNames = Array.isArray(partiesGroup.raidPartyNames) ? partiesGroup.raidPartyNames : [];
+      const partyOverrides = (partiesGroup.partyOverrides && typeof partiesGroup.partyOverrides === 'object') ? partiesGroup.partyOverrides : {};
+      const leagueParties = partiesGroup.leagueParties || { main: Array.from({ length: 8 }, () => []), sub: Array.from({ length: 8 }, () => []) };
+      const leaguePartyNames = partiesGroup.leaguePartyNames || { main: Array.from({ length: 8 }, () => ""), sub: Array.from({ length: 8 }, () => "") };
+      
+      const eoRatings = Array.isArray(metaData.find(m => m.key === 'eoRatings')?.data) ? metaData.find(m => m.key === 'eoRatings').data : [];
+      
+      const auctionSessions = Array.isArray(auctionGroup.auctionSessions) ? auctionGroup.auctionSessions : [];
+      const auctionTemplates = Array.isArray(auctionGroup.auctionTemplates) ? auctionGroup.auctionTemplates : [];
+      const resourceCategories = Array.isArray(auctionGroup.resourceCategories) ? auctionGroup.resourceCategories : ["Card Album", "Light & Dark"];
+      
+      const discordConfig = discordGroup.discord || {};
+      const battlelogConfig = battlelogGroup || {};
 
       setParties(parties);
       setRaidParties(raidParties);
@@ -372,12 +427,16 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(bidsData)) {
-      setAuctionBids(bidsData);
+      const mappedBids = bidsData.map(b => ({
+        ...b,
+        id: b.member_id || b.id
+      }));
+      setAuctionBids(mappedBids);
+      setAuctionWishlist(mappedBids);
     }
   }, []);
 
   const fetchGlobalData = useCallback(async (force = false) => {
-    console.log("fetchGlobalData called:", { force, isFetching: prevData.current.isFetching, hasUser: !!currentUser });
     if (prevData.current.isFetching) return;
     if (!currentUser) {
       setLoading(false);
@@ -391,8 +450,7 @@ export const GuildProvider = ({ children, initialData }) => {
         if (cached) {
           const { data, fetchedAt } = JSON.parse(cached);
           if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
-            console.log("Serving global data from cache...");
-            processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData);
+            processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData);
             setLoading(false);
             setSyncStatus("synced");
             return;
@@ -404,48 +462,42 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       prevData.current.isFetching = true;
       setSyncStatus("loading");
-      const t0 = Date.now();
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
       const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
 
       const headers = getAuthHeaders();
 
-      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/roster?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/absences?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, {
-          headers
-        })
+      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/roster?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/absences?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/attendance?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=*`, { headers })
       ]);
 
-      const rosterData = await rosterRes.json().catch(() => []);
+      const rosterData = rosterRes.ok ? await rosterRes.json() : [];
       const eventsData = await eventsRes.json().catch(() => []);
       const absenceData = await absenceRes.json().catch(() => []);
       const metaData = await metaRes.json().catch(() => []);
-      const bidsData = await bidsRes.json().catch(() => []);
+      const bidsData = bidsRes.ok ? await bidsRes.json() : [];
+      const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
+      const performanceData = await performanceRes.json().catch(() => []);
+      const eoRatingsData = await eoRatingsRes.json().catch(() => []);
 
       if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
 
-      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData);
+      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData);
 
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-        data: { rosterData, eventsData, absenceData, metaData, bidsData },
+        data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData },
         fetchedAt: Date.now()
       }));
 
       setSyncStatus("synced");
-      console.log("Global fetch completed total:", Date.now() - t0, "ms");
     } catch (err) {
       console.error("Supabase fetch failed:", err);
       setSyncStatus("error");
@@ -735,6 +787,13 @@ export const GuildProvider = ({ children, initialData }) => {
     if (members.length === 0 && events.length === 0) return;
     
     const saveToSupabase = async () => {
+      // CRITICAL SAFEGUARD: Do not save if roster or events are empty.
+      // This prevents accidental data wipes during initial load or auth transitions.
+      if (!members || members.length === 0 || !events || events.length === 0) {
+        console.warn("[SAFEGUARD] Aborting save: roster/events are empty.");
+        return;
+      }
+
       setSyncStatus("saving");
       try {
         const headers = getAuthHeaders();
@@ -939,7 +998,15 @@ export const GuildProvider = ({ children, initialData }) => {
               { key: 'parties', data: partiesData },
               { key: 'auction', data: auctionData },
               { key: 'discord', data: { discord: discordConfig } }
-            ]
+            ],
+            bidsData: auctionWishlist.map(b => ({
+              member_id: b.member_id,
+              bids: b.bids,
+              updated_at: b.updated_at
+            })),
+            attendanceData: attendance,
+            performanceData: performance,
+            eoRatingsData: eoRatings
           },
           fetchedAt: Date.now()
         }));
