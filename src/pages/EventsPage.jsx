@@ -50,6 +50,7 @@ function EventsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     eventType: "Guild League",
+    glMode: "vale",
     eventDate: new Date().toLocaleDateString('en-CA'),
     eventTime: "20:55",
     auditDueOffsetHours: 12
@@ -62,19 +63,31 @@ function EventsPage() {
   const [escalationHours] = useState(12); // after dueAt
   const reminderInFlight = React.useRef(new Set());
 
-  // Group events by Month and Week
+  // Helper to get Week Number in month (Monday to Sunday rule)
+  const getWeekKey = (dateObj) => {
+    const d = new Date(dateObj);
+    const dayOfMonth = d.getDate();
+    // Count how many Sundays occurred before this day in the same month
+    let sundayCount = 0;
+    for (let i = 1; i < dayOfMonth; i++) {
+      const tempD = new Date(d.getFullYear(), d.getMonth(), i);
+      if (tempD.getDay() === 0) sundayCount++;
+    }
+    return `Week ${sundayCount + 1}`;
+  };
+
+  // Group events by Month and Week — sorted newest-first
   const groupedEvents = React.useMemo(() => {
     const groups = {};
-    events.forEach(ev => {
-      const d = new Date(ev.eventDate);
+    // Sort events newest-first before grouping
+    const sorted = [...events].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+    sorted.forEach(ev => {
+      const d = new Date(ev.eventDate + 'T00:00:00'); 
       const monthKey = d.toLocaleString('default', { month: 'long', year: 'numeric' });
       if (!groups[monthKey]) groups[monthKey] = {};
-      
-      // Calculate week of month
-      const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
-      const weekNo = Math.ceil((d.getDate() + firstDay.getDay()) / 7);
-      const weekKey = `Week ${weekNo}`;
-      
+
+      const weekKey = getWeekKey(d);
+
       if (!groups[monthKey][weekKey]) groups[monthKey][weekKey] = [];
       groups[monthKey][weekKey].push(ev);
     });
@@ -82,6 +95,26 @@ function EventsPage() {
   }, [events]);
 
   const monthKeys = Object.keys(groupedEvents).sort((a, b) => new Date(b) - new Date(a));
+
+  const initialLoadRef = React.useRef(false);
+
+  // Auto-select and auto-expand newest — only once on load
+  React.useEffect(() => {
+    if (events.length > 0 && !initialLoadRef.current) {
+      const newest = [...events].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))[0];
+      if (newest) {
+        setSelectedEvent(newest);
+        initialLoadRef.current = true;
+        
+        const d = new Date(newest.eventDate + 'T00:00:00');
+        const monthKey = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const weekKey = getWeekKey(d);
+        
+        setExpandedMonths(prev => ({ ...prev, [monthKey]: true }));
+        setExpandedWeeks(prev => ({ ...prev, [weekKey]: true }));
+      }
+    }
+  }, [events]);
 
   const toggleMonth = (m) => setExpandedMonths(prev => ({ ...prev, [m]: !prev[m] }));
   const toggleWeek = (w) => setExpandedWeeks(prev => ({ ...prev, [w]: !prev[w] }));
@@ -170,6 +203,7 @@ function EventsPage() {
         }
       };
       setEvents(prev => [...prev, newEvent]);
+      setSelectedEvent(newEvent);
 
       const newAtt = members
         .filter(m => (m.status || "active") !== "left")
@@ -213,6 +247,7 @@ function EventsPage() {
   const handleEditClick = (ev) => {
     setForm({
       eventType: ev.eventType,
+      glMode: ev.glMode || 'vale',
       eventDate: ev.eventDate,
       eventTime: ev.eventTime || "20:55",
       auditDueOffsetHours: ev.auditDueOffsetHours || 12
@@ -225,6 +260,7 @@ function EventsPage() {
   const handleNewClick = () => {
     setForm({
       eventType: "Guild League",
+      glMode: "vale",
       eventDate: new Date().toLocaleDateString('en-CA'),
       eventTime: "20:55",
       auditDueOffsetHours: 12
@@ -369,6 +405,8 @@ function EventsPage() {
     const key = `${memberId}_${eventId}`;
     const mId = (memberId || "").trim().toLowerCase();
     const edits = perfEdits[key] || {};
+    const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mId);
+    const ev = events.find(e => e.eventId === eventId);
     
     const currentAtt = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
     if (!currentAtt) {
@@ -378,10 +416,13 @@ function EventsPage() {
     setPerformance(prev => {
       const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
       if (exists) return prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
-      return [...prev, { memberId: memberId.trim(), eventId, ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0, ...edits }];
+      // Default fields depend on GL mode
+      const isStellar = ev?.glMode === 'stellar';
+      const defaultFields = isStellar
+        ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
+        : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
+      return [...prev, { memberId: memberId.trim(), eventId, ...defaultFields, ...edits }];
     });
-    const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mId);
-    const ev = events.find(e => e.eventId === eventId);
     showToast("Performance saved", "success");
     const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0}, Kills: ${edits.kills ?? 0}, Ast: ${edits.assists ?? 0} (${ev?.eventDate})`);
@@ -556,7 +597,6 @@ function EventsPage() {
       </div>
 
       <div className="events-layout-container">
-        {!selectedEvent && (
           <div className="events-sidebar">
           <div className="flex items-center justify-between mb-3">
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
@@ -567,7 +607,12 @@ function EventsPage() {
             {monthKeys.map(month => {
               const weekGroups = groupedEvents[month];
               const isMonthExpanded = !!expandedMonths[month];
-              const weekKeys = Object.keys(weekGroups);
+              // Sort weeks newest-first (Week 4 → Week 3 → …)
+              const weekKeys = Object.keys(weekGroups).sort((a, b) => {
+                const wA = parseInt(a.replace('Week ', ''), 10);
+                const wB = parseInt(b.replace('Week ', ''), 10);
+                return wB - wA;
+              });
               return (
                 <div key={month} style={{ marginBottom: 6 }}>
                     <button
@@ -615,7 +660,9 @@ function EventsPage() {
                                     <div key={ev.eventId} onClick={() => setSelectedEvent(ev)}
                                       className="card" style={{ cursor: "pointer", padding: "12px 14px", borderColor: isActive ? "var(--accent)" : "var(--border)", boxShadow: isActive ? "0 0 16px var(--accent-glow)" : "none", background: isActive ? "rgba(99,130,230,0.03)" : undefined }}>
                                       <div className="flex items-center justify-between mb-1">
-                                        <span className="font-cinzel" style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 700 }}>{new Date(ev.eventDate).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })}</span>
+                                        <span className="font-cinzel" style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 700 }}>
+                                          {new Date(ev.eventDate + 'T00:00:00').toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })}
+                                        </span>
                                         <span className={`badge ${ev.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`} style={{ fontSize: 8, padding: "1px 6px" }}>
                                           {ev.eventType === "Guild League" ? "GL" : "EO"}
                                         </span>
@@ -655,7 +702,6 @@ function EventsPage() {
             })}
           </div>
         </div>
-        )}
 
         <div className="events-detail">
           {selectedEvent ? (
@@ -668,6 +714,11 @@ function EventsPage() {
                   <div className="font-cinzel" style={{ fontSize: 16, fontWeight: 700 }}>{selectedEvent.eventDate}</div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`badge ${selectedEvent.eventType === "Guild League" ? "badge-gl" : "badge-eo"}`}>{selectedEvent.eventType}</span>
+                    {selectedEvent.eventType === "Guild League" && (
+                      <span className="badge" style={{ fontSize: 9, background: selectedEvent.glMode === 'stellar' ? 'rgba(168,85,247,0.2)' : 'rgba(99,130,230,0.2)', color: selectedEvent.glMode === 'stellar' ? '#a855f7' : '#6382E6', border: `1px solid ${selectedEvent.glMode === 'stellar' ? 'rgba(168,85,247,0.4)' : 'rgba(99,130,230,0.4)'}` }}>
+                        {selectedEvent.glMode === 'stellar' ? '✨ Stellar Clash' : '⚔ Vale of Clash'}
+                      </span>
+                    )}
                     <span className={`badge ${getAuditStatus(selectedEvent) === "submitted" ? "badge-active" : getAuditStatus(selectedEvent) === "overdue" ? "badge-atrisk" : "badge-casual"}`} style={{ fontSize: 9 }}>
                       Audit: {getAuditStatus(selectedEvent) || "pending"}
                     </span>
@@ -688,19 +739,29 @@ function EventsPage() {
                 </div>
                 <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                   <thead>
-                    {/* Group label row — Guild League only */}
-                    {selectedEvent.eventType === "Guild League" && (
+                    {/* Group label row - Vale of Clash */}
+                    {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
                       <tr style={{ fontSize: 9, letterSpacing: 1 }}>
                         <th colSpan={3} style={{ zIndex: 30, background: "transparent", border: "none", paddingBottom: 2 }}></th>
-                        <th colSpan={4} style={{ background: "rgba(99,130,230,0.08)", color: "#6382E6", borderBottom: "2px solid rgba(99,130,230,0.35)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>⚔ CTF</th>
-                        <th colSpan={2} style={{ background: "rgba(239,68,68,0.07)", color: "#ef4444", borderBottom: "2px solid rgba(239,68,68,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>☠ Combat</th>
-                        <th colSpan={1} style={{ background: "rgba(168,85,247,0.07)", color: "#a855f7", borderBottom: "2px solid rgba(168,85,247,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>★ Perf</th>
+                        <th colSpan={4} style={{ background: "rgba(99,130,230,0.08)", color: "#6382E6", borderBottom: "2px solid rgba(99,130,230,0.35)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>CTF</th>
+                        <th colSpan={2} style={{ background: "rgba(239,68,68,0.07)", color: "#ef4444", borderBottom: "2px solid rgba(239,68,68,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>Combat</th>
+                        <th colSpan={1} style={{ background: "rgba(168,85,247,0.07)", color: "#a855f7", borderBottom: "2px solid rgba(168,85,247,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>Perf</th>
                         <th colSpan={2} style={{ background: "transparent", border: "none", paddingBottom: 2 }}></th>
+                      </tr>
+                    )}
+                    {/* Group label row - Stellar Clash */}
+                    {selectedEvent.eventType === "Guild League" && selectedEvent.glMode === 'stellar' && (
+                      <tr style={{ fontSize: 9, letterSpacing: 1 }}>
+                        <th colSpan={3} style={{ zIndex: 30, background: "transparent", border: "none", paddingBottom: 2 }}></th>
+                        <th colSpan={1} style={{ background: "rgba(99,130,230,0.08)", color: "#6382E6", borderBottom: "2px solid rgba(99,130,230,0.35)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>Team</th>
+                        <th colSpan={3} style={{ background: "rgba(168,85,247,0.07)", color: "#a855f7", borderBottom: "2px solid rgba(168,85,247,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>Field</th>
+                        <th colSpan={2} style={{ background: "rgba(239,68,68,0.07)", color: "#ef4444", borderBottom: "2px solid rgba(239,68,68,0.3)", textAlign: "center", paddingBottom: 4, textTransform: "uppercase" }}>Combat</th>
+                        <th colSpan={3} style={{ background: "transparent", border: "none", paddingBottom: 2 }}></th>
                       </tr>
                     )}
                     <tr>
                       <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
-                      {selectedEvent.eventType === "Guild League" && <>
+                      {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && <>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 1</th>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 2</th>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 3</th>
@@ -708,6 +769,17 @@ function EventsPage() {
                         <th style={{ color: "#ef4444", fontSize: 11 }}>Kills</th>
                         <th style={{ color: "#f59e0b", fontSize: 11 }}>Assists</th>
                         <th style={{ color: "#a855f7", fontSize: 11 }}>Perf</th>
+                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
+                        <th></th>
+                      </>}
+                      {selectedEvent.eventType === "Guild League" && selectedEvent.glMode === 'stellar' && <>
+                        <th style={{ color: "#6382E6", fontSize: 11 }}>Team</th>
+                        <th style={{ color: "#a855f7", fontSize: 11 }}>Tablets</th>
+                        <th style={{ color: "#a855f7", fontSize: 11 }}>Monsters</th>
+                        <th style={{ color: "#a855f7", fontSize: 11 }}>Boss</th>
+                        <th style={{ color: "#ef4444", fontSize: 11 }}>Kills</th>
+                        <th style={{ color: "#f59e0b", fontSize: 11 }}>Assists</th>
+                        <th style={{ color: "#22c55e", fontSize: 11 }}>Total Score</th>
                         <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
                         <th></th>
                       </>}
@@ -737,7 +809,7 @@ function EventsPage() {
                               {(m.att?.status || "present") === "present" ? "Present" : "Absent"}
                             </button>
                           </td>
-                          {selectedEvent.eventType === "Guild League" && (
+                          {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
                             <>
                               {/* ── CTF inputs (blue) ── */}
                               <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
@@ -760,6 +832,50 @@ function EventsPage() {
                               </td>
                             </>
                           )}
+                          {selectedEvent.eventType === "Guild League" && selectedEvent.glMode === 'stellar' && (() => {
+                            const glTeam = curPerf.glTeam !== undefined ? curPerf.glTeam : (m.perf?.glTeam || 'main');
+                            const isMain = glTeam === 'main';
+                            const tablets = curPerf.tabletsCapt !== undefined ? curPerf.tabletsCapt : (m.perf?.tabletsCapt ?? 0);
+                            const monsters = curPerf.monsters !== undefined ? curPerf.monsters : (m.perf?.monsters ?? 0);
+                            const boss = curPerf.boss !== undefined ? curPerf.boss : (m.perf?.boss ?? 0);
+                            const sKills = curPerf.kills !== undefined ? curPerf.kills : (m.perf?.kills ?? 0);
+                            const sAssists = curPerf.assists !== undefined ? curPerf.assists : (m.perf?.assists ?? 0);
+                            const sTotal = curPerf.totalScore !== undefined ? curPerf.totalScore : (m.perf?.totalScore ?? 0);
+                            const sScore = computeScore({ event: selectedEvent, att: m.att, perf: { glTeam, tabletsCapt: tablets, monsters, boss, kills: sKills, assists: sAssists, totalScore: sTotal } });
+                            return (
+                              <>
+                                {/* Team toggle */}
+                                <td>
+                                  <button
+                                    onClick={() => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, glTeam: isMain ? 'sub' : 'main' } }))}
+                                    style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: `1px solid ${isMain ? 'rgba(99,130,230,0.5)' : 'rgba(34,197,94,0.5)'}`, background: isMain ? 'rgba(99,130,230,0.12)' : 'rgba(34,197,94,0.12)', color: isMain ? '#6382E6' : '#22c55e', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700 }}
+                                  >
+                                    {isMain ? '🔵 Main' : '🟢 Sub'}
+                                  </button>
+                                </td>
+                                {/* Tablets (Main only) */}
+                                <td><input type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: isMain ? 1 : 0.3 }} value={isMain ? tablets : ''} placeholder={isMain ? "" : "-"} disabled={!isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, tabletsCapt: +e.target.value } }))} /></td>
+                                {/* Monsters (both) */}
+                                <td><input type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={monsters} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, monsters: +e.target.value } }))} /></td>
+                                {/* Boss (Sub only) */}
+                                <td><input type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: !isMain ? 1 : 0.3 }} value={!isMain ? boss : ''} placeholder={!isMain ? "" : "-"} disabled={isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, boss: +e.target.value } }))} /></td>
+                                {/* Kills */}
+                                <td><input type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={sKills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                                {/* Assists */}
+                                <td><input type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={sAssists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                                {/* Total Score */}
+                                <td><input type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
+                                {/* Computed Score pill */}
+                                <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{sScore}</span></td>
+                                {/* Save button */}
+                                <td>
+                                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "3px 8px", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => savePerformance(m.memberId, selectedEvent.eventId)} title="Save scores">
+                                    <Icon name="save" size={11} /> Save
+                                  </button>
+                                </td>
+                              </>
+                            );
+                          })()}
                           {selectedEvent.eventType === "Emperium Overrun" && (
                             <td>
                               <div style={{ display: "flex", gap: 2 }}>
@@ -800,11 +916,20 @@ function EventsPage() {
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Event Type</label>
-              <select className="form-select" value={form.eventType} onChange={e => setForm(f => ({ ...f, eventType: e.target.value }))}>
+              <select className="form-select" value={form.eventType} onChange={e => setForm(f => ({ ...f, eventType: e.target.value, glMode: e.target.value === 'Guild League' ? (f.glMode || 'vale') : undefined }))}>
                 <option>Guild League</option>
                 <option>Emperium Overrun</option>
               </select>
             </div>
+            {form.eventType === "Guild League" && (
+              <div className="form-group">
+                <label className="form-label">GL Mode</label>
+                <select className="form-select" value={form.glMode || 'vale'} onChange={e => setForm(f => ({ ...f, glMode: e.target.value }))}>
+                  <option value="vale">⚔ Vale of Clash</option>
+                  <option value="stellar">✨ Stellar Clash</option>
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Date</label>
               <input type="date" className="form-input" value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} />

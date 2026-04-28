@@ -228,7 +228,6 @@ export const GuildProvider = ({ children, initialData }) => {
     discordConfig: {},
     battlelogConfig: {}
   });
-  const metadataVersions = useRef({ parties: 0, auction: 0, discord: 0, battlelog: 0 });
   const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
   const roleFetchedRef = useRef(false); // Prevents duplicate user_roles queries on login
@@ -307,10 +306,11 @@ export const GuildProvider = ({ children, initialData }) => {
       const allEo = Array.isArray(eoRatingsData) ? eoRatingsData.map(r => ({ ...r, memberId: r.member_id || r.memberId, eventId: r.event_id || r.eventId })) : [];
 
       const mappedEvents = eventsData.map(e => {
-        const eventId = e.event_id;
+        const eventId = e.event_id || e.eventId;
         
         // Flatten nested attendance if present
         if (e.attendance_data && typeof e.attendance_data === 'object' && Object.keys(e.attendance_data).length > 0) {
+          console.log(`GuildContext: Flattening ${Object.keys(e.attendance_data).length} att for ${eventId}`);
           Object.entries(e.attendance_data).forEach(([mId, status]) => {
             if (!allAtt.find(a => a.eventId === eventId && a.memberId === mId)) {
               allAtt.push({ eventId, memberId: mId, status });
@@ -352,8 +352,12 @@ export const GuildProvider = ({ children, initialData }) => {
           eventType: e.type,
           title: e.title,
           auditor: e.auditor,
+          glMode: e.gl_mode || 'vale',
           battlelogAudit: e.battlelog_audit || e.metadata?.battlelogAudit || null,
           digestMeta: e.digest_meta || e.metadata?.digestMeta || null,
+          attendanceData: e.attendance_data || {},
+          performanceData: e.performance_data || {},
+          eoRatingsData: e.eo_ratings_data || {},
           createdAt: e.created_at
         };
       });
@@ -375,19 +379,10 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(metaData)) {
-      const partiesGroup = metaData.find(m => m.key === 'parties')?.data || {};
       const auctionGroup = metaData.find(m => m.key === 'auction')?.data || {};
       const discordGroup = metaData.find(m => m.key === 'discord')?.data || {};
       const battlelogGroup = metaData.find(m => m.key === 'battlelog')?.data || {};
 
-      const parties = Array.isArray(partiesGroup.parties) ? partiesGroup.parties : [];
-      const raidParties = Array.isArray(partiesGroup.raidParties) ? partiesGroup.raidParties : [];
-      const partyNames = Array.isArray(partiesGroup.partyNames) ? partiesGroup.partyNames : [];
-      const raidPartyNames = Array.isArray(partiesGroup.raidPartyNames) ? partiesGroup.raidPartyNames : [];
-      const partyOverrides = (partiesGroup.partyOverrides && typeof partiesGroup.partyOverrides === 'object') ? partiesGroup.partyOverrides : {};
-      const leagueParties = partiesGroup.leagueParties || { main: Array.from({ length: 8 }, () => []), sub: Array.from({ length: 8 }, () => []) };
-      const leaguePartyNames = partiesGroup.leaguePartyNames || { main: Array.from({ length: 8 }, () => ""), sub: Array.from({ length: 8 }, () => "") };
-      
       const eoRatings = Array.isArray(metaData.find(m => m.key === 'eoRatings')?.data) ? metaData.find(m => m.key === 'eoRatings').data : [];
       
       const auctionSessions = Array.isArray(auctionGroup.auctionSessions) ? auctionGroup.auctionSessions : [];
@@ -397,13 +392,6 @@ export const GuildProvider = ({ children, initialData }) => {
       const discordConfig = discordGroup.discord || {};
       const battlelogConfig = battlelogGroup || {};
 
-      setParties(parties);
-      setRaidParties(raidParties);
-      setPartyNames(partyNames);
-      setRaidPartyNames(raidPartyNames);
-      setPartyOverrides(partyOverrides);
-      setLeagueParties(leagueParties);
-      setLeaguePartyNames(leaguePartyNames);
       setEoRatings(eoRatings);
       setAuctionSessions(auctionSessions);
       setAuctionTemplates(auctionTemplates);
@@ -411,13 +399,6 @@ export const GuildProvider = ({ children, initialData }) => {
       setDiscordConfig(discordConfig);
       setBattlelogConfig(battlelogConfig);
 
-      prevData.current.parties = [...parties];
-      prevData.current.raidParties = [...raidParties];
-      prevData.current.partyNames = [...partyNames];
-      prevData.current.raidPartyNames = [...raidPartyNames];
-      prevData.current.partyOverrides = { ...partyOverrides };
-      prevData.current.leagueParties = { ...leagueParties };
-      prevData.current.leaguePartyNames = { ...leaguePartyNames };
       prevData.current.eoRatings = [...eoRatings];
       prevData.current.auctionSessions = [...auctionSessions];
       prevData.current.auctionTemplates = [...auctionTemplates];
@@ -450,10 +431,15 @@ export const GuildProvider = ({ children, initialData }) => {
         if (cached) {
           const { data, fetchedAt } = JSON.parse(cached);
           if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
-            processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData);
-            setLoading(false);
-            setSyncStatus("synced");
-            return;
+            // Force refresh if roster is empty
+            if (data.rosterData && data.rosterData.length > 0) {
+              processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData);
+              setLoading(false);
+              setSyncStatus("synced");
+              return;
+            } else {
+              console.log("GuildContext: Cache has empty roster, forcing fresh fetch.");
+            }
           }
         }
       } catch (e) { console.warn("Cache read failed", e); }
@@ -462,12 +448,8 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       prevData.current.isFetching = true;
       setSyncStatus("loading");
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
-
       const headers = getAuthHeaders();
-
+      const cutoffDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/roster?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, { headers }),
@@ -488,9 +470,7 @@ export const GuildProvider = ({ children, initialData }) => {
       const performanceData = await performanceRes.json().catch(() => []);
       const eoRatingsData = await eoRatingsRes.json().catch(() => []);
 
-      if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
-
-      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData);
+      processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData);
 
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
         data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData },
@@ -527,7 +507,7 @@ export const GuildProvider = ({ children, initialData }) => {
           if (!roleFetchedRef.current) {
             roleFetchedRef.current = true;
             const headers = getAuthHeaders();
-            const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${user.id}&select=*`, {
+            const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${session.user.id}&select=*`, {
               headers
             });
             
@@ -541,7 +521,7 @@ export const GuildProvider = ({ children, initialData }) => {
               } else {
                 console.log("AuthInit: No user_roles found. Attempting auto-link...");
                 // Only perform auto-linking if no manual role exists in user_roles
-                const identifier = user.email.split('@')[0].toLowerCase();
+                const identifier = session.user.email.split('@')[0].toLowerCase();
                 console.log("AuthInit: Search identifier:", identifier);
                 const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster?or=(discord.ilike.${identifier},ign.ilike.${identifier})&select=*`, { headers });
                 
@@ -557,14 +537,14 @@ export const GuildProvider = ({ children, initialData }) => {
                     else if (['Admin', 'Guild Master', 'Vice Guild Master'].includes(rank)) newRole = 'admin';
                     else if (['Officer', 'Commander', 'Charisma Baby'].includes(rank)) newRole = 'officer';
                     
-                    console.log(`Auto-assigning role: ${newRole} for ${user.email} (Matched via roster)`);
+                    console.log(`Auto-assigning role: ${newRole} for ${session.user.email} (Matched via roster)`);
                     
                     await fetch(`${supabaseUrl}/rest/v1/user_roles`, {
                       method: 'POST',
                       headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
                       body: JSON.stringify({
-                        uid: user.id,
-                        email: user.email,
+                        uid: session.user.id,
+                        email: session.user.email,
                         role: newRole,
                         member_id: m.member_id,
                         updated_at: new Date().toISOString()
@@ -730,22 +710,30 @@ export const GuildProvider = ({ children, initialData }) => {
       const reqsData = await reqsRes.json().catch(() => []);
       const joinData = await joinRes.json().catch(() => []);
       
-      const safeReqs = Array.isArray(reqsData) ? reqsData : [];
-      const safeJoin = Array.isArray(joinData) ? joinData : [];
-
-      setRequests(safeReqs);
-      setJoinRequests(safeJoin.map(r => ({
+      const mappedReqs = (Array.isArray(reqsData) ? reqsData : []).map(r => ({
         ...r,
-        // Map snake_case from DB to camelCase for UI if needed, 
-        // but RequestsPage already handles some class/jobClass logic.
-        // We ensure requestType exists for UI filters.
-        requestType: r.request_type || r.requestType || 'join'
-      })));
+        memberId: r.member_id || r.memberId,
+        requesterIgn: r.requester_ign || r.requesterIgn,
+        oldData: r.old_data || r.oldData,
+        newData: r.new_data || r.newData,
+        timestamp: r.timestamp || r.created_at
+      }));
+
+      const mappedJoin = (Array.isArray(joinData) ? joinData : []).map(r => ({
+        ...r,
+        // Ensure standard fields for join requests too
+        jobClass: r.jobClass || r.class,
+        requestType: r.request_type || r.requestType || 'join',
+        timestamp: r.timestamp || r.created_at
+      }));
+
+      setRequests(mappedReqs);
+      setJoinRequests(mappedJoin);
 
       // Cache to sessionStorage
       sessionStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
-        requests: reqsData || [],
-        joinRequests: joinData || [],
+        requests: mappedReqs,
+        joinRequests: mappedJoin,
         fetchedAt: Date.now()
       }));
     } catch (err) {
@@ -786,11 +774,38 @@ export const GuildProvider = ({ children, initialData }) => {
     if (!currentUser || authLoading || loading || syncStatus === "offline") return;
     if (members.length === 0 && events.length === 0) return;
     
-    const saveToSupabase = async () => {
-      // CRITICAL SAFEGUARD: Do not save if roster or events are empty.
-      // This prevents accidental data wipes during initial load or auth transitions.
-      if (!members || members.length === 0 || !events || events.length === 0) {
-        console.warn("[SAFEGUARD] Aborting save: roster/events are empty.");
+      const saveToSupabase = async () => {
+      // HARD SAFEGUARD: Never save if roster or events are empty when they weren't before
+    const prevMemberCount = prevData.current.members?.length || 0;
+    const prevEventCount = prevData.current.events?.length || 0;
+
+    if (members.length === 0 && prevMemberCount > 0) {
+      console.error("[CRITICAL SAFEGUARD] Save blocked: Members list is empty but was previously", prevMemberCount);
+      setSyncStatus("error");
+      return;
+    }
+
+    if (events.length === 0 && prevEventCount > 0) {
+      console.error("[CRITICAL SAFEGUARD] Save blocked: Events list is empty but was previously", prevEventCount);
+      setSyncStatus("error");
+      return;
+    }
+
+    // Additional check: Don't allow saving if count dropped by more than 20% suddenly (unless intentional)
+    if (prevMemberCount > 10 && members.length < prevMemberCount * 0.8) {
+       console.warn("[SAFEGUARD] Large data drop detected. Verifying before save...");
+       // For now, we allow it but log it. In a stricter mode, we could block it.
+    }
+
+    setSyncStatus("saving");
+      
+      // Prevent saving if attendance/performance state just "vanished" (potential fetch error)
+      if (attendance.length === 0 && (prevData.current.attendance?.length || 0) > 0) {
+        console.error("[SAFEGUARD] Aborting save: Attendance records vanished from state!");
+        return;
+      }
+      if (performance.length === 0 && (prevData.current.performance?.length || 0) > 0) {
+        console.error("[SAFEGUARD] Aborting save: Performance records vanished from state!");
         return;
       }
 
@@ -833,20 +848,6 @@ export const GuildProvider = ({ children, initialData }) => {
         }
 
         // --- 2. Metadata ---
-        const partiesData = { parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames };
-        if (JSON.stringify(partiesData) !== JSON.stringify(prevData.current.partiesData)) {
-          const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify({ key: 'parties', data: partiesData, updated_at: new Date().toISOString() })
-          });
-          if (!res.ok) throw new Error(`Parties Save Failed: ${res.status}`);
-          prevData.current.partiesData = { ...partiesData };
-        }
-
         const auctionData = { auctionSessions, auctionTemplates, resourceCategories };
         if (JSON.stringify(auctionData) !== JSON.stringify(prevData.current.auctionData)) {
           const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
@@ -914,6 +915,9 @@ export const GuildProvider = ({ children, initialData }) => {
             type: e.eventType || e.type,
             title: e.title || '',
             auditor: e.battlelogAudit?.assignedIgn || e.auditor || '',
+            gl_mode: e.glMode || 'vale',
+            battlelog_audit: e.battlelogAudit || null,
+            digest_meta: e.digestMeta || null,
             attendance_data: e.attendanceData || {},
             performance_data: e.performanceData || {},
             eo_ratings_data: e.eoRatingsData || {},
@@ -995,7 +999,6 @@ export const GuildProvider = ({ children, initialData }) => {
               status: a.status
             })),
             metaData: [
-              { key: 'parties', data: partiesData },
               { key: 'auction', data: auctionData },
               { key: 'discord', data: { discord: discordConfig } }
             ],
@@ -1019,43 +1022,7 @@ export const GuildProvider = ({ children, initialData }) => {
     const timer = setTimeout(saveToSupabase, 8000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- authLoading/currentUser/getAuthHeaders/loading/syncStatus excluded intentionally: adding them would re-trigger the 8s save debounce on every auth state change
-  }, [members, events, absences, parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
-
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_parties', JSON.stringify({ data: parties, ts: Date.now() }));
-  }, [parties, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_partyNames', JSON.stringify({ data: partyNames, ts: Date.now() }));
-  }, [partyNames, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_raidParties', JSON.stringify({ data: raidParties, ts: Date.now() }));
-  }, [raidParties, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_raidPartyNames', JSON.stringify({ data: raidPartyNames, ts: Date.now() }));
-  }, [raidPartyNames, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_partyOverrides', JSON.stringify({ data: partyOverrides, ts: Date.now() }));
-  }, [partyOverrides, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_leagueParties', JSON.stringify({ data: leagueParties, ts: Date.now() }));
-  }, [leagueParties, loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    localStorage.setItem('guild_leaguePartyNames', JSON.stringify({ data: leaguePartyNames, ts: Date.now() }));
-  }, [leaguePartyNames, loading]);
+  }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
   const sendNotification = async (targetId, title, message, type = "info") => {
     const headers = getAuthHeaders();
@@ -1442,22 +1409,17 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       if (!rosterRes.ok) throw new Error(`Roster activation failed: ${rosterRes.status}`);
 
-      // 2. Mark request as approved
+      // Delete join request after approval to keep DB clean
       const reqRes = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ 
-          status: 'approved',
-          metadata: {
-            ...r,
-            accountStatus: "activated",
-            activatedAt: new Date().toISOString()
-          }
-        })
+        method: 'DELETE',
+        headers
       });
-      if (!reqRes.ok) throw new Error(`Request approval failed: ${reqRes.status}`);
+      if (!reqRes.ok) throw new Error(`Join request cleanup failed: ${reqRes.status}`);
 
-      if (reqRes.ok && (r.request_type !== "reactivation" && r.requestType !== "reactivation")) {
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+      sessionStorage.removeItem("requests_cache_v1");
+
+      if (r.request_type !== "reactivation" && r.requestType !== "reactivation") {
         sendDiscordEmbed(
           "🎉 New Member Joined!",
           `Welcome **${r.ign}** to our Guild Portal!`,
@@ -1476,7 +1438,6 @@ export const GuildProvider = ({ children, initialData }) => {
       }
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
       fetchGlobalData(true); // Force refresh to clear cache
-      fetchRequests(true);
       return true;
     } catch(err) {
       console.error(err);
@@ -1490,15 +1451,14 @@ export const GuildProvider = ({ children, initialData }) => {
       const headers = getAuthHeaders();
 
       const res = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ status: 'rejected' })
+        method: 'DELETE',
+        headers
       });
-      if (!res.ok) throw new Error(`Rejection failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
 
-      setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId));
       sessionStorage.removeItem("requests_cache_v1");
-      showToast('Registration rejected', 'info');
+      showToast('Registration rejected and removed', 'info');
       return true;
     } catch(err) {
       console.error(err);
@@ -1611,15 +1571,14 @@ export const GuildProvider = ({ children, initialData }) => {
       // Update member in local state
       setMembers(prev => prev.map(m => m.memberId === r.member_id ? { ...m, ...r.new_data } : m));
 
-      // Update request status
+      // Delete request after approval to keep DB clean (History is in Audit Logs)
       const reqRes = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ status: 'approved' })
+        method: 'DELETE',
+        headers
       });
-      if (!reqRes.ok) throw new Error(`Request update failed: ${reqRes.status}`);
+      if (!reqRes.ok) throw new Error(`Request cleanup failed: ${reqRes.status}`);
 
-      setRequests(prev => prev.map(x => x.id === requestId ? { ...x, status: 'approved' } : x));
+      setRequests(prev => prev.filter(x => x.id !== requestId));
       sessionStorage.removeItem("requests_cache_v1");
       showToast(`Request approved for ${r.requester_ign}`, 'success');
       return true;
@@ -1635,15 +1594,14 @@ export const GuildProvider = ({ children, initialData }) => {
       const headers = getAuthHeaders();
 
       const res = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ status: 'rejected' })
+        method: 'DELETE',
+        headers
       });
-      if (!res.ok) throw new Error(`Rejection failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
 
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+      setRequests(prev => prev.filter(r => r.id !== requestId));
       sessionStorage.removeItem("requests_cache_v1");
-      showToast('Request rejected', 'info');
+      showToast('Request rejected and removed', 'info');
       return true;
     } catch(err) {
       console.error(err);

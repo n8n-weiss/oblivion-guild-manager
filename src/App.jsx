@@ -8,7 +8,6 @@ import { NAV_ITEMS, JOB_CLASSES } from "./utils/constants";
 import "./styles/index.css";
 import Icon from "./components/ui/icons";
 import Toast from "./components/ui/Toast";
-import { MemberAvatar } from "./components/common/MemberAvatar";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
 import Modal from "./components/ui/Modal";
 
@@ -42,8 +41,6 @@ import Dashboard from "./pages/Dashboard";
 const MembersPage = lazyWithRetry(() => import("./pages/MembersPage"), "members");
 const EventsPage = lazyWithRetry(() => import("./pages/EventsPage"), "events");
 const AbsencesPage = lazyWithRetry(() => import("./pages/AbsencesPage"), "absences");
-const ReportsPage = lazyWithRetry(() => import("./pages/ReportsPage"), "reports");
-const PartyBuilder = lazyWithRetry(() => import("./pages/PartyBuilder"), "party");
 const MemberProfilePage = lazyWithRetry(() => import("./pages/MemberProfilePage"), "member-profile");
 const AuctionBuilder = lazyWithRetry(() => import("./pages/AuctionBuilder"), "auction");
 const ImportPage = lazyWithRetry(() => import("./pages/ImportPage"), "import");
@@ -58,8 +55,6 @@ const pagePrefetchers = {
   "member-profile": () => import("./pages/MemberProfilePage"),
   events: () => import("./pages/EventsPage"),
   absences: () => import("./pages/AbsencesPage"),
-  reports: () => import("./pages/ReportsPage"),
-  party: () => import("./pages/PartyBuilder"),
   import: () => import("./pages/ImportPage"),
   auction: () => import("./pages/AuctionBuilder"),
   users: () => import("./pages/UserManagementPage"),
@@ -115,7 +110,7 @@ export default function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [densityMode, setDensityMode] = useState(() => localStorage.getItem("ui_density_mode") || "comfy");
   const [highContrastMode, setHighContrastMode] = useState(() => localStorage.getItem("ui_high_contrast_mode") === "1");
-  const [themeMode, setThemeMode] = useState(() => localStorage.getItem("ui_theme_mode") || "dark");
+  const [themeMode] = useState(() => localStorage.getItem("ui_theme_mode") || "dark");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
@@ -456,7 +451,7 @@ export default function App() {
       if (me && me.class) {
         for (const branch of JOB_CLASSES) {
           const job = branch.jobs.find(j => j.name === me.class);
-          if (job) {
+          if (job && job.color) {
              activeColorVar = job.color;
              break;
           }
@@ -653,18 +648,41 @@ export default function App() {
               <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid var(--border)" }} onClick={handleSignOut}>
                 Sign Out
               </button>
-              <div style={{ marginTop: 8 }}>
-                <button
-                  className={`btn btn-sm ${themeMode === "light" ? "btn-primary" : "btn-ghost"}`}
-                  style={{ width: "100%", justifyContent: "center", fontSize: 10, padding: "6px 8px", border: "1px solid var(--border)" }}
-                  onClick={() => setThemeMode(v => v === "dark" ? "light" : "dark")}
-                  title="Toggle between Dark and Light visual themes."
-                >
-                  {themeMode === "dark" ? "🌙 Dark Mode" : "☀️ Light Mode"}
-                </button>
-              </div>
             </div>
           )}
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between", 
+              padding: "8px 12px", 
+              background: "rgba(0,0,0,0.2)", 
+              borderRadius: 8, 
+              border: "1px solid var(--border)",
+              fontSize: 10
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-muted)" }}>
+                <div style={{ 
+                  width: 6, height: 6, borderRadius: "50%", 
+                  background: syncStatus === "synced" ? "#10b981" : syncStatus === "saving" ? "var(--gold)" : "#ef4444",
+                  boxShadow: syncStatus === "synced" ? "0 0 8px #10b981" : "none"
+                }} />
+                {syncStatus.toUpperCase()}
+              </div>
+              <button 
+                className="btn btn-ghost btn-sm" 
+                style={{ padding: "2px 4px", height: "auto", minWidth: 0 }}
+                onClick={() => {
+                  triggerSyncRetry();
+                  showToast("Re-fetching global data...", "info");
+                }}
+                title="Force Refresh Data"
+              >
+                <Icon name="rotate-cw" size={12} />
+              </button>
+            </div>
+          </div>
 
           <button
             className="btn btn-primary"
@@ -694,7 +712,7 @@ export default function App() {
           if (item.id === "import") return true; // Force show Import for migration
           if (isMember && !(isAdmin || isOfficer || isArchitect)) return item.id === "members";
           // Only show top 5 relevant items on mobile nav to avoid clutter
-          const mobileWhitelisted = ["dashboard", "members", "events", "leaderboard", "party"];
+          const mobileWhitelisted = ["dashboard", "members", "events", "leaderboard"];
           if (!mobileWhitelisted.includes(item.id)) return false;
           
           if (isAdmin) return true;
@@ -748,10 +766,22 @@ export default function App() {
                   <div>Req Pending: <strong>{pendingRequestsCount}</strong></div>
                   <div>Meta Notice: <strong>{metadataNotice ? "yes" : "no"}</strong></div>
                   <div>Auction Conflict: <strong>{pendingAuctionConflict ? "yes" : "no"}</strong></div>
+                  <div style={{ gridColumn: "span 2", marginTop: 8 }}>
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      style={{ width: "100%", fontSize: 10, padding: "4px 8px", background: "var(--red)", borderColor: "rgba(255,0,0,0.3)" }}
+                      onClick={() => {
+                        triggerSyncRetry();
+                        showToast("Forcing fresh sync from Supabase...", "info");
+                      }}
+                    >
+                      <Icon name="rotate-cw" size={12} /> Force Refresh Database
+                    </button>
+                  </div>
+                </div>
                   <div>Recent Meta Events: <strong>{metadataActivity?.length || 0}</strong></div>
                   <div>User: <strong>{currentUser?.email ? "auth" : "anon"}</strong></div>
                   <div>Role Flags: <strong>{isAdmin ? "admin" : isOfficer ? "officer" : isMember ? "member" : "n/a"}</strong></div>
-                </div>
                 <div style={{ marginTop: 8, fontSize: 10, color: "var(--text-muted)" }}>
                   Build: {import.meta.env.MODE} | {new Date().toLocaleTimeString()}
                 </div>
@@ -994,22 +1024,6 @@ export default function App() {
             {effectivePage === "absences" && (
               <PageWrapper id="absences">
                 <AbsencesPage />
-              </PageWrapper>
-            )}
-
-            {effectivePage === "reports" && (
-              <PageWrapper id={profileMember ? `profile-rpt-${profileMember.memberId}` : "reports"}>
-                  {profileMember ? (
-                    <MemberProfilePage member={profileMember} onBack={() => setProfileMember(null)} />
-                  ) : (
-                    <ReportsPage onViewProfile={setProfileMember} />
-                  )}
-              </PageWrapper>
-            )}
-
-            {effectivePage === "party" && (
-              <PageWrapper id="party">
-                <PartyBuilder />
               </PageWrapper>
             )}
 

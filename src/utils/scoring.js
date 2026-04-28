@@ -3,6 +3,27 @@ export function computeScore({ event, att, perf }) {
   const isPresent = status === "present";
   if (event.eventType === "Emperium Overrun") return 0;
   if (!isPresent) return 0;
+
+  // Stellar Clash scoring
+  if (event.glMode === "stellar") {
+    const kills = perf?.kills ?? 0;
+    const assists = perf?.assists ?? 0;
+    const totalScore = perf?.totalScore ?? 0;
+    const team = perf?.glTeam || "main";
+    if (team === "main") {
+      // Main Elites: Tablets + Monsters + Kills + Assists + TotalScore
+      const tablets = perf?.tabletsCapt ?? 0;
+      const monsters = perf?.monsters ?? 0;
+      return tablets + monsters + kills + assists + totalScore;
+    } else {
+      // Sub Field: Monsters + Boss + Kills + Assists + TotalScore
+      const monsters = perf?.monsters ?? 0;
+      const boss = perf?.boss ?? 0;
+      return monsters + boss + kills + assists + totalScore;
+    }
+  }
+
+  // Vale of Clash (default) scoring
   const ctf1 = perf?.ctf1 ?? perf?.ctfPoints ?? 0;
   const ctf2 = perf?.ctf2 ?? 0;
   const ctf3 = perf?.ctf3 ?? 0;
@@ -13,13 +34,14 @@ export function computeScore({ event, att, perf }) {
   return ctfTotal + pp + kills + assists;
 }
 
+
 export function computeAttendanceStatus(attendancePct) {
   if (attendancePct >= 80) return { label: "Reliable", color: "var(--green)", badge: "badge-active", icon: "✅" };
   if (attendancePct >= 60) return { label: "Average", color: "var(--gold)", badge: "badge-casual", icon: "⚠" };
   return { label: "At Risk", color: "var(--red)", badge: "badge-atrisk", icon: "🚨" };
 }
 
-export function computeLeaderboard(members, events, attendance, performance, eoRatings = [], filterMonth = null, filterYear = null) {
+export function computeLeaderboard(members, events, attendance, performance, eoRatings = [], filterMonth = null, filterYear = null, startDate = null, endDate = null) {
   return members.map((member) => {
     let totalScore = 0;
     let presentCount = 0;
@@ -30,15 +52,28 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     let totalAssists = 0;
     let totalPP = 0;
     let totalCTF = 0;
+    let totalTablets = 0;
+    let totalMonsters = 0;
+    let totalBoss = 0;
+    let totalIngameScore = 0;
+    let totalValeScore = 0;
+    let totalStellarScore = 0;
+    let valeKills = 0;
+    let valeAssists = 0;
+    let stellarKills = 0;
+    let stellarAssists = 0;
 
     const mId = (member.memberId || "").toLowerCase();
 
     // Filter events: include if after Join Date OR if member has explicit data for it
     const eligibleEvents = events.filter(e => {
+      const eDate = new Date(e.eventDate);
       if (filterMonth && String(e?.eventDate || "").slice(0, 7) !== filterMonth) return false;
       if (filterYear && String(e?.eventDate || "").slice(0, 4) !== filterYear) return false;
+      if (startDate && eDate < new Date(startDate)) return false;
+      if (endDate && eDate > new Date(endDate)) return false;
       if (!member.joinDate) return true;
-      if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
+      if (eDate >= new Date(member.joinDate)) return true;
       const hasAtt = attendance.some(a => (a.memberId || "").toLowerCase() === mId && a.eventId === e.eventId);
       const hasPerf = performance.some(p => (p.memberId || "").toLowerCase() === mId && p.eventId === e.eventId);
       return hasAtt || hasPerf;
@@ -67,7 +102,27 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
         totalPP += perf?.performancePoints ?? 0;
         const ctf = (perf?.ctf1 ?? perf?.ctfPoints ?? 0) + (perf?.ctf2 ?? 0) + (perf?.ctf3 ?? 0);
         totalCTF += ctf;
-        totalScore += computeScore({ event, att, perf });
+        
+        // Stellar Clash Fields
+        totalTablets += perf?.tabletsCapt ?? 0;
+        totalMonsters += perf?.monsters ?? 0;
+        totalBoss += perf?.boss ?? 0;
+        totalIngameScore += perf?.totalScore ?? 0;
+
+        const kills = perf?.kills ?? 0;
+        const assists = perf?.assists ?? 0;
+        const score = computeScore({ event, att, perf });
+        
+        if (event.glMode === "stellar") {
+          stellarKills += kills;
+          stellarAssists += assists;
+          totalStellarScore += score;
+        } else {
+          valeKills += kills;
+          valeAssists += assists;
+          totalValeScore += score;
+        }
+        totalScore += score;
       }
     });
 
@@ -79,7 +134,7 @@ export function computeLeaderboard(members, events, attendance, performance, eoR
     const avgEoRating = mEoRatings.length > 0 
       ? Math.round((mEoRatings.reduce((s, r) => s + r.rating, 0) / mEoRatings.length) * 10) / 10 : 0;
 
-    return { ...member, totalScore, attendancePct, avgScore, avgEoRating, absentCount, consecutiveAbsent, attStatus, totalKills, totalAssists, totalPP, totalCTF };
+    return { ...member, totalScore, attendancePct, avgScore, avgEoRating, absentCount, consecutiveAbsent, attStatus, totalKills, totalAssists, totalPP, totalCTF, totalTablets, totalMonsters, totalBoss, totalIngameScore, totalValeScore, totalStellarScore, valeKills, valeAssists, stellarKills, stellarAssists };
   }).sort((a, b) => b.totalScore - a.totalScore)
     .map((m, i) => ({ ...m, rank: i + 1 }));
 }

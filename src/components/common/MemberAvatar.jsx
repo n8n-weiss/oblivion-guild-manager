@@ -70,16 +70,17 @@ function getRank(glScore) {
  * @param {boolean} hexagon    - Use hexagonal clip path (default false)
  */
 export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexagon = false }) {
-  const c = AVATAR_COLORS[(index || 0) % AVATAR_COLORS.length];
+  const safeIndex = Math.abs(parseInt(index) || 0);
+  const c = (AVATAR_COLORS && AVATAR_COLORS[safeIndex % AVATAR_COLORS.length]) || (AVATAR_COLORS && AVATAR_COLORS[0]) || { bg: "transparent", color: "var(--text-muted)" };
   const initials = ign ? ign.slice(0, 2).toUpperCase() : "??";
-  const classTheme = CLASS_THEMES[memberClass] || null;
+  const classTheme = (memberClass && CLASS_THEMES) ? (CLASS_THEMES[memberClass] || null) : null;
   const rank = (glScore !== undefined && glScore !== null) ? getRank(glScore) : null;
-  const ring = rank ? RANK_RING[rank] : null;
+  const ring = (rank && RANK_RING) ? RANK_RING[rank] : null;
 
   // Hexagonal clip path
   const hexClip = "polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)";
 
-  const ringColor = classTheme?.color || ring?.color || c.color;
+  const ringColor = classTheme?.color || ring?.color || c.color || "var(--accent)";
   const showRing = !!(classTheme || ring);
   const ringSize = size + (hexagon ? 8 : 6);
   const iconSize = Math.max(10, Math.round(size * 0.32));
@@ -115,9 +116,9 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
           clipPath: hexagon ? hexClip : undefined,
           background: classTheme?.portrait 
             ? `url(${classTheme.portrait}) center/cover no-repeat` 
-            : (classTheme ? `${classTheme.color}22` : c.bg),
-          backgroundColor: classTheme ? `${classTheme.color}44` : c.bg,
-          color: classTheme?.color || c.color,
+            : (classTheme ? `${classTheme.color || c.color}22` : (c.bg || "rgba(255,255,255,0.05)")),
+          backgroundColor: classTheme ? `${classTheme.color || c.color}44` : (c.bg || "rgba(255,255,255,0.05)"),
+          color: classTheme?.color || c.color || "var(--text-primary)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -142,7 +143,7 @@ export function MemberAvatar({ ign, index, size = 34, memberClass, glScore, hexa
         {classTheme && (
           <div style={{
             position: "absolute", top: 0, right: 0, width: "60%", height: "60%",
-            background: `radial-gradient(circle at top right, ${classTheme.color}44, transparent)`,
+            background: `radial-gradient(circle at top right, ${classTheme.color || "var(--accent)"}44, transparent)`,
             pointerEvents: "none",
           }} />
         )}

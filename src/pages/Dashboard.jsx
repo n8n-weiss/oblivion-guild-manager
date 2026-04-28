@@ -20,11 +20,11 @@ function Dashboard() {
   const lb = useMemo(() => computeLeaderboard(activeMembers, events, attendance, performance), [activeMembers, events, attendance, performance]);
 
   // Guild Level and XP Calculation
-  const totalGuildScore = lb.reduce((sum, m) => sum + (m.totalScore || 0), 0);
+  const totalGuildScore = lb.reduce((sum, m) => sum + (Number(m.totalScore) || 0), 0);
   const guildLevel = Math.max(1, Math.floor(Math.sqrt(totalGuildScore / 10)));
   const nextLevelXP = Math.pow(guildLevel + 1, 2) * 10;
   const currentLevelXP = Math.pow(guildLevel, 2) * 10;
-  const xpProgress = Math.min(100, Math.round(((totalGuildScore - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100));
+  const xpProgress = nextLevelXP === currentLevelXP ? 0 : Math.min(100, Math.round(((totalGuildScore - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100));
 
   const myLbEntry = useMemo(() => lb.find(l => l.memberId === myMemberId), [lb, myMemberId]);
   const myRankNum = useMemo(() => lb.findIndex(l => l.memberId === myMemberId) + 1, [lb, myMemberId]);

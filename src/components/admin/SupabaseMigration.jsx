@@ -70,6 +70,7 @@ const SupabaseMigration = () => {
 
 
       // 2. Migrate Events
+      let migratedEvents = [];
       if (data.events) {
         addLog(`Migrating ${data.events.length} events...`);
         const validEvents = data.events.filter(e => e.eventId || e.event_id);
@@ -81,9 +82,9 @@ const SupabaseMigration = () => {
           const eid = e.eventId || e.event_id;
           const existing = existingEvents?.find(ex => ex.event_id === eid);
           
-          const newAtt = e.attendance_data || e.attendanceData || {};
-          const newPerf = e.performance_data || e.performanceData || {};
-          const newEo = e.eo_ratings_data || e.eoRatingsData || {};
+          const newAtt = e.attendance_data || e.attendanceData || e.attendance || e.metadata?.attendanceData || {};
+          const newPerf = e.performance_data || e.performanceData || e.performance || e.perf || e.scores || e.metadata?.performanceData || {};
+          const newEo = e.eo_ratings_data || e.eoRatingsData || e.eo_ratings || e.metadata?.eoRatingsData || {};
 
           return {
             event_id: eid,
@@ -97,6 +98,10 @@ const SupabaseMigration = () => {
             eo_ratings_data: Object.keys(newEo).length > 0 ? newEo : (existing?.eo_ratings_data || {})
           };
         });
+        
+        migratedEvents = upsertData;
+
+        console.log("Migration Debug: upsertData sample:", upsertData[0]);
 
         const { error } = await supabase.from('events').upsert(upsertData);
         if (error) throw new Error(`Events error: ${error.message}`);
@@ -233,11 +238,11 @@ const SupabaseMigration = () => {
       showToast("Migration successful!", "success");
       
       // Clear cache to force fresh fetch after migration
-      sessionStorage.removeItem("global_guild_data_v2");
-      sessionStorage.setItem("global_guild_data_v2", JSON.stringify({
+      sessionStorage.removeItem("global_guild_data_v3");
+      sessionStorage.setItem("global_guild_data_v3", JSON.stringify({
         data: {
-          rosterData: data.members,
-          eventsData: data.events,
+          rosterData: (data.members && data.members.length > 0) ? data.members : JSON.parse(sessionStorage.getItem("global_guild_data_v3") || "{}")?.data?.rosterData || [],
+          eventsData: migratedEvents.length > 0 ? migratedEvents : data.events,
           absenceData: data.absences,
           metaData: data.metaData,
           bidsData: wishlistEntries,

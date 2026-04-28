@@ -10,13 +10,12 @@ const normalizeDiscord = (value = "") => String(value || "").toLowerCase().repla
 
 function RequestsPage() {
   const { 
-    requests, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
-    joinRequests, approveJoinRequest, rejectJoinRequest, deleteJoinRequest,
-    isOfficer, isArchitect, members, currentUser, fetchRequests, isFetchingRequests 
+    requests, approveRequest, rejectRequest,
+    joinRequests, approveJoinRequest, rejectJoinRequest,
+    isOfficer, members, currentUser, fetchRequests, isFetchingRequests 
   } = useGuild();
   
   const [subTab, setSubTab] = useState("profile"); // profile, join, reactivation
-  const [statusFilter, setStatusFilter] = useState("all"); // all, pending, approved, rejected
   const [showConfetti, setShowConfetti] = useState(false);
 
   // Fetch requests from Firebase only when this page is actually opened.
@@ -28,9 +27,6 @@ function RequestsPage() {
   const pendingRequests = requests.filter(r => r.status === "pending");
   const pendingJoin = joinRequests.filter(r => r.status === "pending" && (r.request_type || r.requestType) !== "reactivation");
   const pendingReactivation = joinRequests.filter(r => r.status === "pending" && (r.request_type || r.requestType) === "reactivation");
-  
-  const processedRequests = requests.filter(r => r.status !== "pending");
-  const processedJoin = joinRequests.filter(r => r.status !== "pending");
 
   const getDuplicateInfo = (app, allMembers) => {
     const matches = [];
@@ -102,52 +98,13 @@ function RequestsPage() {
     { id: "join", label: "Applications", count: pendingJoin.length, emptyTitle: "No pending applications", emptyDesc: "Guild is quiet right now.", emptyIcon: "🛡️" },
     { id: "reactivation", label: "Reactivation", count: pendingReactivation.length, emptyTitle: "No pending reactivation requests", emptyDesc: "No old accounts waiting for reactivation.", emptyIcon: "♻️" }
   ];
-  const filterItems = [
-    { id: "all", label: "All" },
-    { id: "pending", label: "Pending" },
-    { id: "approved", label: "Approved" },
-    { id: "rejected", label: "Rejected" }
-  ];
-  const applyStatusFilter = (rows) => {
-    if (statusFilter === "all") return rows;
-    return rows.filter(r => (r.status || "").toLowerCase() === statusFilter);
-  };
+
   const pendingRowsByTab = {
     profile: pendingRequests,
     join: pendingJoin,
     reactivation: pendingReactivation
   };
-  const visiblePending = applyStatusFilter(pendingRowsByTab[subTab] || []);
-  const allProcessed = [...processedRequests, ...processedJoin];
-  const historyForTab = allProcessed.filter((r) => {
-    const type = r.request_type || r.requestType;
-    if (subTab === "profile") return type === "profile_update";
-    if (subTab === "join") return type === "join";
-    if (subTab === "reactivation") return type === "reactivation";
-    // Fallback for legacy data without request_type
-    if (subTab === "profile") return r.uid === undefined;
-    return r.uid !== undefined;
-  });
-
-  const visibleHistory = applyStatusFilter(historyForTab)
-    .sort((a,b) => {
-      const dateA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
-      const dateB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
-      return dateB - dateA;
-    })
-    .slice(0, 20);
-
-  const handleDelete = async (r, type = "profile") => {
-    const success = type === "profile" ? await deleteRequest(r.id) : await deleteJoinRequest(r.id);
-    if (success) {
-      await writeAuditLog(
-        currentUser.email,
-        currentUser.displayName || currentUser.email,
-        `${type}_request_deleted`,
-        `Deleted processed request history for ${r.requesterIgn || r.ign}`
-      );
-    }
-  };
+  const visiblePending = pendingRowsByTab[subTab] || [];
 
   if (!isOfficer) {
     return (
@@ -165,7 +122,7 @@ function RequestsPage() {
         <div>
           <h1 className="page-title" style={{ fontSize: 32, marginBottom: 8 }}>📝 Request Manager</h1>
           <div className="flex items-center gap-3">
-            <p className="page-subtitle" style={{ marginBottom: 0 }}>Premium dashboard for member data & applications</p>
+            <p className="page-subtitle" style={{ marginBottom: 0 }}>Pending tasks requiring officer attention</p>
             <button 
               className={`btn btn-sm btn-ghost ${isFetchingRequests ? 'animate-spin' : ''}`} 
               onClick={fetchRequests}
@@ -182,7 +139,7 @@ function RequestsPage() {
           {tabItems.map(t => (
             <button
               key={t.id}
-              onClick={() => { setSubTab(t.id); setStatusFilter("all"); }}
+              onClick={() => { setSubTab(t.id); }}
               style={{
                 padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', transition: 'all 0.3s',
                 background: subTab === t.id ? 'var(--accent)' : 'transparent',
@@ -197,32 +154,14 @@ function RequestsPage() {
       </div>
 
       <div style={{ marginBottom: 60 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {filterItems.map(f => (
-            <button
-              key={f.id}
-              className={`btn btn-sm ${statusFilter === f.id ? "" : "btn-ghost"}`}
-              style={{
-                fontSize: 11,
-                padding: "4px 10px",
-                borderColor: statusFilter === f.id ? "var(--accent)" : "var(--border)",
-                background: statusFilter === f.id ? "rgba(99,130,230,0.15)" : "transparent",
-                color: statusFilter === f.id ? "var(--accent)" : "var(--text-muted)"
-              }}
-              onClick={() => setStatusFilter(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
         {subTab === "profile" ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 24 }}>
             {visiblePending.length === 0 ? (
               <div style={{ gridColumn: '1/-1' }}>
                 <StatePanel
                   icon="✨"
-                  title={statusFilter === "all" ? "All clear" : `No ${statusFilter} items`}
-                  description={statusFilter === "all" ? "No pending profile changes." : "Try another filter to see more requests."}
+                  title="All clear"
+                  description="No pending profile changes."
                 />
               </div>
             ) : (
@@ -289,8 +228,8 @@ function RequestsPage() {
               <div style={{ gridColumn: '1/-1' }}>
                 <StatePanel
                   icon={tabItems.find(t => t.id === subTab)?.emptyIcon || "🛡️"}
-                  title={statusFilter === "all" ? (tabItems.find(t => t.id === subTab)?.emptyTitle || "No pending requests") : `No ${statusFilter} items`}
-                  description={statusFilter === "all" ? (tabItems.find(t => t.id === subTab)?.emptyDesc || "Nothing to process right now.") : "Try another filter to see more requests."}
+                  title={tabItems.find(t => t.id === subTab)?.emptyTitle || "No pending requests"}
+                  description={tabItems.find(t => t.id === subTab)?.emptyDesc || "Nothing to process right now."}
                 />
               </div>
             ) : (
@@ -368,96 +307,6 @@ function RequestsPage() {
             )}
           </div>
         )}
-      </div>
-
-      {/* History Section - Sleek Table */}
-      <div style={{ marginBottom: 40 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-            📜 Processing History ({tabItems.find(t => t.id === subTab)?.label || "All"})
-          </h2>
-          {isArchitect && (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, opacity: 0.6 }} onClick={clearProcessedRequests}>
-              <Icon name="trash" size={12} /> Clear All
-            </button>
-          )}
-        </div>
-        
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-wrap" style={{ border: 'none' }}>
-            <table className="w-full text-xs">
-              <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <th style={{ padding: '16px 20px' }}>Member/Applicant</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Details</th>
-                  <th>Date Processed</th>
-                  {isArchitect && <th style={{ textAlign: "right", paddingRight: 20 }}>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleHistory.map(r => {
-                    const isJoin = r.uid !== undefined;
-                    const isReactivation = isJoin && (r.request_type || r.requestType) === "reactivation";
-                    return (
-                      <tr key={r.id}>
-                        <td style={{ padding: '12px 20px', fontWeight: 700 }}>{r.requesterIgn || r.ign}</td>
-                        <td>
-                          <span style={{ 
-                            fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase',
-                            background: isJoin ? 'rgba(139,92,246,0.15)' : 'rgba(99,130,230,0.15)',
-                            color: isJoin ? '#a78bfa' : 'var(--accent)',
-                            border: isJoin ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(99,130,230,0.3)'
-                          }}>
-                            {isJoin ? (isReactivation ? "Reactivate" : "Join App") : "Profile"}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: r.status === "approved" ? 'var(--green)' : 'var(--red)', boxShadow: `0 0 8px ${r.status === "approved" ? 'var(--green)' : 'var(--red)'}` }} />
-                            <span style={{ fontWeight: 700, color: r.status === "approved" ? 'var(--green)' : 'var(--red)', textTransform: 'uppercase' }}>{r.status}</span>
-                          </div>
-                        </td>
-                        <td style={{ color: 'var(--text-secondary)' }}>
-                          {isJoin
-                            ? `${r.jobClass || r.class || "—"} | ${r.role || "—"}${r.status === "approved" ? ` | ${r.accountStatus === "activated" ? "Account Activated" : "Account Pending Activation"}` : ""}`
-                            : `${r.newData?.ign || "—"} | ${r.newData?.class || "—"}`}
-                        </td>
-                        <td style={{ color: 'var(--text-muted)' }}>
-                          {new Date(r.timestamp).toLocaleDateString()}
-                        </td>
-                        {isArchitect && (
-                          <td style={{ paddingRight: 20 }}>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              <button 
-                                className="btn btn-ghost btn-icon" 
-                                style={{ color: 'var(--red)', opacity: 0.5 }}
-                                onClick={() => handleDelete(r, isJoin ? "join" : "profile")}
-                              >
-                                <Icon name="trash" size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                {visibleHistory.length === 0 && (
-                  <tr>
-                    <td colSpan={isArchitect ? 6 : 5} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                      <StatePanel
-                        icon="📜"
-                        title={`No ${tabItems.find(t => t.id === subTab)?.label?.toLowerCase() || "request"} history found`}
-                        description="Approved or rejected requests will appear here."
-                      />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
     </div>
   );
