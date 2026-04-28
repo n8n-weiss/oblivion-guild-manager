@@ -115,6 +115,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
+  const [auctionBids, setAuctionBids] = useState([]);
   const [battlelogConfig, setBattlelogConfig] = useState({ weeklyAssignments: {}, rotationPoolMemberIds: [], lastEditorUid: null, lastUpdate: null });
 
   const storageKey = `sb-ngmgxqahznycnzuaraez-auth-token`;
@@ -281,6 +282,181 @@ export const GuildProvider = ({ children, initialData }) => {
   const isMember = (userRole === "member" || !userRole) && !isAdmin && !isOfficer && !isArchitect;
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
+  // Data Loading from Supabase
+  const GLOBAL_CACHE_KEY = "global_guild_data_v1";
+  const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
+
+  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData) => {
+    console.log("processFetchedData receiving:", { 
+      roster: Array.isArray(rosterData) ? rosterData.length : typeof rosterData,
+      events: Array.isArray(eventsData) ? eventsData.length : typeof eventsData 
+    });
+    if (Array.isArray(rosterData)) {
+      const mappedMembers = rosterData.map(r => ({ 
+        ...r,
+        ...r.metadata, 
+        memberId: r.member_id,
+        discord: r.discord || r.metadata?.discord || "",
+        guildRank: r.guild_rank,
+        isDonator: r.is_donator
+      }));
+
+      setMembers(mappedMembers);
+      prevData.current.members = [...mappedMembers];
+    }
+
+    if (Array.isArray(eventsData)) {
+      const mappedEvents = eventsData.map(e => ({
+        eventId: e.event_id,
+        eventDate: e.event_date,
+        type: e.type,
+        eventType: e.type,
+        title: e.title,
+        auditor: e.auditor,
+        attendanceData: e.attendance_data,
+        performanceData: e.performance_data,
+        eoRatings: e.eo_ratings,
+        metadata: e.metadata
+      }));
+      setEvents(mappedEvents);
+      prevData.current.events = [...mappedEvents];
+    }
+
+    if (Array.isArray(absenceData)) {
+      setAbsences(absenceData);
+      prevData.current.absences = [...absenceData];
+    }
+
+    if (Array.isArray(metaData)) {
+      const parties = metaData.find(m => m.key === 'parties')?.value || [];
+      const raidParties = metaData.find(m => m.key === 'raidParties')?.value || [];
+      const partyNames = metaData.find(m => m.key === 'partyNames')?.value || [];
+      const raidPartyNames = metaData.find(m => m.key === 'raidPartyNames')?.value || [];
+      const partyOverrides = metaData.find(m => m.key === 'partyOverrides')?.value || {};
+      const leagueParties = metaData.find(m => m.key === 'leagueParties')?.value || { main: Array.from({ length: 8 }, () => []), sub: Array.from({ length: 8 }, () => []) };
+      const leaguePartyNames = metaData.find(m => m.key === 'leaguePartyNames')?.value || { main: Array.from({ length: 8 }, () => ""), sub: Array.from({ length: 8 }, () => "") };
+      const eoRatings = metaData.find(m => m.key === 'eoRatings')?.value || [];
+      const auctionSessions = metaData.find(m => m.key === 'auctionSessions')?.value || [];
+      const auctionTemplates = metaData.find(m => m.key === 'auctionTemplates')?.value || [];
+      const resourceCategories = metaData.find(m => m.key === 'resourceCategories')?.value || ["Card Album", "Light & Dark"];
+      const discordConfig = metaData.find(m => m.key === 'discordConfig')?.value || {};
+      const battlelogConfig = metaData.find(m => m.key === 'battlelogConfig')?.value || {};
+
+      setParties(parties);
+      setRaidParties(raidParties);
+      setPartyNames(partyNames);
+      setRaidPartyNames(raidPartyNames);
+      setPartyOverrides(partyOverrides);
+      setLeagueParties(leagueParties);
+      setLeaguePartyNames(leaguePartyNames);
+      setEoRatings(eoRatings);
+      setAuctionSessions(auctionSessions);
+      setAuctionTemplates(auctionTemplates);
+      setResourceCategories(resourceCategories);
+      setDiscordConfig(discordConfig);
+      setBattlelogConfig(battlelogConfig);
+
+      prevData.current.parties = [...parties];
+      prevData.current.raidParties = [...raidParties];
+      prevData.current.partyNames = [...partyNames];
+      prevData.current.raidPartyNames = [...raidPartyNames];
+      prevData.current.partyOverrides = { ...partyOverrides };
+      prevData.current.leagueParties = { ...leagueParties };
+      prevData.current.leaguePartyNames = { ...leaguePartyNames };
+      prevData.current.eoRatings = [...eoRatings];
+      prevData.current.auctionSessions = [...auctionSessions];
+      prevData.current.auctionTemplates = [...auctionTemplates];
+      prevData.current.resourceCategories = [...resourceCategories];
+      prevData.current.discordConfig = { ...discordConfig };
+      prevData.current.battlelogConfig = { ...battlelogConfig };
+    }
+
+    if (Array.isArray(bidsData)) {
+      setAuctionBids(bidsData);
+    }
+  }, []);
+
+  const fetchGlobalData = useCallback(async (force = false) => {
+    console.log("fetchGlobalData called:", { force, isFetching: prevData.current.isFetching, hasUser: !!currentUser });
+    if (prevData.current.isFetching) return;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+    
+    // Check Cache
+    if (!force) {
+      try {
+        const cached = sessionStorage.getItem(GLOBAL_CACHE_KEY);
+        if (cached) {
+          const { data, fetchedAt } = JSON.parse(cached);
+          if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
+            console.log("Serving global data from cache...");
+            processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData);
+            setLoading(false);
+            setSyncStatus("synced");
+            return;
+          }
+        }
+      } catch (e) { console.warn("Cache read failed", e); }
+    }
+
+    try {
+      prevData.current.isFetching = true;
+      setSyncStatus("loading");
+      const t0 = Date.now();
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
+
+      const headers = getAuthHeaders();
+
+      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/roster?select=*`, {
+          headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, {
+          headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/absences?select=*`, {
+          headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, {
+          headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, {
+          headers
+        })
+      ]);
+
+      const rosterData = await rosterRes.json().catch(() => []);
+      const eventsData = await eventsRes.json().catch(() => []);
+      const absenceData = await absenceRes.json().catch(() => []);
+      const metaData = await metaRes.json().catch(() => []);
+      const bidsData = await bidsRes.json().catch(() => []);
+
+      if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
+
+      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData);
+
+      sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
+        data: { rosterData, eventsData, absenceData, metaData, bidsData },
+        fetchedAt: Date.now()
+      }));
+
+      setSyncStatus("synced");
+      console.log("Global fetch completed total:", Date.now() - t0, "ms");
+    } catch (err) {
+      console.error("Supabase fetch failed:", err);
+      setSyncStatus("error");
+      showToast("Data sync failed. Some data may be missing.", "error");
+    } finally {
+      setLoading(false);
+      prevData.current.isFetching = false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- we want to re-fetch when currentUser changes to get the correct closure
+  }, [showToast, getAuthHeaders, currentUser, processFetchedData]);
+
   // Auth Listener (Native Supabase Mode)
   useEffect(() => {
     const initAuth = async () => {
@@ -288,14 +464,12 @@ export const GuildProvider = ({ children, initialData }) => {
         setAuthLoading(true);
         console.log("Initializing Auth with getSession()...");
         
-        const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
-        
-        if (sessionErr) throw sessionErr;
-
-        if (session) {
-          const user = session.user;
-          console.log("Session found for user:", user.email);
-          setCurrentUser(user);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        if (currentUser?.id !== session.user.id) {
+          setCurrentUser(session.user);
+        }
+        console.log("Session found for user:", session.user.email);
           
           // Skip if SIGNED_IN handler already fetched the role
           if (!roleFetchedRef.current) {
@@ -378,7 +552,9 @@ export const GuildProvider = ({ children, initialData }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log("Auth state change event:", _event);
       if (session) {
-        setCurrentUser(session.user);
+        if (currentUser?.id !== session.user.id) {
+          setCurrentUser(session.user);
+        }
 
         // On actual sign-in (not the initial session load which initAuth handles),
         // fetch the role immediately to avoid the race condition where userRole
@@ -393,7 +569,6 @@ export const GuildProvider = ({ children, initialData }) => {
               const roles = await roleRes.json();
               console.log("AuthChange: roles:", roles);
               if (roles && roles[0]) {
-                // Staff account: has an explicit role + member_id
                 console.log("AuthChange: Staff role found:", roles[0].role);
                 setUserRole(roles[0].role);
                 setMyMemberId(roles[0].member_id || null);
@@ -406,14 +581,15 @@ export const GuildProvider = ({ children, initialData }) => {
                   setMyMemberId(metaMemberId);
                 }
               }
+              // Force fresh data to ensure new members are in the roster
+              fetchGlobalData(true);
             }
           } catch (err) {
             console.warn("Role fetch on SIGNED_IN failed:", err);
           }
         }
-
       } else {
-        // Reset on sign out so re-login fetches fresh role
+        // Reset on sign out
         roleFetchedRef.current = false;
         setCurrentUser(null);
         setUserRole(null);
@@ -422,197 +598,10 @@ export const GuildProvider = ({ children, initialData }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [getAuthHeaders]);
+  }, []); // Only run once on mount to set up the listener
 
 
-  // Data Loading from Supabase
-  const GLOBAL_CACHE_KEY = "global_guild_data_v1";
-  const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
-  const fetchGlobalData = useCallback(async (force = false) => {
-    console.log("fetchGlobalData called:", { force, isFetching: prevData.current.isFetching, hasUser: !!currentUser });
-    if (prevData.current.isFetching) return;
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-    
-    // Check Cache
-    if (!force) {
-      try {
-        const cached = sessionStorage.getItem(GLOBAL_CACHE_KEY);
-        if (cached) {
-          const { data, fetchedAt } = JSON.parse(cached);
-          if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
-            console.log("Serving global data from cache...");
-            processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData);
-            setLoading(false);
-            setSyncStatus("synced");
-            return;
-          }
-        }
-      } catch (e) { console.warn("Cache read failed", e); }
-    }
-
-    try {
-      prevData.current.isFetching = true;
-      setSyncStatus("loading");
-      const t0 = Date.now();
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
-
-      const headers = getAuthHeaders();
-
-      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/roster?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/absences?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, {
-          headers
-        })
-      ]);
-
-      const rosterData = await rosterRes.json().catch(() => []);
-      const eventsData = await eventsRes.json().catch(() => []);
-      const absenceData = await absenceRes.json().catch(() => []);
-      const metaData = await metaRes.json().catch(() => []);
-      const bidsData = await bidsRes.json().catch(() => []);
-
-      if (rosterRes.status === 403) console.warn("Roster fetch 403 - check RLS");
-
-      processFetchedData(rosterData, eventsData, absenceData, metaData, bidsData);
-
-      sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-        data: { rosterData, eventsData, absenceData, metaData, bidsData },
-        fetchedAt: Date.now()
-      }));
-
-      setSyncStatus("synced");
-      console.log("Global fetch completed total:", Date.now() - t0, "ms");
-    } catch (err) {
-      console.error("Supabase fetch failed:", err);
-      setSyncStatus("error");
-      showToast("Data sync failed. Some data may be missing.", "error");
-    } finally {
-      setLoading(false);
-      prevData.current.isFetching = false;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- we want to re-fetch when currentUser changes to get the correct closure
-  }, [showToast, getAuthHeaders, currentUser]);
-
-  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData) => {
-    console.log("processFetchedData receiving:", { 
-      roster: Array.isArray(rosterData) ? rosterData.length : typeof rosterData,
-      events: Array.isArray(eventsData) ? eventsData.length : typeof eventsData 
-    });
-    if (Array.isArray(rosterData)) {
-      const mappedMembers = rosterData.map(r => ({ 
-        ...r,
-        ...r.metadata, 
-        memberId: r.member_id,
-        discord: r.discord || r.metadata?.discord || "",
-        guildRank: r.guild_rank,
-        isDonator: r.is_donator
-      }));
-
-      setMembers(mappedMembers);
-      prevData.current.members = [...mappedMembers];
-    }
-
-    if (Array.isArray(eventsData)) {
-      const mappedEvents = eventsData.map(e => ({
-        eventId: e.event_id,
-        eventDate: e.event_date,
-        type: e.type,
-        eventType: e.type,
-        title: e.title,
-        auditor: e.auditor,
-        attendanceData: e.attendance_data,
-        performanceData: e.performance_data,
-        eoRatingsData: e.eo_ratings_data
-      }));
-      const sorted = mappedEvents.sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
-      setEvents(sorted);
-      prevData.current.events = [...sorted];
-
-      const nestedAtt = [];
-      const nestedPerf = [];
-      const nestedEo = [];
-      mappedEvents.forEach(e => {
-        if (e.attendanceData) Object.entries(e.attendanceData).forEach(([mid, status]) => nestedAtt.push({ eventId: e.eventId, memberId: mid, status }));
-        if (e.performanceData) Object.entries(e.performanceData).forEach(([mid, pData]) => nestedPerf.push({ ...pData, eventId: e.eventId, memberId: mid }));
-        if (e.eoRatingsData) Object.entries(e.eoRatingsData).forEach(([mid, rating]) => nestedEo.push({ eventId: e.eventId, memberId: mid, rating }));
-      });
-      setAttendance(nestedAtt);
-      setPerformance(nestedPerf);
-      setEoRatings(nestedEo);
-    }
-
-    if (Array.isArray(absenceData)) {
-      const mappedAbs = absenceData.map(a => ({
-        id: a.id,
-        memberId: a.member_id,
-        startDate: a.start_date,
-        endDate: a.end_date,
-        reason: a.reason,
-        status: a.status
-      }));
-      setAbsences(mappedAbs);
-      prevData.current.absences = [...mappedAbs];
-    }
-
-    if (Array.isArray(metaData)) {
-      metaData.forEach(m => {
-        const d = m.data;
-        if (m.key === 'parties') {
-          setParties(d.parties || []);
-          setPartyNames(d.partyNames || []);
-          setRaidParties(d.raidParties || []);
-          setRaidPartyNames(d.raidPartyNames || []);
-          setPartyOverrides(d.partyOverrides || {});
-          setLeagueParties(d.leagueParties || { 
-            main: Array.from({ length: 8 }, () => []), 
-            sub: Array.from({ length: 8 }, () => []) 
-          });
-          setLeaguePartyNames(d.leaguePartyNames || { 
-            main: Array.from({ length: 8 }, () => ""), 
-            sub: Array.from({ length: 8 }, () => "") 
-          });
-          metadataVersions.current.parties = m.version;
-        } else if (m.key === 'auction') {
-          setAuctionSessions(d.auctionSessions || []);
-          setAuctionTemplates(d.auctionTemplates || []);
-          setResourceCategories(d.resourceCategories || ["Card Album", "Light & Dark"]);
-          metadataVersions.current.auction = m.version;
-        } else if (m.key === 'discord') {
-          const config = d.discord ? d.discord : d;
-          setDiscordConfig(config || {});
-          metadataVersions.current.discord = m.version;
-        } else if (m.key === 'battlelog') {
-          setBattlelogConfig(d);
-          metadataVersions.current.battlelog = m.version;
-        }
-      });
-    }
-
-    if (bidsData && Array.isArray(bidsData)) {
-      const mappedBids = bidsData.map(b => ({
-        id: b.member_id,
-        bids: b.bids || []
-      }));
-      setAuctionWishlist(mappedBids);
-    }
-  }, []);
 
   useEffect(() => {
     fetchGlobalData();
@@ -739,6 +728,9 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // Auto-save to Supabase — smart dirty tracking
   useEffect(() => {
+    // Only Staff/Architects should attempt to auto-save global data.
+    // Regular members can only view, so we skip the sync logic for them.
+    if (!canSeeRequestData) return;
     if (!currentUser || authLoading || loading || syncStatus === "offline") return;
     if (members.length === 0 && events.length === 0) return;
     
@@ -1618,16 +1610,31 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       const headers = getAuthHeaders();
 
-      const processedIds = requests.filter(r => r.status !== 'pending').map(r => r.id);
-      if (processedIds.length === 0) return true;
+      const pIds = requests.filter(r => r.status !== 'pending').map(r => r.id);
+      const jIds = joinRequests.filter(r => r.status !== 'pending').map(r => r.id);
+      
+      if (pIds.length === 0 && jIds.length === 0) return true;
 
-      const res = await fetch(`${supabaseUrl}/rest/v1/requests?id=in.(${processedIds.join(',')})`, {
-        method: 'DELETE',
-        headers
-      });
-      if (!res.ok) throw new Error(`Clear processed failed: ${res.status}`);
+      const deleteCalls = [];
+      if (pIds.length > 0) {
+        deleteCalls.push(fetch(`${supabaseUrl}/rest/v1/requests?id=in.(${pIds.join(',')})`, {
+          method: 'DELETE',
+          headers
+        }));
+      }
+      if (jIds.length > 0) {
+        deleteCalls.push(fetch(`${supabaseUrl}/rest/v1/join_requests?id=in.(${jIds.join(',')})`, {
+          method: 'DELETE',
+          headers
+        }));
+      }
+
+      const results = await Promise.all(deleteCalls);
+      const failed = results.find(r => !r.ok);
+      if (failed) throw new Error(`Clear processed failed with status ${failed.status}`);
 
       setRequests(prev => prev.filter(r => r.status === 'pending'));
+      setJoinRequests(prev => prev.filter(r => r.status === 'pending'));
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Processed history cleared', 'success');
       return true;
@@ -1855,6 +1862,7 @@ export const GuildProvider = ({ children, initialData }) => {
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,
     fetchGlobalData, fetchRequests, isFetchingRequests,
+    auctionBids, setAuctionBids,
     isOfflineMode, setIsOfflineMode
   };
 

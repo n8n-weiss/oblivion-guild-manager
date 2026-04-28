@@ -131,13 +131,23 @@ export default function App() {
   
   const unreadCount = notifications.filter(n => n.targetId === "all" || (n.targetId === myMemberId && !n.isRead)).length;
   const effectivePage = (isMember && !(isAdmin || isOfficer || isArchitect) && page !== "import") ? "members" : page;
-  const ownMember = React.useMemo(
-    () => members.find(m => m.memberId?.trim().toLowerCase() === (myMemberId || "").trim().toLowerCase()) || null,
-    [members, myMemberId]
-  );
   const pendingRequestsCount = 
     requests.filter(r => r.status === "pending").length + 
     joinRequests.filter(r => r.status === "pending").length;
+
+  console.log("AppDebug: myMemberId:", myMemberId, "Members count:", members.length);
+  const ownMember = React.useMemo(() => {
+    if (!myMemberId || members.length === 0) return null;
+    const normalizedMyId = (myMemberId || "").trim().toLowerCase();
+    const found = members.find(m => (m.memberId || "").trim().toLowerCase() === normalizedMyId);
+    
+    if (!found) {
+      console.warn("AppDebug: Member NOT found. Available IDs:", members.slice(0, 10).map(m => m.memberId));
+    } else {
+      console.log("AppDebug: Member found:", found.ign);
+    }
+    return found || null;
+  }, [members, myMemberId]);
 
   const prefetchPage = React.useCallback((pageId) => {
     if (!pageId || prefetchedPages.has(pageId)) return;
