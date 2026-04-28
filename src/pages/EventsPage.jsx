@@ -63,23 +63,24 @@ function EventsPage() {
   const [escalationHours] = useState(12); // after dueAt
   const reminderInFlight = React.useRef(new Set());
 
-  // Helper to get Week Number in month (Monday to Sunday rule)
+  // Helper to get Week Label (Monday to Sunday rule)
   const getWeekKey = (dateObj) => {
     const d = new Date(dateObj);
-    const dayOfMonth = d.getDate();
-    // Count how many Sundays occurred before this day in the same month
-    let sundayCount = 0;
-    for (let i = 1; i < dayOfMonth; i++) {
-      const tempD = new Date(d.getFullYear(), d.getMonth(), i);
-      if (tempD.getDay() === 0) sundayCount++;
-    }
-    return `Week ${sundayCount + 1}`;
+    const day = d.getDay(); // 0 (Sun) to 6 (Sat)
+    // Find the Monday of this week
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+    monday.setHours(0, 0, 0, 0);
+    
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    return `${monday.toLocaleDateString("en-US", { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}`;
   };
 
   // Group events by Month and Week — sorted newest-first
   const groupedEvents = React.useMemo(() => {
     const groups = {};
-    // Sort events newest-first before grouping
     const sorted = [...events].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
     sorted.forEach(ev => {
       const d = new Date(ev.eventDate + 'T00:00:00'); 
@@ -401,6 +402,17 @@ function EventsPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
   };
 
+  const markAllPresent = (eventId) => {
+    const activeIds = activeMembers.map(m => (m.memberId || "").trim());
+    setAttendance(prev => {
+      const otherEvents = prev.filter(a => a.eventId !== eventId);
+      const newAttendance = activeIds.map(id => ({ memberId: id, eventId, status: "present" }));
+      return [...otherEvents, ...newAttendance];
+    });
+    showToast("All active members marked as present", "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_bulk", `Marked all as present — ${events.find(e => e.eventId === eventId)?.eventDate}`);
+  };
+
   const savePerformance = (memberId, eventId) => {
     const key = `${memberId}_${eventId}`;
     const mId = (memberId || "").trim().toLowerCase();
@@ -472,13 +484,14 @@ function EventsPage() {
       topSupport: topSupport.map(m => [m.memberId, m.eventScore]),
       topAttendance: topAttendance.map(m => [m.memberId, m.attendancePct])
     };
-    return { topDps, topSupport, topAttendance, hash: JSON.stringify(hashPayload) };
+    return { withEventScore, topDps, topSupport, topAttendance, hash: JSON.stringify(hashPayload) };
   }, [attendance, leaderboardSnapshot, members, performance]);
   
   const postEventDigest = async (mode = "manual") => {
     if (!selectedEvent) return;
     const digest = buildDigestSnapshot(selectedEvent);
     if (!digest) return;
+    const { withEventScore } = digest;
     const isFinalize = mode === "finalize";
     if (!isFinalize && selectedEvent?.digestMeta?.hash && selectedEvent.digestMeta.hash === digest.hash) {
       showToast("Digest unchanged. No repost needed.", "info");
@@ -491,18 +504,20 @@ function EventsPage() {
         list.length ? list.map((m, i) => `${i + 1}. ${m.ign} — ${m[scoreKey]} ${suffix}`).join("\n") : "No data yet";
 
       await sendDiscordEmbed(
-        "📊 Post-Event Digest",
-        isFinalize ? "Finalized event digest from officer review." : "Updated event digest after score edits.",
-        0xF0C040,
+        `🛡️  __**OBLIVION EVENT COMBAT RESULTS**__  🛡️`,
+        isFinalize 
+          ? `Finalized combat results for ${selectedEvent.eventType} on ${selectedEvent.eventDate}. Excellent performance, everyone!\n\u200B` 
+          : `Updated combat results for ${selectedEvent.eventType} on ${selectedEvent.eventDate}.\n\u200B`,
+        selectedEvent.glMode === 'stellar' ? 0x9333ea : 0x6382E6,
         [
-          { name: "Event", value: `${selectedEvent.eventType} • ${selectedEvent.eventDate}`, inline: false },
-          { name: "Top 10 DPS", value: rowText(digest.topDps), inline: false },
-          { name: "Top 10 Support/Utility", value: rowText(digest.topSupport), inline: false },
-          { name: "Top 10 Attendance", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
+          { name: "🏆 TOP 10 OVERALL", value: rowText(withEventScore.sort((a, b) => b.eventScore - a.eventScore).slice(0, 10)), inline: false },
+          { name: "⚔️ TOP 10 DPS", value: rowText(digest.topDps), inline: true },
+          { name: "🛡️ TOP 10 SUPPORT", value: rowText(digest.topSupport), inline: true },
+          { name: "📋 TOP 10 ATTENDANCE (SNAPSHOT)", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
         ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-logo.png",
-        "event_digest",
-        "event_digest",
+        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
+        "event_results",
+        "event_results",
         { type: selectedEvent.eventType, date: selectedEvent.eventDate }
       );
 
@@ -609,9 +624,9 @@ function EventsPage() {
               const isMonthExpanded = !!expandedMonths[month];
               // Sort weeks newest-first (Week 4 → Week 3 → …)
               const weekKeys = Object.keys(weekGroups).sort((a, b) => {
-                const wA = parseInt(a.replace('Week ', ''), 10);
-                const wB = parseInt(b.replace('Week ', ''), 10);
-                return wB - wA;
+                const dateA = new Date(weekGroups[a][0].eventDate);
+                const dateB = new Date(weekGroups[b][0].eventDate);
+                return dateB - dateA;
               });
               return (
                 <div key={month} style={{ marginBottom: 6 }}>
@@ -649,6 +664,9 @@ function EventsPage() {
                             >
                               <span style={{ color: isWeekExpanded ? "var(--accent)" : "rgba(255,255,255,0.2)", fontSize: 8 }}>{isWeekExpanded ? "▼" : "▶"}</span>
                               <span style={{ fontWeight: 800 }}>{weekKey.toUpperCase()}</span>
+                              {weekKey === getWeekKey(new Date()) && (
+                                <span className="badge badge-gl" style={{ fontSize: 7, marginLeft: 'auto', padding: '1px 4px' }}>CURRENT</span>
+                              )}
                             </button>
                             {isWeekExpanded && (
                               <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s", paddingLeft: 4 }}>
@@ -760,7 +778,19 @@ function EventsPage() {
                       </tr>
                     )}
                     <tr>
-                      <th style={{ zIndex: 30 }}>Member</th><th>Class</th><th>Attendance</th>
+                      <th style={{ zIndex: 30 }}>Member</th><th>Class</th>
+                      <th>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          Attendance
+                          <button 
+                            className="btn btn-ghost btn-sm" 
+                            style={{ padding: '2px 6px', fontSize: 9, color: 'var(--green)', border: '1px solid rgba(34,197,94,0.3)' }}
+                            onClick={() => markAllPresent(selectedEvent.eventId)}
+                          >
+                            <Icon name="check" size={10} /> Mark All Present
+                          </button>
+                        </div>
+                      </th>
                       {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && <>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 1</th>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>CTF 2</th>
@@ -783,7 +813,6 @@ function EventsPage() {
                         <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
                         <th></th>
                       </>}
-                      {selectedEvent.eventType === "Emperium Overrun" && <th>Rating</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -876,25 +905,6 @@ function EventsPage() {
                               </>
                             );
                           })()}
-                          {selectedEvent.eventType === "Emperium Overrun" && (
-                            <td>
-                              <div style={{ display: "flex", gap: 2 }}>
-                                {[1, 2, 3, 4, 5].map(star => {
-                                  const currentRating = eoRatings.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId)?.rating || 0;
-                                  return (
-                                    <span key={star} onClick={() => {
-                                      const newRating = star === currentRating ? 0 : star;
-                                      setEoRatings(prev => {
-                                        const exists = prev.find(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId);
-                                        if (exists) return prev.map(r => r.memberId === m.memberId && r.eventId === selectedEvent.eventId ? { ...r, rating: newRating } : r);
-                                        return [...prev, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: newRating }];
-                                      });
-                                    }} style={{ cursor: "pointer", color: star <= currentRating ? "var(--gold)" : "rgba(255,255,255,0.1)" }}>★</span>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          )}
                         </tr>
                       );
                     })}

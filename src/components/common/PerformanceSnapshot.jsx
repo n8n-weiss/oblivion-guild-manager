@@ -26,10 +26,21 @@ const PerformanceSnapshot = () => {
   );
 
   const weeklyLb = useMemo(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 7);
-    return computeLeaderboard(activeMembers, events, attendance, performance, eoRatings, null, null, start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
+    const now = new Date();
+    const day = now.getDay(); // 0 (Sun) to 6 (Sat)
+    // Adjust to find the most recent Monday
+    // (day === 0 ? -6 : 1) handles Sunday being the end of the previous week
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    
+    const end = new Date(); // Today
+    return computeLeaderboard(
+      activeMembers, events, attendance, performance, eoRatings, 
+      null, null, 
+      monday.toISOString().split('T')[0], 
+      end.toISOString().split('T')[0]
+    );
   }, [activeMembers, events, attendance, performance, eoRatings]);
 
   const combatHighlights = useMemo(() => {
