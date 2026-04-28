@@ -26,8 +26,8 @@ function RequestsPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingRequests = requests.filter(r => r.status === "pending");
-  const pendingJoin = joinRequests.filter(r => r.status === "pending" && r.requestType !== "reactivation");
-  const pendingReactivation = joinRequests.filter(r => r.status === "pending" && r.requestType === "reactivation");
+  const pendingJoin = joinRequests.filter(r => r.status === "pending" && (r.request_type || r.requestType) !== "reactivation");
+  const pendingReactivation = joinRequests.filter(r => r.status === "pending" && (r.request_type || r.requestType) === "reactivation");
   
   const processedRequests = requests.filter(r => r.status !== "pending");
   const processedJoin = joinRequests.filter(r => r.status !== "pending");
@@ -79,8 +79,8 @@ function RequestsPage() {
       await writeAuditLog(
         currentUser.email,
         currentUser.displayName || currentUser.email,
-        r.requestType === "reactivation" ? "reactivation_request_approved" : "join_request_approved",
-        `${r.requestType === "reactivation" ? "Approved reactivation" : "Approved membership"} for ${r.ign} (UID: ${r.uid})`
+        (r.request_type || r.requestType) === "reactivation" ? "reactivation_request_approved" : "join_request_approved",
+        `${(r.request_type || r.requestType) === "reactivation" ? "Approved reactivation" : "Approved membership"} for ${r.ign} (UID: ${r.uid})`
       );
     }
   };
@@ -91,8 +91,8 @@ function RequestsPage() {
       await writeAuditLog(
         currentUser.email,
         currentUser.displayName || currentUser.email,
-        r.requestType === "reactivation" ? "reactivation_request_rejected" : "join_request_rejected",
-        `${r.requestType === "reactivation" ? "Rejected reactivation" : "Rejected membership"} for ${r.ign} (UID: ${r.uid})`
+        (r.request_type || r.requestType) === "reactivation" ? "reactivation_request_rejected" : "join_request_rejected",
+        `${(r.request_type || r.requestType) === "reactivation" ? "Rejected reactivation" : "Rejected membership"} for ${r.ign} (UID: ${r.uid})`
       );
     }
   };
@@ -118,14 +118,24 @@ function RequestsPage() {
     reactivation: pendingReactivation
   };
   const visiblePending = applyStatusFilter(pendingRowsByTab[subTab] || []);
-  const processedRows = [...processedRequests, ...processedJoin]
-    .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 10);
-  const visibleHistory = applyStatusFilter(processedRows.filter((r) => {
+  const allProcessed = [...processedRequests, ...processedJoin];
+  const historyForTab = allProcessed.filter((r) => {
+    const type = r.request_type || r.requestType;
+    if (subTab === "profile") return type === "profile_update";
+    if (subTab === "join") return type === "join";
+    if (subTab === "reactivation") return type === "reactivation";
+    // Fallback for legacy data without request_type
     if (subTab === "profile") return r.uid === undefined;
-    if (subTab === "join") return r.uid !== undefined && r.requestType !== "reactivation";
-    return r.uid !== undefined && r.requestType === "reactivation";
-  }));
+    return r.uid !== undefined;
+  });
+
+  const visibleHistory = applyStatusFilter(historyForTab)
+    .sort((a,b) => {
+      const dateA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
+      const dateB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
+      return dateB - dateA;
+    })
+    .slice(0, 20);
 
   const handleDelete = async (r, type = "profile") => {
     const success = type === "profile" ? await deleteRequest(r.id) : await deleteJoinRequest(r.id);
@@ -300,7 +310,7 @@ function RequestsPage() {
                         <div style={{ fontSize: 12, color: isDup ? 'var(--red)' : 'var(--accent)', fontWeight: 700 }}>UID: {r.uid}</div>
                       </div>
                       <div style={{ background: isDup ? 'rgba(224, 80, 80, 0.2)' : 'rgba(130,90,230,0.2)', padding: '4px 8px', borderRadius: 6, fontSize: 10, color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {r.requestType === "reactivation" ? "REACTIVATION" : (isDup ? "DUPLICATE DATA" : "NEW APPLICANT")}
+                        {(r.request_type || r.requestType) === "reactivation" ? "REACTIVATION" : (isDup ? "DUPLICATE DATA" : "NEW APPLICANT")}
                       </div>
                     </div>
                     
@@ -345,7 +355,7 @@ function RequestsPage() {
                           style={{ background: 'linear-gradient(135deg, #8b5cf6, var(--accent))', color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}
                           onClick={() => handleApproveJoin(r)}
                         >
-                          {r.requestType === "reactivation" ? "Approve Reactivation" : "Approve & Activate"}
+                          {(r.request_type || r.requestType) === "reactivation" ? "Approve Reactivation" : "Approve & Activate"}
                         </button>
                       </div>
                     </div>
@@ -389,7 +399,7 @@ function RequestsPage() {
               <tbody>
                 {visibleHistory.map(r => {
                     const isJoin = r.uid !== undefined;
-                    const isReactivation = isJoin && r.requestType === "reactivation";
+                    const isReactivation = isJoin && (r.request_type || r.requestType) === "reactivation";
                     return (
                       <tr key={r.id}>
                         <td style={{ padding: '12px 20px', fontWeight: 700 }}>{r.requesterIgn || r.ign}</td>

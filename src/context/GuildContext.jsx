@@ -223,6 +223,7 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionSessions: [],
     auctionTemplates: [],
     resourceCategories: [],
+    isFetching: false,
     discordConfig: {},
     battlelogConfig: {}
   });
@@ -306,17 +307,21 @@ export const GuildProvider = ({ children, initialData }) => {
             
             if (roleRes.ok) {
               const roles = await roleRes.json();
+              console.log("AuthInit: user_roles results:", roles);
               if (roles && roles[0]) {
-                console.log("User role found:", roles[0].role);
+                console.log("AuthInit: User role found:", roles[0].role, "MemberID:", roles[0].member_id);
                 setUserRole(roles[0].role);
                 setMyMemberId(roles[0].member_id || null);
               } else {
+                console.log("AuthInit: No user_roles found. Attempting auto-link...");
                 // Only perform auto-linking if no manual role exists in user_roles
                 const identifier = user.email.split('@')[0].toLowerCase();
+                console.log("AuthInit: Search identifier:", identifier);
                 const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster?or=(discord.ilike.${identifier},ign.ilike.${identifier})&select=*`, { headers });
                 
                 if (rosterRes.ok) {
                   const rosterMatch = await rosterRes.json();
+                  console.log("AuthInit: Roster match results:", rosterMatch);
                   if (rosterMatch && rosterMatch[0]) {
                     const m = rosterMatch[0];
                     const rank = m.guild_rank || "";
@@ -383,15 +388,19 @@ export const GuildProvider = ({ children, initialData }) => {
           try {
             const headers = getAuthHeaders();
             const roleRes = await fetch(`${supabaseUrl}/rest/v1/user_roles?uid=eq.${session.user.id}&select=*`, { headers });
+            console.log("AuthChange: user_roles results:", roleRes.status);
             if (roleRes.ok) {
               const roles = await roleRes.json();
+              console.log("AuthChange: roles:", roles);
               if (roles && roles[0]) {
                 // Staff account: has an explicit role + member_id
+                console.log("AuthChange: Staff role found:", roles[0].role);
                 setUserRole(roles[0].role);
                 setMyMemberId(roles[0].member_id || null);
               } else {
                 // Regular member: use metadata member_id stored during auto-signup
                 const metaMemberId = session.user.user_metadata?.member_id || null;
+                console.log("AuthChange: No role found, using metadata member_id:", metaMemberId);
                 if (metaMemberId) {
                   setUserRole('member');
                   setMyMemberId(metaMemberId);
@@ -421,7 +430,12 @@ export const GuildProvider = ({ children, initialData }) => {
   const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
   const fetchGlobalData = useCallback(async (force = false) => {
+    console.log("fetchGlobalData called:", { force, isFetching: prevData.current.isFetching, hasUser: !!currentUser });
     if (prevData.current.isFetching) return;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     
     // Check Cache
     if (!force) {
@@ -493,11 +507,15 @@ export const GuildProvider = ({ children, initialData }) => {
       setLoading(false);
       prevData.current.isFetching = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- GLOBAL_CACHE_TTL and processFetchedData are stable constants; adding them would not change behavior
-  }, [showToast, getAuthHeaders]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- we want to re-fetch when currentUser changes to get the correct closure
+  }, [showToast, getAuthHeaders, currentUser]);
 
   const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData) => {
-    if (rosterData) {
+    console.log("processFetchedData receiving:", { 
+      roster: Array.isArray(rosterData) ? rosterData.length : typeof rosterData,
+      events: Array.isArray(eventsData) ? eventsData.length : typeof eventsData 
+    });
+    if (Array.isArray(rosterData)) {
       const mappedMembers = rosterData.map(r => ({ 
         ...r,
         ...r.metadata, 
@@ -511,7 +529,7 @@ export const GuildProvider = ({ children, initialData }) => {
       prevData.current.members = [...mappedMembers];
     }
 
-    if (eventsData) {
+    if (Array.isArray(eventsData)) {
       const mappedEvents = eventsData.map(e => ({
         eventId: e.event_id,
         eventDate: e.event_date,
@@ -540,7 +558,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setEoRatings(nestedEo);
     }
 
-    if (absenceData) {
+    if (Array.isArray(absenceData)) {
       const mappedAbs = absenceData.map(a => ({
         id: a.id,
         memberId: a.member_id,
@@ -553,7 +571,7 @@ export const GuildProvider = ({ children, initialData }) => {
       prevData.current.absences = [...mappedAbs];
     }
 
-    if (metaData) {
+    if (Array.isArray(metaData)) {
       metaData.forEach(m => {
         const d = m.data;
         if (m.key === 'parties') {
@@ -597,7 +615,6 @@ export const GuildProvider = ({ children, initialData }) => {
   }, []);
 
   useEffect(() => {
-    if (!currentUser && !initialData) return;
     fetchGlobalData();
   }, [currentUser, fetchGlobalData, initialData]);
 
@@ -620,8 +637,10 @@ export const GuildProvider = ({ children, initialData }) => {
         const res = await fetch(url, {
           headers
         });
-        const data = await res.json();
-        setNotifications(data.map(n => ({ ...n, id: n.id, ts: n.ts, targetId: n.target_id })));
+        const data = await res.json().catch(() => []);
+        if (Array.isArray(data)) {
+          setNotifications(data.map(n => ({ ...n, id: n.id, ts: n.ts, targetId: n.target_id })));
+        }
       } catch (err) {
         console.error("Supabase notif fetch error:", err);
       }
@@ -667,11 +686,20 @@ export const GuildProvider = ({ children, initialData }) => {
         })
       ]);
 
-      const reqsData = await reqsRes.json();
-      const joinData = await joinRes.json();
+      const reqsData = await reqsRes.json().catch(() => []);
+      const joinData = await joinRes.json().catch(() => []);
+      
+      const safeReqs = Array.isArray(reqsData) ? reqsData : [];
+      const safeJoin = Array.isArray(joinData) ? joinData : [];
 
-      setRequests(reqsData || []);
-      setJoinRequests(joinData || []);
+      setRequests(safeReqs);
+      setJoinRequests(safeJoin.map(r => ({
+        ...r,
+        // Map snake_case from DB to camelCase for UI if needed, 
+        // but RequestsPage already handles some class/jobClass logic.
+        // We ensure requestType exists for UI filters.
+        requestType: r.request_type || r.requestType || 'join'
+      })));
 
       // Cache to sessionStorage
       sessionStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
@@ -1200,13 +1228,15 @@ export const GuildProvider = ({ children, initialData }) => {
         return false;
       }
       const req = {
+        id: crypto.randomUUID?.() || Date.now().toString(),
         ign: data.ign,
         class: data.jobClass,
         role: data.role,
         uid: data.uid,
         discord: data.discord,
         status: "pending",
-        timestamp: new Date().toISOString()
+        request_type: "join",
+        timestamp: Date.now()
       };
       
       const res = await fetch(`${supabaseUrl}/rest/v1/join_requests`, {
@@ -1266,14 +1296,15 @@ export const GuildProvider = ({ children, initialData }) => {
         return false;
       }
       const req = {
+        id: crypto.randomUUID?.() || Date.now().toString(),
         discord: data.discord,
         ign: data.ign || existing.ign || "Unknown",
         uid,
-        jobClass: existing.class || "Unknown",
+        class: existing.class || "Unknown",
         role: existing.role || "DPS",
         status: "pending",
-        requestType: "reactivation",
-        timestamp: new Date().toISOString()
+        request_type: "reactivation",
+        timestamp: Date.now()
       };
       
       const res = await fetch(`${supabaseUrl}/rest/v1/join_requests`, {
@@ -1313,12 +1344,13 @@ export const GuildProvider = ({ children, initialData }) => {
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
 
+      const jobClass = r.jobClass || r.class || "Unknown";
       const existingMember = members.find(m => (m.memberId || "").toLowerCase() === (r.uid || "").toLowerCase());
       const newMember = {
         ...(existingMember || {}),
         memberId: r.uid,
         ign: r.ign,
-        class: r.jobClass,
+        class: jobClass,
         role: r.role,
         discord: r.discord,
         guildRank: existingMember?.guildRank || "Member",
@@ -1366,7 +1398,7 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       if (!reqRes.ok) throw new Error(`Request approval failed: ${reqRes.status}`);
 
-      if (r.requestType !== "reactivation") {
+      if (reqRes.ok && (r.request_type !== "reactivation" && r.requestType !== "reactivation")) {
         sendDiscordEmbed(
           "🎉 New Member Joined!",
           `Welcome **${r.ign}** to our Guild Portal!`,
@@ -1444,12 +1476,13 @@ export const GuildProvider = ({ children, initialData }) => {
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
       const req = {
+        id: crypto.randomUUID?.() || Date.now().toString(),
         member_id: memberId,
         requester_ign: m.ign,
         old_data: { ign: m.ign, class: m.class, role: m.role },
         new_data: newData,
         status: "pending",
-        timestamp: new Date().toISOString()
+        timestamp: Date.now()
       };
       
       const res = await fetch(`${supabaseUrl}/rest/v1/requests`, {
@@ -1753,7 +1786,7 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       const eventsData = await res.json();
 
-      if (eventsData) {
+      if (Array.isArray(eventsData)) {
         const mappedEvents = eventsData.map(e => ({
           eventId: e.event_id,
           eventDate: e.event_date,
