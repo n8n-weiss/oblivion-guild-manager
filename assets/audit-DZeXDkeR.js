@@ -1,1 +1,0 @@
-import{i as e}from"./icons-S2lZN6fI.js";async function t(t,n,r,i){try{await e.from(`audit_logs`).insert([{user_email:t,user_name:n,action:r,details:i,timestamp:new Date().toISOString()}])}catch(e){console.error(`Audit log error:`,e)}}export{t};
