@@ -108,6 +108,8 @@ export const GuildProvider = ({ children, initialData }) => {
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState("synced"); // "saving" | "synced" | "offline" | "error"
+  const [hasMoreEvents, setHasMoreEvents] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [auctionBids, setAuctionBids] = useState([]);
   const [battlelogConfig, setBattlelogConfig] = useState({ weeklyAssignments: {}, rotationPoolMemberIds: [], lastEditorUid: null, lastUpdate: null });
 
@@ -455,15 +457,17 @@ export const GuildProvider = ({ children, initialData }) => {
       prevData.current.isFetching = true;
       setSyncStatus("loading");
       const headers = getAuthHeaders();
-      const cutoffDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // Optimization: Initial load only gets last 60 days to keep app snappy
+      const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
       const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes, auctionSessionsRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/roster?select=member_id,ign,class,role,discord,guild_rank,status,level,cp,metadata,is_donator`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=gte.${cutoffDate}`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/absences?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=gte.${cutoffDate}&order=event_date.desc`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/absences?select=*&event_date=gte.${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&order=event_date.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/metadata?select=key,data,updated_at`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/auction_bids?select=member_id,id,data,updated_at`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }), // Performance varies by GL mode, select all score fields
+        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }), // Attendance will be filtered in processFetchedData or kept if small
+        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }), 
         fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=id,name,date,columns,members,cells&order=date.desc`, { headers })
       ]);
@@ -481,6 +485,8 @@ export const GuildProvider = ({ children, initialData }) => {
       const performanceData = performanceRes.ok ? await performanceRes.json() : [];
       const eoRatingsData = eoRatingsRes.ok ? await eoRatingsRes.json() : [];
       let auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
+
+      setHasMoreEvents(eventsData.length >= 10);
 
       // RECOVERY LOGIC: If the migration script dropped the data, restore from the user's local v3 cache before it's gone
       if (auctionSessionsData.length === 0) {
@@ -524,6 +530,58 @@ export const GuildProvider = ({ children, initialData }) => {
       prevData.current.isFetching = false;
     }
   }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL]);
+
+  const fetchFullHistory = useCallback(async () => {
+    if (loadingHistory || !hasMoreEvents) return;
+    setLoadingHistory(true);
+    try {
+      const headers = getAuthHeaders();
+      const oldestLoaded = events.length > 0 ? events[events.length - 1].eventDate : new Date().toISOString().split('T')[0];
+      
+      const [eventsRes, attendanceRes, performanceRes, eoRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=lt.${oldestLoaded}&order=event_date.desc&limit=50`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers })
+      ]);
+
+      const newEvents = eventsRes.ok ? await eventsRes.json() : [];
+      const newAtt = attendanceRes.ok ? await attendanceRes.json() : [];
+      const newPerf = performanceRes.ok ? await performanceRes.json() : [];
+      const newEo = eoRes.ok ? await eoRes.json() : [];
+
+      if (newEvents.length === 0) {
+        setHasMoreEvents(false);
+      } else {
+        setEvents(prev => [...prev, ...newEvents]);
+        setAttendance(prev => {
+          const combined = [...prev, ...newAtt.map(a => ({ ...a, memberId: a.member_id, eventId: a.event_id }))];
+          const map = new Map();
+          combined.forEach(a => map.set(`${a.memberId}_${a.eventId}`, a));
+          return Array.from(map.values());
+        });
+        setPerformance(prev => {
+          const combined = [...prev, ...newPerf.map(p => ({ ...p, memberId: p.member_id, eventId: p.event_id }))];
+          const map = new Map();
+          combined.forEach(p => map.set(`${p.memberId}_${p.eventId}`, p));
+          return Array.from(map.values());
+        });
+        setEoRatings(prev => {
+          const combined = [...prev, ...newEo.map(r => ({ ...r, memberId: r.member_id, eventId: r.event_id }))];
+          const map = new Map();
+          combined.forEach(r => map.set(`${r.memberId}_${r.eventId}`, r));
+          return Array.from(map.values());
+        });
+        setHasMoreEvents(newEvents.length === 50);
+        showToast(`Loaded ${newEvents.length} older events`, "success");
+      }
+    } catch (err) {
+      console.error("Full history fetch error:", err);
+      showToast("Failed to load history", "error");
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [loadingHistory, hasMoreEvents, getAuthHeaders, events, supabaseUrl, showToast]);
 
   const triggerSyncRetry = useCallback(() => {
     if (navigator.onLine) setSyncStatus("saving");
@@ -845,6 +903,12 @@ export const GuildProvider = ({ children, initialData }) => {
   // --- Real-time Subscriptions ---
   useEffect(() => {
     if (!currentUser || authLoading || loading) return;
+
+    // OPTIMIZATION: Disable database real-time for non-staff to save Supabase connection limits
+    if (!isStaff) {
+      console.log("GuildContext: Real-time subscriptions disabled for regular members.");
+      return;
+    }
 
     console.log("GuildContext: Initializing Real-time Subscriptions...");
 
@@ -1396,16 +1460,19 @@ export const GuildProvider = ({ children, initialData }) => {
           a.id && JSON.stringify(a) !== prevAbsenceMap.get(a.id)
         );
         if (dirtyAbsences.length > 0) {
-          const payload = dirtyAbsences.map(a => ({
-            id: a.id,
-            member_id: a.memberId,
-            event_type: a.eventType,
-            event_date: a.eventDate,
-            start_date: a.eventDate, // backward compatibility
-            reason: a.reason,
-            online_status: a.onlineStatus,
-            status: a.status || 'pending'
-          }));
+          const payload = dirtyAbsences.map(a => {
+            return {
+              id: a.id,
+              member_id: a.memberId,
+              event_type: a.eventType,
+              event_date: a.eventDate,
+              start_date: a.eventDate, // backward compatibility
+              end_date: a.eventDate,   // required by schema
+              reason: a.reason,
+              online_status: a.onlineStatus,
+              status: a.status || 'pending'
+            };
+          });
 
           const res = await fetch(`${supabaseUrl}/rest/v1/absences`, {
             method: 'POST',
@@ -2403,6 +2470,7 @@ export const GuildProvider = ({ children, initialData }) => {
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,
     fetchGlobalData, fetchRequests, isFetchingRequests,
+    hasMoreEvents, loadingHistory, fetchFullHistory,
     auctionBids, setAuctionBids,
     isOfflineMode, setIsOfflineMode
   }), [
@@ -2413,6 +2481,7 @@ export const GuildProvider = ({ children, initialData }) => {
     resourceCategories, metadataNotice, metadataActivity, pendingAuctionConflict, syncStatus,
     memberLootStats, auctionWishlist, historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings,
     isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests,
+    hasMoreEvents, loadingHistory, fetchFullHistory,
     deleteEvent, deleteAuctionSession, deleteMember,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata
   ]);

@@ -4,7 +4,7 @@ import Icon from '../components/ui/icons';
 import { writeAuditLog } from "../utils/audit";
 
 function AbsencesPage() {
-  const { members, absences, setAbsences, showToast, currentUser, sendDiscordEmbed } = useGuild();
+  const { members, absences, setAbsences, showToast, currentUser } = useGuild();
   const [form, setForm] = useState({
     memberId: members?.[0]?.memberId || "",
     eventType: "Guild League",

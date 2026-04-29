@@ -72,22 +72,75 @@ serve(async (req) => {
     }
 
     // --- CASE 2: TABLE TRIGGERS ---
+    const globalWebhookUrl = meta.data?.discord?.webhookUrl;
+    
     if (table === 'absences') {
-      webhookUrl = notifications.absences?.webhookUrl || Deno.env.get("DISCORD_ABSENCE_WEBHOOK_URL");
+      webhookUrl = notifications.absences?.webhookUrl || globalWebhookUrl || Deno.env.get("DISCORD_ABSENCE_WEBHOOK_URL");
+      
+      let displayName = record.ign;
+      if (!displayName && record.member_id) {
+        const { data: memberData } = await supabase.from('roster').select('ign').eq('member_id', record.member_id).single();
+        if (memberData) displayName = memberData.ign;
+      }
+      displayName = displayName || record.member_id || "Unknown";
+
       if (type === 'INSERT') {
-        discordPayload = { embeds: [{ title: "🚨 New Absence Filed", color: 0xff4757, fields: [{ name: "IGN", value: record.ign, inline: true }, { name: "Date", value: record.event_date, inline: true }, { name: "Reason", value: record.reason || "No reason" }] }] };
+        discordPayload = { 
+          embeds: [{ 
+            title: "🚨 Absence Notice Filed", 
+            description: `**${displayName}** will not be able to attend an upcoming event.`,
+            color: 0xff4757, 
+            fields: [
+              { name: "Date", value: record.event_date, inline: true }, 
+              { name: "Reason", value: record.reason || "No reason provided", inline: false }
+            ],
+            thumbnail: { url: "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" }
+          }] 
+        };
       } else if (type === 'DELETE') {
-        discordPayload = { embeds: [{ title: "✅ Absence Removed", color: 0x2ecc71, description: `Absence record ni **${record.ign}** ay binura.` }] };
+        discordPayload = { 
+          embeds: [{ 
+            title: "✅ Absence Cancelled", 
+            color: 0x2ecc71, 
+            description: `The absence record for **${displayName}** on **${record.event_date}** has been cancelled. They are now expected to attend.` 
+          }] 
+        };
       }
     } 
     else if (table === 'join_requests' && type === 'INSERT') {
-      webhookUrl = notifications.join_requests?.webhookUrl;
+      webhookUrl = notifications.join_requests?.webhookUrl || globalWebhookUrl;
       const isRe = record.request_type === 'reactivation';
-      discordPayload = { embeds: [{ title: isRe ? "♻️ Reactivation Request" : "📩 New Application", color: isRe ? 0x6382E6 : 0x3498db, fields: [{ name: "IGN", value: record.ign, inline: true }, { name: "Status", value: "Pending Approval" }] }] };
+      discordPayload = { 
+        embeds: [{ 
+          title: isRe ? "♻️ Account Reactivation Request" : "📩 New Guild Application", 
+          description: `Please review this request in the Guild Portal.`,
+          color: isRe ? 0x6382E6 : 0x3498db, 
+          fields: [
+            { name: "IGN", value: record.ign || "Unknown", inline: true }, 
+            { name: "Class", value: record.class || "Unknown", inline: true },
+            { name: "Role", value: record.role || "Unknown", inline: true },
+            { name: "Discord", value: record.discord || "Unknown", inline: true },
+            { name: "UID", value: record.uid || "Unknown", inline: true }
+          ],
+          thumbnail: { url: "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" }
+        }] 
+      };
     }
     else if (table === 'events' && type === 'INSERT') {
-      webhookUrl = notifications.events?.webhookUrl;
-      discordPayload = { embeds: [{ title: `📅 Event Created: ${record.title}`, color: 0x9b59b6, fields: [{ name: "Type", value: record.type, inline: true }, { name: "Date", value: record.event_date, inline: true }] }] };
+      webhookUrl = notifications.events?.webhookUrl || globalWebhookUrl;
+      discordPayload = { 
+        embeds: [{ 
+          title: `📅 New Event Scheduled: ${record.title}`, 
+          description: `A new guild event has been posted to the calendar.`,
+          color: 0x9b59b6, 
+          fields: [
+            { name: "Type", value: record.type, inline: true }, 
+            { name: "Date", value: record.event_date, inline: true },
+            { name: "Auditor", value: record.auditor || "TBA", inline: true }
+          ],
+          thumbnail: { url: "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" }
+        }] 
+      };
     }
 
     if (discordPayload && webhookUrl) {

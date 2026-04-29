@@ -9,8 +9,9 @@ import { writeAuditLog } from "../utils/audit";
 function EventsPage() {
   const {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
-    performance, setPerformance, absences, eoRatings,
-    showToast, isAdmin, currentUser, sendDiscordEmbed, discordConfig
+    performance, setPerformance, absences, eoRatings, setEoRatings,
+    showToast, isAdmin, currentUser, sendDiscordEmbed,
+    hasMoreEvents, loadingHistory, fetchFullHistory
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const officerPool = React.useMemo(() => {
@@ -60,8 +61,6 @@ function EventsPage() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [postingDigest, setPostingDigest] = useState(false);
   const [finalizingDigest, setFinalizingDigest] = useState(false);
-  const [escalationHours] = useState(12); // after dueAt
-  const reminderInFlight = React.useRef(new Set());
 
   // Helper to get Week Label (Monday to Sunday rule)
   const getWeekKey = (dateObj) => {
@@ -650,6 +649,21 @@ function EventsPage() {
                 </div>
               );
             })}
+
+            {hasMoreEvents && (
+              <button 
+                className="btn btn-ghost btn-sm" 
+                style={{ width: "100%", marginTop: 12, fontSize: 10, border: "1px dashed var(--border)", color: "var(--accent)" }}
+                onClick={fetchFullHistory}
+                disabled={loadingHistory}
+              >
+                {loadingHistory ? (
+                  <span className="flex items-center gap-2"><div className="spinner" style={{ width: 10, height: 10 }} /> LOADING...</span>
+                ) : (
+                  <><Icon name="rotate-cw" size={12} /> LOAD PREVIOUS HISTORY</>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
