@@ -1726,22 +1726,6 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       if (!res.ok) throw new Error(`Join request failed: ${res.status}`);
 
-      sendDiscordEmbed(
-        "📝 New Join Request",
-        `A new recruitment application has been received from **${data.ign}**!`,
-        0xF0C040,
-        [
-          { name: "IGN", value: data.ign, inline: true },
-          { name: "Class", value: data.jobClass, inline: true },
-          { name: "Role", value: data.role, inline: true },
-          { name: "UID", value: data.uid, inline: true },
-          { name: "Discord", value: data.discord, inline: true }
-        ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "join_requests",
-        "new_join",
-        { ign: data.ign, class: data.jobClass, role: data.role, uid: data.uid, discord: data.discord }
-      );
       showToast("Registration submitted for approval!", "success");
       return true;
     } catch(err) {
@@ -1794,20 +1778,6 @@ export const GuildProvider = ({ children, initialData }) => {
       });
       if (!res.ok) throw new Error(`Reactivation failed: ${res.status}`);
 
-      sendDiscordEmbed(
-        "♻️ Account Reactivation Request",
-        `A former member requested account reactivation for **${req.ign}**.`,
-        0x6382E6,
-        [
-          { name: "IGN", value: req.ign, inline: true },
-          { name: "UID", value: req.uid, inline: true },
-          { name: "Discord", value: req.discord || "N/A", inline: true }
-        ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "join_requests",
-        "new_join",
-        { ign: req.ign, class: req.jobClass, role: req.role, uid: req.uid, discord: req.discord || "N/A" }
-      );
       showToast("Reactivation request submitted. Please wait for officer approval.", "success");
       return true;
     } catch (err) {
@@ -2070,20 +2040,6 @@ export const GuildProvider = ({ children, initialData }) => {
         body: JSON.stringify([req])
       });
       if (!res.ok) throw new Error(`Request submission failed: ${res.status}`);
-
-      sendDiscordEmbed(
-        "🛡️ Vanguard Request (Profile Update)",
-        `Member **${m.ign}** has submitted a profile update request.`,
-        0x6382E6,
-        [
-          { name: "Requester", value: m.ign, inline: true },
-          { name: "Updates", value: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
-        ],
-        null,
-        "vanguard",
-        "vanguard",
-        { ign: m.ign, updates: Object.entries(newData).map(([k,v]) => `• ${k}: ${v}`).join("\n") }
-      );
 
       showToast("Request submitted for approval!", "success");
       return true;

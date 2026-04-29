@@ -65,19 +65,19 @@ const prefetchedPages = new Set();
 
 // --- Helper Components for Premium UI ---
 const SyncPill = ({ status, onRetry }) => {
-  const isSaving = status === 'saving';
+  const isSyncing = status === 'syncing';
   const isError = status === 'error';
   const isOffline = status === 'offline';
   
   return (
     <div className="fixed bottom-6 right-6 z-[200] animate-float" style={{ animationDelay: '1s' }}>
       <div className="premium-pill glass-panel" style={{ padding: '8px 16px', gap: 10 }}>
-        <div className={`status-dot ${isSaving ? 'animate-pulse' : ''}`} style={{ 
-          background: isError ? '#ef4444' : isSaving || isOffline ? '#f59e0b' : '#10b981',
-          boxShadow: `0 0 12px ${isError ? '#ef4444' : isSaving || isOffline ? '#f59e0b' : '#10b981'}`
+        <div className={`status-dot ${isSyncing ? 'animate-pulse' : ''}`} style={{ 
+          background: isError ? '#ef4444' : isSyncing || isOffline ? '#f59e0b' : '#10b981',
+          boxShadow: `0 0 12px ${isError ? '#ef4444' : isSyncing || isOffline ? '#f59e0b' : '#10b981'}`
         }} />
         <span style={{ color: 'var(--text-primary)', fontSize: 10 }}>
-          {isSaving ? 'CLOUD SAVING...' : isError ? 'SYNC ERROR' : isOffline ? 'OFFLINE' : 'CLOUD SYNCED'}
+          {isSyncing ? 'CLOUD SYNCING...' : isError ? 'SYNC ERROR' : isOffline ? 'OFFLINE' : 'CLOUD SYNCED'}
         </span>
         <button onClick={onRetry} className="btn-ghost" style={{ padding: 4, borderRadius: 6 }}>
           <Icon name="rotate-cw" size={12} />

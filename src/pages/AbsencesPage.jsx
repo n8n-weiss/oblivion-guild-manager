@@ -21,24 +21,7 @@ function AbsencesPage() {
     showToast("Absence submitted successfully", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Submitted absence for ${member?.ign} — ${form.eventType} ${form.eventDate}: "${form.reason}"`);
     
-    // Discord Notification
-    sendDiscordEmbed(
-      "🚨 New Absence Filed",
-      `Si **${member?.ign}** ay nag-file ng absence para sa upcoming event.`,
-      0xE05050, // Red
-      [
-        { name: "Member", value: member?.ign || form.memberId, inline: true },
-        { name: "Event", value: `${form.eventType} (${form.eventDate})`, inline: true },
-        { name: "Reason", value: form.reason },
-        { name: "Will be Online?", value: form.onlineStatus, inline: true }
-      ],
-      null,
-      "absences",
-      "absence_filed",
-      { ign: member?.ign || form.memberId, event: form.eventType, date: form.eventDate, reason: form.reason, online: form.onlineStatus },
-      member?.discord
-    );
-
+    
     setForm(f => ({ ...f, reason: "" }));
   };
 
@@ -49,21 +32,6 @@ function AbsencesPage() {
     showToast("Absence removed", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_delete", `Removed absence for ${member?.ign} — ${absence?.eventType} ${absence?.eventDate}`);
     
-    // Discord Notification
-    sendDiscordEmbed(
-      "✅ Absence Removed",
-      `Ang absence record ni **${member?.ign}** ay kinuha na/binura.`,
-      0x40C97A, // Green
-      [
-        { name: "Member", value: member?.ign || absence?.memberId, inline: true },
-        { name: "Event", value: `${absence?.eventType} (${absence?.eventDate})`, inline: true }
-      ],
-      null,
-      "absences",
-      "absence_removed",
-      { ign: member?.ign || absence?.memberId, event: absence?.eventType, date: absence?.eventDate },
-      member?.discord
-    );
   };
 
   return (

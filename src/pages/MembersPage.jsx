@@ -48,6 +48,7 @@ function MembersPage({ onViewProfile }) {
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
+  const [memberEdits, setMemberEdits] = useState({}); // Tracking bulk changes
 
   const RANK_ORDER = {
     "Guild Master": 0,
@@ -62,6 +63,7 @@ function MembersPage({ onViewProfile }) {
   const getRankPriority = (rank) => RANK_ORDER[rank] ?? 7;
 
   const filtered = members
+    .map(m => memberEdits[m.memberId] ? { ...memberEdits[m.memberId] } : m)
     .filter(m => {
       const status = m.status || "active";
       return (status === statusFilter) &&
@@ -185,14 +187,8 @@ function MembersPage({ onViewProfile }) {
   const saveMember = () => {
     if (!form.ign.trim() || !form.class.trim()) { showToast("Fill all fields", "error"); return; }
     if (editMember) {
-      const existing = members.find(m => m.memberId === editMember);
-      setMembers(prev => prev.map(m => m.memberId === editMember ? { ...form } : m));
-      showToast("Member updated", "success");
-      // Log rank change separately if it changed
-      if (existing?.guildRank !== form.guildRank) {
-        writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "rank_change", `Rank changed for ${form.ign} (${form.memberId}): ${existing?.guildRank || "Member"} → ${form.guildRank}`);
-      }
-      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_edit", `Edited member ${form.ign} (${form.memberId}) — Class: ${form.class}, Role: ${form.role}, Rank: ${form.guildRank}`);
+      setMemberEdits(prev => ({ ...prev, [editMember]: { ...form } }));
+      showToast("Changes queued. Remember to save all.", "info");
     } else {
       if (members.find(m => m.memberId === form.memberId)) { showToast("ID already exists", "error"); return; }
       setMembers(prev => [...prev, { ...form }]);
@@ -201,6 +197,16 @@ function MembersPage({ onViewProfile }) {
     }
     setShowModal(false);
     localStorage.removeItem(MEMBER_DRAFT_KEY);
+  };
+
+  const saveAllMemberChanges = () => {
+    const editCount = Object.keys(memberEdits).length;
+    if (editCount === 0) return;
+
+    setMembers(prev => prev.map(m => memberEdits[m.memberId] ? { ...memberEdits[m.memberId] } : m));
+    setMemberEdits({});
+    showToast(`Saved ${editCount} member updates`, "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_bulk_edit", `Bulk saved ${editCount} member updates`);
   };
   const saveCurrentPreset = () => {
     const name = window.prompt("Preset name?", `Members ${viewPresets.length + 1}`);
@@ -378,8 +384,9 @@ function MembersPage({ onViewProfile }) {
                   const theme = classThemes[m.class] || { color: "var(--color-others)", icon: "👤" };
                   const idx = members.indexOf(m);
                   const isOnline = onlineUsers.some(ou => (ou.memberId && ou.memberId === m.memberId) || (ou.displayName && ou.displayName.toLowerCase() === m.ign.toLowerCase()));
+                  const isDirty = !!memberEdits[m.memberId];
                   return (
-                    <tr key={m.memberId} className="animate-fade-in" style={{ borderLeft: `3px solid ${theme.color}55` }}>
+                    <tr key={m.memberId} className="animate-fade-in" style={{ borderLeft: `3px solid ${isDirty ? 'var(--gold)' : theme.color + '55'}`, background: isDirty ? 'rgba(212,175,55,0.03)' : undefined, transition: 'all 0.3s ease' }}>
                       {/* Row number */}
                       <td style={{ color: "var(--text-muted)", fontSize: 12, fontWeight: 700, paddingRight: 0 }}>
                         {i + 1}
@@ -588,6 +595,24 @@ function MembersPage({ onViewProfile }) {
             )}
           </div>
         </Modal>
+      )}
+
+      {/* Floating Action Bar for Bulk Saves */}
+      {Object.keys(memberEdits).length > 0 && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-slide-up">
+          <div className="premium-pill glass-panel shadow-2xl" style={{ padding: '12px 24px', gap: 20, border: '1px solid var(--accent)', display: 'flex', alignItems: 'center' }}>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-accent uppercase tracking-widest" style={{ color: 'var(--accent)', fontWeight: 800 }}>Unsaved Roster Changes</span>
+              <span className="text-[10px] text-muted" style={{ opacity: 0.7 }}>{Object.keys(memberEdits).length} profiles modified</span>
+            </div>
+            <div className="flex gap-3" style={{ display: 'flex', gap: 12 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setMemberEdits({})}>Discard</button>
+              <button className="btn btn-primary btn-sm px-6" onClick={saveAllMemberChanges} style={{ padding: '6px 20px', borderRadius: 8 }}>
+                <Icon name="save" size={12} /> Save All Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

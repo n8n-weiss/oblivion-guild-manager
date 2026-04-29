@@ -245,24 +245,6 @@ function EventsPage() {
       });
       showToast("Event created with attendance loaded", "success");
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_create", `Created ${form.eventType} event — ${form.eventDate}`);
-      
-      await sendDiscordEmbed(
-        "📅 New Event Scheduled",
-        `A new guild event has been scheduled! Please check your attendance.`,
-        0x6382E6,
-        [
-          { name: "Event Type", value: form.eventType, inline: true },
-          { name: "Date", value: form.eventDate, inline: true },
-          { name: "Event Time", value: discordConfig?.eventTimeText || "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time", inline: false },
-          { name: "Battlelog Auditor", value: assignedAuditor?.ign || "Not assigned", inline: true },
-          { name: "Assignment", value: assignmentSource, inline: true },
-          { name: "Note", value: "Attendance auto-loaded based on your LOA filings." }
-        ],
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "events",
-        "event_created",
-        { type: form.eventType, date: form.eventDate }
-      );
     }
     setShowModal(false);
     setIsEditing(false);
@@ -297,116 +279,8 @@ function EventsPage() {
 
   React.useEffect(() => {
     if (!currentUser) return;
-    const now = Date.now();
-
-    const postEventReminders = events.filter(ev => {
-      const audit = ev.battlelogAudit;
-      if (!audit || audit.status === "submitted" || audit.postEventReminderSentAt) return false;
-      const eventStart = new Date(`${ev.eventDate}T${ev.eventTime || "20:55"}:00`).getTime();
-      const triggerTime = eventStart + (55 * 60 * 1000);
-      return Number.isFinite(triggerTime) && now >= triggerTime;
-    }).slice(0, 3);
-
-    const overduePending = events.filter(ev => {
-      const audit = ev.battlelogAudit;
-      if (!audit || audit.status === "submitted" || audit.reminderSentAt) return false;
-      let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
-      const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
-      if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) dueTime += 24 * 60 * 60 * 1000;
-      return Number.isFinite(dueTime) && dueTime <= now;
-    }).slice(0, 3);
-
-    const escalationCandidates = events.filter(ev => {
-      const audit = ev.battlelogAudit;
-      if (!audit || audit.status === "submitted" || !audit.reminderSentAt || audit.escalatedAt) return false;
-      let dueTime = audit.dueAt ? new Date(audit.dueAt).getTime() : new Date(`${ev.eventDate}T23:00:00`).getTime();
-      const evStart = new Date(`${ev.eventDate}T00:00:00`).getTime();
-      if (dueTime <= evStart + 23 * 60 * 60 * 1000 && !ev.eventTime) dueTime += 24 * 60 * 60 * 1000;
-      return Number.isFinite(dueTime) && (now - dueTime) >= escalationHours * 60 * 60 * 1000;
-    }).slice(0, 3);
-
-    const runReminders = async () => {
-      for (const ev of postEventReminders) {
-        if (reminderInFlight.current.has(ev.eventId + "_soft")) continue;
-        reminderInFlight.current.add(ev.eventId + "_soft");
-        try {
-          await sendDiscordEmbed(
-            "🔔 Battlelog Soft Reminder",
-            "The event has ended. Please remember to audit the battlelogs when you have the chance.",
-            0x6382E6,
-            [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
-              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true }
-            ],
-            null,
-            "battlelog_reminder",
-            "battlelog_reminder",
-            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
-            ev.battlelogAudit?.assignedDiscordId
-          );
-          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
-            ...x,
-            battlelogAudit: { ...(x.battlelogAudit || {}), postEventReminderSentAt: new Date().toISOString() }
-          } : x));
-        } catch (err) { console.error("Soft reminder failed:", err); }
-        finally { reminderInFlight.current.delete(ev.eventId + "_soft"); }
-      }
-
-      for (const ev of overduePending) {
-        if (reminderInFlight.current.has(ev.eventId + "_hard")) continue;
-        reminderInFlight.current.add(ev.eventId + "_hard");
-        try {
-          await sendDiscordEmbed(
-            "📘 Battlelog Overdue Alert",
-            "Battlelog audit is now overdue. Please submit as soon as possible.",
-            0xF0C040,
-            [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false },
-              { name: "Assigned Auditor", value: ev.battlelogAudit?.assignedIgn || "Unassigned", inline: true }
-            ],
-            null,
-            "battlelog_reminder",
-            "battlelog_reminder",
-            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
-            ev.battlelogAudit?.assignedDiscordId
-          );
-          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
-            ...x,
-            battlelogAudit: { ...(x.battlelogAudit || {}), reminderSentAt: new Date().toISOString(), status: "overdue" }
-          } : x));
-        } catch (err) { console.error("Hard reminder failed:", err); }
-        finally { reminderInFlight.current.delete(ev.eventId + "_hard"); }
-      }
-
-      for (const ev of escalationCandidates) {
-        if (reminderInFlight.current.has(ev.eventId + "_esc")) continue;
-        reminderInFlight.current.add(ev.eventId + "_esc");
-        try {
-          await sendDiscordEmbed(
-            "⏰ Battlelog Escalation",
-            `Battlelog is still pending ${escalationHours}+ hours after due time.`,
-            0xE05050,
-            [
-              { name: "Event", value: `${ev.eventType} • ${ev.eventDate}`, inline: false }
-            ],
-            null,
-            "battlelog_reminder",
-            "battlelog_reminder",
-            { type: ev.eventType, date: ev.eventDate, auditor: ev.battlelogAudit?.assignedIgn || "Unassigned" },
-            ev.battlelogAudit?.assignedDiscordId
-          );
-          setEvents(prev => prev.map(x => x.eventId === ev.eventId ? {
-            ...x,
-            battlelogAudit: { ...(x.battlelogAudit || {}), escalatedAt: new Date().toISOString() }
-          } : x));
-        } catch (err) { console.error("Escalation failed:", err); }
-        finally { reminderInFlight.current.delete(ev.eventId + "_esc"); }
-      }
-    };
-
-    runReminders();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- escalationHours is useState(12) and never changes; adding it would have no effect
-  }, [events, sendDiscordEmbed, setEvents, currentUser]);
+  // Reminders are now handled by Server-Side Cron Job.
+  }, [events, setEvents, currentUser]);
 
   const toggleAtt = (memberId, eventId) => {
     const mId = (memberId || "").trim().toLowerCase();
@@ -646,7 +520,8 @@ function EventsPage() {
       ...m,
       rowIndex: idx,
       att: evtAtt.find(a => (a.memberId || "").trim().toLowerCase() === mId),
-      perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId)
+      perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId),
+      eoRating: eoRatings.find(r => (r.memberId || "").trim().toLowerCase() === mId && r.eventId === evt.eventId)?.rating || 0
     };
   }) : [];
 
@@ -879,6 +754,30 @@ function EventsPage() {
                         <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
                         <th></th>
                       </>}
+                      {selectedEvent.eventType === "Emperium Overrun" && <>
+                        <th style={{ color: "var(--gold)", fontSize: 11 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            Rating
+                            <button 
+                              className="btn btn-ghost btn-sm" 
+                              style={{ padding: '2px 6px', fontSize: 9, color: 'var(--gold)', border: '1px solid rgba(240,192,64,0.3)' }}
+                              onClick={() => {
+                                const activeIds = activeMembers.map(m => (m.memberId || "").trim());
+                                setEoRatings(prev => {
+                                  const others = prev.filter(r => r.eventId !== selectedEvent.eventId);
+                                  const batch = activeIds.map(id => ({ memberId: id, eventId: selectedEvent.eventId, rating: 4 }));
+                                  return [...others, ...batch];
+                                });
+                                showToast("All active members rated as Good (4★)", "success");
+                              }}
+                            >
+                              <Icon name="star" size={10} /> Rate All 4★
+                            </button>
+                          </div>
+                        </th>
+                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
+                        <th></th>
+                      </>}
                     </tr>
                   </thead>
                   <tbody>
@@ -971,6 +870,43 @@ function EventsPage() {
                               </>
                             );
                           })()}
+                          {selectedEvent.eventType === "Emperium Overrun" && (() => {
+                            const curRating = m.att?.status === "absent" ? 0 : (m.eoRating || 0);
+                            const score = computeScore({ event: selectedEvent, att: m.att, eoRating: curRating });
+                            return (
+                              <>
+                                <td>
+                                  <div style={{ display: 'flex', gap: 2 }}>
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                      <button
+                                        key={star}
+                                        onClick={() => {
+                                          setEoRatings(prev => {
+                                            const others = prev.filter(r => !(r.memberId === m.memberId && r.eventId === selectedEvent.eventId));
+                                            return [...others, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: star }];
+                                          });
+                                          if (m.att?.status === "absent") {
+                                            setAttendance(prev => prev.map(a => (a.memberId === m.memberId && a.eventId === selectedEvent.eventId) ? { ...a, status: "present" } : a));
+                                          }
+                                        }}
+                                        style={{ 
+                                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                                          color: star <= curRating ? 'var(--gold)' : 'rgba(255,255,255,0.1)',
+                                          fontSize: 14, transition: 'transform 0.1s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                      >
+                                        ★
+                                      </button>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
+                                <td></td>
+                              </>
+                            );
+                          })()}
                         </tr>
                       );
                     })}
@@ -1012,6 +948,24 @@ function EventsPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Floating Action Bar for Bulk Saves */}
+      {Object.keys(perfEdits).length > 0 && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-slide-up">
+          <div className="premium-pill glass-panel shadow-2xl" style={{ padding: '12px 24px', gap: 20, border: '1px solid var(--accent)', display: 'flex', alignItems: 'center' }}>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-accent uppercase tracking-widest" style={{ color: 'var(--accent)', fontWeight: 800 }}>Unsaved Changes</span>
+              <span className="text-[10px] text-muted" style={{ opacity: 0.7 }}>{Object.keys(perfEdits).length} performance records modified</span>
+            </div>
+            <div className="flex gap-3" style={{ display: 'flex', gap: 12 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPerfEdits({})}>Discard</button>
+              <button className="btn btn-primary btn-sm px-6" onClick={saveAllPerformance} style={{ padding: '6px 20px', borderRadius: 8 }}>
+                <Icon name="save" size={12} /> Save All Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
