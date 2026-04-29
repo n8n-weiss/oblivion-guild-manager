@@ -148,6 +148,32 @@ function EventsPage() {
     return auditor;
   }, [duoOfficerPool]);
 
+  // Excel-Mode Keyboard Navigation
+  const handleKeyDown = (e, rowIndex, colIndex) => {
+    let targetRow = rowIndex;
+    let targetCol = colIndex;
+
+    if (e.key === 'ArrowUp') {
+      targetRow = Math.max(0, rowIndex - 1);
+      e.preventDefault();
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      targetRow = rowIndex + 1;
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft') {
+      targetCol = Math.max(0, colIndex - 1);
+    } else if (e.key === 'ArrowRight') {
+      targetCol = colIndex + 1;
+    } else {
+      return;
+    }
+
+    const nextId = `perf-${targetRow}-${targetCol}`;
+    const nextEl = document.getElementById(nextId);
+    if (nextEl) {
+      nextEl.focus();
+    }
+  };
+
   const handleSaveEvent = async () => {
     if (isEditing) {
       const updatedEvents = events.map(ev => {
@@ -438,6 +464,38 @@ function EventsPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0}, Kills: ${edits.kills ?? 0}, Ast: ${edits.assists ?? 0} (${ev?.eventDate})`);
   };
 
+  const saveAllPerformance = () => {
+    const keys = Object.keys(perfEdits).filter(k => k.endsWith(`_${selectedEvent.eventId}`));
+    if (keys.length === 0) {
+      showToast("No changes to save", "info");
+      return;
+    }
+
+    setPerformance(prev => {
+      let next = [...prev];
+      keys.forEach(key => {
+        const [memberId] = key.split('_');
+        const mId = memberId.trim().toLowerCase();
+        const edits = perfEdits[key];
+        const exists = next.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === selectedEvent.eventId);
+        if (exists) {
+          next = next.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === selectedEvent.eventId ? { ...p, ...edits } : p);
+        } else {
+          const isStellar = selectedEvent?.glMode === 'stellar';
+          const defaultFields = isStellar
+            ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
+            : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
+          next.push({ memberId: memberId.trim(), eventId: selectedEvent.eventId, ...defaultFields, ...edits });
+        }
+      });
+      return next;
+    });
+
+    setPerfEdits({}); 
+    showToast(`Saved all changes for ${selectedEvent.eventType}`, "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "bulk_score_save", `Bulk saved scores for ${selectedEvent.eventType} on ${selectedEvent.eventDate}`);
+  };
+
   const leaderboardSnapshot = React.useMemo(
     () => computeLeaderboard(activeMembers, events, attendance, performance, eoRatings),
     [activeMembers, events, attendance, performance, eoRatings]
@@ -582,10 +640,11 @@ function EventsPage() {
     const hasAtt = attendance.some(a => a.eventId === evt.eventId && (a.memberId || "").trim().toLowerCase() === mId);
     const isActive = (m.status || "active") === "active";
     return hasAtt || isActive;
-  }).map(m => {
+  }).map((m, idx) => {
     const mId = (m.memberId || "").trim().toLowerCase();
     return {
       ...m,
+      rowIndex: idx,
       att: evtAtt.find(a => (a.memberId || "").trim().toLowerCase() === mId),
       perf: performance.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === evt.eventId)
     };
@@ -747,6 +806,15 @@ function EventsPage() {
                   <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
                     <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize"}
                   </button>
+                  {Object.keys(perfEdits).some(k => k.endsWith(`_${selectedEvent.eventId}`)) && (
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      style={{ padding: "6px 12px", borderRadius: 8, background: "var(--green)", borderColor: "var(--green)", boxShadow: "0 4px 12px rgba(34,197,94,0.3)" }}
+                      onClick={saveAllPerformance}
+                    >
+                      <Icon name="save" size={12} /> Save All Changes
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="table-responsive">
@@ -839,16 +907,16 @@ function EventsPage() {
                           {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
                             <>
                               {/* ── CTF inputs (blue) ── */}
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
                               {/* CTF Total pill */}
                               <td><span style={{ display: "inline-block", minWidth: 36, textAlign: "center", fontWeight: 800, fontSize: 13, color: "#6382E6", background: "rgba(99,130,230,0.12)", borderRadius: 6, padding: "3px 8px" }}>{ctfTotal}</span></td>
                               {/* ── Combat inputs ── */}
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
                               {/* ── Perf input (purple) ── */}
-                              <td><input type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
                               {/* Score pill */}
                               <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
                               {/* Save button */}
@@ -881,17 +949,17 @@ function EventsPage() {
                                   </button>
                                 </td>
                                 {/* Tablets (Main only) */}
-                                <td><input type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: isMain ? 1 : 0.3 }} value={isMain ? tablets : ''} placeholder={isMain ? "" : "-"} disabled={!isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, tabletsCapt: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: isMain ? 1 : 0.3 }} value={isMain ? tablets : ''} placeholder={isMain ? "" : "-"} disabled={!isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, tabletsCapt: +e.target.value } }))} /></td>
                                 {/* Monsters (both) */}
-                                <td><input type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={monsters} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, monsters: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={monsters} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, monsters: +e.target.value } }))} /></td>
                                 {/* Boss (Sub only) */}
-                                <td><input type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: !isMain ? 1 : 0.3 }} value={!isMain ? boss : ''} placeholder={!isMain ? "" : "-"} disabled={isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, boss: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: !isMain ? 1 : 0.3 }} value={!isMain ? boss : ''} placeholder={!isMain ? "" : "-"} disabled={isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, boss: +e.target.value } }))} /></td>
                                 {/* Kills */}
-                                <td><input type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={sKills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={sKills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
                                 {/* Assists */}
-                                <td><input type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={sAssists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={sAssists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
                                 {/* Total Score */}
-                                <td><input type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
                                 {/* Computed Score pill */}
                                 <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{sScore}</span></td>
                                 {/* Save button */}
