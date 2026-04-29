@@ -368,7 +368,7 @@ function AuctionBuilder() {
     resourceCategories, setResourceCategories,
     sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig, isOfflineMode,
     memberLootStats, auctionWishlist,
-    members, auctionSessions, setAuctionSessions
+    members, auctionSessions, setAuctionSessions, deleteAuctionSession
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -798,10 +798,11 @@ function AuctionBuilder() {
     setShowNewSession(true);
   };
 
-  const deleteSession = (id) => {
-    setAuctionSessions(prev => prev.filter(s => s.id !== id));
-    if (activeSession === id) { setActiveSession(null); setView("sessions"); }
-    showToast("Session deleted", "success");
+  const deleteSession = async (id) => {
+    const success = await deleteAuctionSession(id);
+    if (success) {
+      if (activeSession === id) { setActiveSession(null); setView("sessions"); }
+    }
   };
 
   const updateSession = React.useCallback((updater) => {

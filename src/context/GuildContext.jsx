@@ -43,14 +43,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch { return ["Alpha Squad", "Bravo Force", "Charlie Wing", "Delta Strike", "Echo Vanguard", "Foxtrot Blade"]; }
   });
   const [eoRatings, setEoRatings] = useState([]);
-  const [auctionSessions, setAuctionSessions] = useState(() => {
-    try {
-      const saved = localStorage.getItem('guild_auctionSessions');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : (parsed.data || []);
-    } catch { return []; }
-  });
+  const [auctionSessions, setAuctionSessions] = useState([]);
   const [auctionTemplates, setAuctionTemplates] = useState(() => {
     try {
       const saved = localStorage.getItem('guild_auctionTemplates');
@@ -282,10 +275,10 @@ export const GuildProvider = ({ children, initialData }) => {
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
   // Data Loading from Supabase
-  const GLOBAL_CACHE_KEY = "global_guild_data_v3";
+  const GLOBAL_CACHE_KEY = "global_guild_data_v4";
   const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
-  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData) => {
+  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData) => {
     if (Array.isArray(rosterData)) {
       const mappedMembers = rosterData.map(r => ({ 
         ...r,
@@ -385,15 +378,18 @@ export const GuildProvider = ({ children, initialData }) => {
 
       const eoRatings = Array.isArray(metaData.find(m => m.key === 'eoRatings')?.data) ? metaData.find(m => m.key === 'eoRatings').data : [];
       
-      const auctionSessions = Array.isArray(auctionGroup.auctionSessions) ? auctionGroup.auctionSessions : [];
       const auctionTemplates = Array.isArray(auctionGroup.auctionTemplates) ? auctionGroup.auctionTemplates : [];
       const resourceCategories = Array.isArray(auctionGroup.resourceCategories) ? auctionGroup.resourceCategories : ["Card Album", "Light & Dark"];
       
       const discordConfig = discordGroup.discord || {};
       const battlelogConfig = battlelogGroup || {};
 
+      if (Array.isArray(auctionSessionsData)) {
+        setAuctionSessions(auctionSessionsData);
+        prevData.current.auctionSessions = [...auctionSessionsData];
+      }
+
       setEoRatings(eoRatings);
-      setAuctionSessions(auctionSessions);
       setAuctionTemplates(auctionTemplates);
       setResourceCategories(resourceCategories);
       setDiscordConfig(discordConfig);
@@ -450,7 +446,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setSyncStatus("loading");
       const headers = getAuthHeaders();
       const cutoffDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes] = await Promise.all([
+      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes, auctionSessionsRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/roster?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/absences?select=*`, { headers }),
@@ -458,7 +454,8 @@ export const GuildProvider = ({ children, initialData }) => {
         fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/attendance?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=*`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=*&order=date.desc`, { headers })
       ]);
 
       const rosterData = rosterRes.ok ? await rosterRes.json() : [];
@@ -469,11 +466,12 @@ export const GuildProvider = ({ children, initialData }) => {
       const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
       const performanceData = await performanceRes.json().catch(() => []);
       const eoRatingsData = await eoRatingsRes.json().catch(() => []);
+      const auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
 
-      processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData);
+      processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData);
 
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-        data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData },
+        data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData },
         fetchedAt: Date.now()
       }));
 
@@ -742,7 +740,27 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         }
       })
-      // 5. Metadata (Auctions, Discord Config, etc.)
+      // 5. Auction Sessions (Individual Rows)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_sessions' }, payload => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          setAuctionSessions(prev => {
+            const exists = prev.find(s => s.id === newRow.id);
+            const updated = exists 
+              ? prev.map(s => s.id === newRow.id ? newRow : s)
+              : [...prev, newRow].sort((a, b) => new Date(b.date) - new Date(a.date));
+            prevData.current.auctionSessions = [...updated];
+            return updated;
+          });
+        } else if (eventType === 'DELETE') {
+          setAuctionSessions(prev => {
+            const updated = prev.filter(s => s.id !== oldRow.id);
+            prevData.current.auctionSessions = [...updated];
+            return updated;
+          });
+        }
+      })
+      // 6. Metadata (Auctions, Discord Config, etc.)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metadata' }, payload => {
         const { eventType, new: newRow } = payload;
         if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -1029,18 +1047,38 @@ export const GuildProvider = ({ children, initialData }) => {
         }
 
         // --- 2. Metadata ---
-        const auctionData = { auctionSessions, auctionTemplates, resourceCategories };
-        if (JSON.stringify(auctionData) !== JSON.stringify(prevData.current.auctionData)) {
+        const auctionMetaData = { auctionTemplates, resourceCategories }; // removed auctionSessions from here
+        if (JSON.stringify(auctionMetaData) !== JSON.stringify(prevData.current.auctionMetaData)) {
           const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
             method: 'POST',
             headers: { 
               ...headers,
               'Prefer': 'resolution=merge-duplicates'
             },
-            body: JSON.stringify({ key: 'auction', data: auctionData, updated_at: new Date().toISOString() })
+            body: JSON.stringify({ key: 'auction', data: auctionMetaData, updated_at: new Date().toISOString() })
           });
-          if (!res.ok) throw new Error(`Auction Save Failed: ${res.status}`);
-          prevData.current.auctionData = { ...auctionData };
+          if (!res.ok) throw new Error(`Auction Metadata Save Failed: ${res.status}`);
+          prevData.current.auctionMetaData = { ...auctionMetaData };
+        }
+
+        // --- 2.1 Auction Sessions (Individual Rows) ---
+        const prevAuctionMap = new Map(
+          (prevData.current.auctionSessions || []).map(s => [s.id, JSON.stringify(s)])
+        );
+        const dirtyAuctions = auctionSessions.filter(s =>
+          JSON.stringify(s) !== prevAuctionMap.get(s.id)
+        );
+        if (dirtyAuctions.length > 0) {
+          const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
+            method: 'POST',
+            headers: { 
+              ...headers,
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(dirtyAuctions)
+          });
+          if (!res.ok) throw new Error(`Auction Sessions Save Failed: ${res.status}`);
+          prevData.current.auctionSessions = [...auctionSessions];
         }
 
         if (JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordData)) {
@@ -1180,7 +1218,7 @@ export const GuildProvider = ({ children, initialData }) => {
               status: a.status
             })),
             metaData: [
-              { key: 'auction', data: auctionData },
+              { key: 'auction', data: { auctionTemplates, resourceCategories } },
               { key: 'discord', data: { discord: discordConfig } }
             ],
             bidsData: auctionWishlist.map(b => ({
@@ -1627,6 +1665,56 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   };
 
+  const deleteEvent = async (eventId) => {
+    try {
+      const headers = getAuthHeaders();
+      
+      // 1. Delete from Supabase Events table
+      const res = await fetch(`${supabaseUrl}/rest/v1/events?event_id=eq.${eventId}`, {
+        method: 'DELETE',
+        headers
+      });
+      
+      if (!res.ok) throw new Error(`Event deletion failed: ${res.status}`);
+
+      // 2. Cleanup related data in separate tables (using event_id)
+      await Promise.allSettled([
+        fetch(`${supabaseUrl}/rest/v1/attendance?event_id=eq.${eventId}`, { method: 'DELETE', headers }),
+        fetch(`${supabaseUrl}/rest/v1/performance?event_id=eq.${eventId}`, { method: 'DELETE', headers }),
+        fetch(`${supabaseUrl}/rest/v1/eo_ratings?event_id=eq.${eventId}`, { method: 'DELETE', headers })
+      ]);
+
+      // 3. Update local state
+      setEvents(prev => {
+        const updated = prev.filter(ev => ev.eventId !== eventId);
+        prevData.current.events = [...updated];
+        return updated;
+      });
+      setAttendance(prev => {
+        const updated = prev.filter(a => a.eventId !== eventId);
+        prevData.current.attendance = [...updated];
+        return updated;
+      });
+      setPerformance(prev => {
+        const updated = prev.filter(p => p.eventId !== eventId);
+        prevData.current.performance = [...updated];
+        return updated;
+      });
+      setEoRatings(prev => {
+        const updated = prev.filter(r => r.eventId !== eventId);
+        prevData.current.eoRatings = [...updated];
+        return updated;
+      });
+
+      showToast("Event deleted permanently", "success");
+      return true;
+    } catch (err) {
+      console.error("Delete event error:", err);
+      showToast("Failed to delete event from database", "error");
+      return false;
+    }
+  };
+
   const rejectJoinRequest = async (requestId) => {
     try {
       const headers = getAuthHeaders();
@@ -1665,6 +1753,30 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch(err) {
       console.error(err);
       showToast('Failed to delete record', 'error');
+      return false;
+    }
+  };
+
+  const deleteAuctionSession = async (sessionId) => {
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions?id=eq.${sessionId}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!res.ok) throw new Error(`Auction session deletion failed: ${res.status}`);
+
+      setAuctionSessions(prev => {
+        const updated = prev.filter(s => s.id !== sessionId);
+        prevData.current.auctionSessions = [...updated];
+        return updated;
+      });
+
+      showToast("Auction session deleted permanently", "success");
+      return true;
+    } catch (err) {
+      console.error("Delete auction error:", err);
+      showToast("Failed to delete auction session", "error");
       return false;
     }
   };
@@ -2037,13 +2149,14 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [showToast]);
 
 
-  const value = {
+  const value = React.useMemo(() => ({
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
     page, setPage,
     toast, setToast, showToast,
     members, setMembers,
-    events, setEvents,
+    events, setEvents, deleteEvent,
+    auctionSessions, setAuctionSessions, deleteAuctionSession,
     attendance, setAttendance,
     performance, setPerformance,
     absences, setAbsences,
@@ -2055,7 +2168,6 @@ export const GuildProvider = ({ children, initialData }) => {
     leagueParties, setLeagueParties,
     leaguePartyNames, setLeaguePartyNames,
     eoRatings, setEoRatings,
-    auctionSessions, setAuctionSessions,
     auctionTemplates, setAuctionTemplates,
     notifications, sendNotification, markNotifRead,
     requests, submitRequest, approveRequest, rejectRequest, deleteRequest, clearProcessedRequests,
@@ -2070,7 +2182,15 @@ export const GuildProvider = ({ children, initialData }) => {
     fetchGlobalData, fetchRequests, isFetchingRequests,
     auctionBids, setAuctionBids,
     isOfflineMode, setIsOfflineMode
-  };
+  }), [
+    loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
+    onlineUsers, page, toast, members, events, auctionSessions, attendance, performance, absences,
+    parties, partyNames, raidParties, raidPartyNames, partyOverrides, leagueParties, leaguePartyNames,
+    eoRatings, auctionTemplates, notifications, requests, joinRequests, discordConfig, battlelogConfig,
+    resourceCategories, metadataNotice, metadataActivity, pendingAuctionConflict, syncStatus,
+    memberLootStats, auctionWishlist, historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings,
+    isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests
+  ]);
 
   return (
     <GuildContext.Provider value={value}>

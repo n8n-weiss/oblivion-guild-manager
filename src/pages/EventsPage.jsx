@@ -8,7 +8,7 @@ import { writeAuditLog } from "../utils/audit";
 
 function EventsPage() {
   const {
-    members, events, setEvents, attendance, setAttendance,
+    members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
     showToast, isAdmin, currentUser, sendDiscordEmbed, discordConfig
   } = useGuild();
@@ -120,14 +120,12 @@ function EventsPage() {
   const toggleMonth = (m) => setExpandedMonths(prev => ({ ...prev, [m]: !prev[m] }));
   const toggleWeek = (w) => setExpandedWeeks(prev => ({ ...prev, [w]: !prev[w] }));
 
-  const deleteEvent = (id) => {
-    setEvents(prev => prev.filter(ev => ev.eventId !== id));
-    setAttendance(prev => prev.filter(a => a.eventId !== id));
-    setPerformance(prev => prev.filter(p => p.eventId !== id));
-    setEoRatings(prev => prev.filter(r => r.eventId !== id));
-    if (selectedEvent?.eventId === id) setSelectedEvent(null);
-    showToast("Event deleted", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${id}`);
+  const deleteEvent = async (id) => {
+    const success = await deleteEventFromDb(id);
+    if (success) {
+      if (selectedEvent?.eventId === id) setSelectedEvent(null);
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "event_delete", `Deleted event ${id}`);
+    }
   };
 
   const [isEditing, setIsEditing] = useState(false);
