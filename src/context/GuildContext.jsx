@@ -363,17 +363,22 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(absenceData)) {
-      const mappedAbsences = absenceData.map(a => ({
-        id: a.id,
-        memberId: a.member_id,
-        eventType: a.event_type || a.eventType || 'Guild League',
-        eventDate: a.event_date || a.start_date || a.eventDate,
-        reason: a.reason,
-        onlineStatus: a.online_status || a.onlineStatus || 'No',
-        createdAt: a.created_at
-      }));
-      setAbsences(mappedAbsences);
-      prevData.current.absences = [...mappedAbsences];
+      try {
+        const mappedAbsences = absenceData.map(a => ({
+          id: a.id,
+          memberId: a.member_id || a.memberId,
+          eventType: a.event_type || a.eventType || 'Guild League',
+          eventDate: a.event_date || a.start_date || a.eventDate,
+          reason: a.reason,
+          onlineStatus: a.online_status || a.onlineStatus || 'No',
+          createdAt: a.created_at || a.createdAt
+        }));
+        setAbsences(mappedAbsences);
+        prevData.current.absences = [...mappedAbsences];
+      } catch (err) {
+        console.error("Absence mapping error:", err);
+        setAbsences(absenceData); // Fallback to raw data
+      }
     }
 
     if (Array.isArray(metaData)) {
@@ -452,25 +457,29 @@ export const GuildProvider = ({ children, initialData }) => {
       const headers = getAuthHeaders();
       const cutoffDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes, auctionSessionsRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/roster?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/events?select=*&event_date=gte.${cutoffDate}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/roster?select=member_id,ign,class,role,discord,guild_rank,status,level,cp,metadata,is_donator`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=gte.${cutoffDate}`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/absences?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/metadata?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/attendance?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=*&order=date.desc`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/metadata?select=key,data,updated_at`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=member_id,id,data,updated_at`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }), // Performance varies by GL mode, select all score fields
+        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=id,name,date,columns,members,cells&order=date.desc`, { headers })
       ]);
 
       const rosterData = rosterRes.ok ? await rosterRes.json() : [];
-      const eventsData = await eventsRes.json().catch(() => []);
-      const absenceData = await absenceRes.json().catch(() => []);
-      const metaData = await metaRes.json().catch(() => []);
+      const eventsData = eventsRes.ok ? await eventsRes.json() : [];
+      let absenceData = absenceRes.ok ? await absenceRes.json() : [];
+      if (!Array.isArray(absenceData)) {
+        console.error("Absences fetch returned non-array:", absenceData);
+        absenceData = [];
+      }
+      const metaData = metaRes.ok ? await metaRes.json() : [];
       const bidsData = bidsRes.ok ? await bidsRes.json() : [];
       const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
-      const performanceData = await performanceRes.json().catch(() => []);
-      const eoRatingsData = await eoRatingsRes.json().catch(() => []);
+      const performanceData = performanceRes.ok ? await performanceRes.json() : [];
+      const eoRatingsData = eoRatingsRes.ok ? await eoRatingsRes.json() : [];
       let auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
 
       // RECOVERY LOGIC: If the migration script dropped the data, restore from the user's local v3 cache before it's gone
