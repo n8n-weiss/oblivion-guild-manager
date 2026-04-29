@@ -396,7 +396,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setBattlelogConfig(battlelogConfig);
 
       prevData.current.eoRatings = [...eoRatings];
-      prevData.current.auctionSessions = [...auctionSessions];
+      // Removed stale outer auctionSessions reference that was causing continuous re-saves and data wiping
       prevData.current.auctionTemplates = [...auctionTemplates];
       prevData.current.resourceCategories = [...resourceCategories];
       prevData.current.discordConfig = { ...discordConfig };
@@ -428,13 +428,13 @@ export const GuildProvider = ({ children, initialData }) => {
           const { data, fetchedAt } = JSON.parse(cached);
           if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
             // Force refresh if roster is empty
-            if (data.rosterData && data.rosterData.length > 0) {
-              processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData);
+            if (!data.rosterData || data.rosterData.length === 0) {
+              console.log("GuildContext: Cache has empty roster, forcing refresh");
+            } else {
+              processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData, data.auctionSessionsData);
               setLoading(false);
               setSyncStatus("synced");
               return;
-            } else {
-              console.log("GuildContext: Cache has empty roster, forcing fresh fetch.");
             }
           }
         }
@@ -466,7 +466,32 @@ export const GuildProvider = ({ children, initialData }) => {
       const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
       const performanceData = await performanceRes.json().catch(() => []);
       const eoRatingsData = await eoRatingsRes.json().catch(() => []);
-      const auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
+      let auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
+
+      // RECOVERY LOGIC: If the migration script dropped the data, restore from the user's local v3 cache before it's gone
+      if (auctionSessionsData.length === 0) {
+        try {
+          const oldCache = sessionStorage.getItem("global_guild_data_v3");
+          if (oldCache) {
+            const parsed = JSON.parse(oldCache);
+            const oldMeta = parsed.data?.metaData?.find(m => m.key === 'auction');
+            const recoveredSessions = oldMeta?.data?.auctionSessions || [];
+            
+            if (recoveredSessions.length > 0) {
+              console.warn("Recovering lost auction sessions from local v3 cache!");
+              // Post them back to the new table to save them
+              await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
+                method: 'POST',
+                headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify(recoveredSessions)
+              });
+              auctionSessionsData = recoveredSessions;
+            }
+          }
+        } catch (err) {
+          console.error("Auction recovery failed", err);
+        }
+      }
 
       processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData);
 
