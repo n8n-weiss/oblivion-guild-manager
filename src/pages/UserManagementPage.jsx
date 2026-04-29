@@ -421,11 +421,13 @@ function UserManagementPage() {
           </div>
         )}
 
-        <div className="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Name</th><th>Email</th><th>Role</th><th>Linked Member</th><th>UID Snippet</th><th style={{ textAlign: "right" }}>Actions</th>
-            </tr></thead>
+        <div className="table-wrap" style={{ maxHeight: "500px", overflowY: "auto", borderBottom: "1px solid var(--border)" }}>
+          <table style={{ position: "relative", borderCollapse: "separate", borderSpacing: 0 }}>
+            <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--bg-card)", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
+              <tr>
+                <th>Name</th><th>Email</th><th>Role</th><th>Linked Member</th><th>UID Snippet</th><th style={{ textAlign: "right" }}>Actions</th>
+              </tr>
+            </thead>
 
             <tbody>
               {users.length === 0 && (

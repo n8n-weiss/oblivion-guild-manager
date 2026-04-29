@@ -366,9 +366,9 @@ function MembersPage({ onViewProfile }) {
           />
         ) : (
           <>
-            <div className={`table-wrap table-sticky-head ${tableCompact ? "table-compact" : ""} hybrid-mobile-hide`}>
-            <table>
-              <thead>
+            <div className={`table-wrap ${tableCompact ? "table-compact" : ""} hybrid-mobile-hide`} style={{ maxHeight: "600px", overflowY: "auto", borderBottom: "1px solid var(--border)" }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+              <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--bg-card)", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
                 <tr>
                   <th style={{ width: 48 }}>#</th>
                   <th>Member</th>
