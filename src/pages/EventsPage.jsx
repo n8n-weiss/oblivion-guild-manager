@@ -548,7 +548,7 @@ function EventsPage() {
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
             <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2" style={{ maxHeight: "600px", overflowY: "auto", overflowX: "hidden", paddingRight: 4, paddingBottom: 10 }}>
             {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
             {monthKeys.map(month => {
               const weekGroups = groupedEvents[month];
@@ -710,8 +710,9 @@ function EventsPage() {
                 <div className="text-xs text-muted" style={{ marginBottom: 16 }}>
                   Assigned Auditor: <strong>{selectedEvent.battlelogAudit?.assignedIgn || "Unassigned"}</strong>
                 </div>
-                <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                  <thead>
+                <div className="table-wrap" style={{ maxHeight: "600px", overflowY: "auto", borderBottom: "1px solid var(--border)" }}>
+                  <table className="sticky-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, position: "relative" }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 40, background: "var(--bg-card)", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
                     {/* Group label row - Vale of Clash */}
                     {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
                       <tr style={{ fontSize: 9, letterSpacing: 1 }}>
@@ -926,6 +927,7 @@ function EventsPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           ) : (

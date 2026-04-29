@@ -273,7 +273,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const canSeeRequestData = isOfficer || isAdmin || isArchitect;
 
   // Data Loading from Supabase
-  const GLOBAL_CACHE_KEY = "global_guild_data_v4";
+  const GLOBAL_CACHE_KEY = "global_guild_data_v5";
   const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
   const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData) => {
@@ -396,11 +396,6 @@ export const GuildProvider = ({ children, initialData }) => {
       const discordConfig = discordGroup.discord || {};
       const battlelogConfig = battlelogGroup || {};
 
-      if (Array.isArray(auctionSessionsData)) {
-        setAuctionSessions(auctionSessionsData);
-        prevData.current.auctionSessions = [...auctionSessionsData];
-      }
-
       setEoRatings(eoRatings);
       setAuctionTemplates(auctionTemplates);
       setResourceCategories(resourceCategories);
@@ -413,6 +408,11 @@ export const GuildProvider = ({ children, initialData }) => {
       prevData.current.resourceCategories = [...resourceCategories];
       prevData.current.discordConfig = { ...discordConfig };
       prevData.current.battlelogConfig = { ...battlelogConfig };
+    }
+
+    if (Array.isArray(auctionSessionsData)) {
+      setAuctionSessions(auctionSessionsData);
+      prevData.current.auctionSessions = [...auctionSessionsData];
     }
 
     if (Array.isArray(bidsData)) {
@@ -472,19 +472,23 @@ export const GuildProvider = ({ children, initialData }) => {
         fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=id,name,date,columns,members,cells&order=date.desc`, { headers })
       ]);
 
-      const rosterData = rosterRes.ok ? await rosterRes.json() : [];
-      const eventsData = eventsRes.ok ? await eventsRes.json() : [];
+      if (!rosterRes.ok || !eventsRes.ok || !metaRes.ok || !auctionSessionsRes.ok) {
+        throw new Error(`Critical API fetch failed: Roster(${rosterRes.status}), Events(${eventsRes.status}), Meta(${metaRes.status}), Auctions(${auctionSessionsRes.status})`);
+      }
+
+      const rosterData = await rosterRes.json();
+      const eventsData = await eventsRes.json();
       let absenceData = absenceRes.ok ? await absenceRes.json() : [];
       if (!Array.isArray(absenceData)) {
         console.error("Absences fetch returned non-array:", absenceData);
         absenceData = [];
       }
-      const metaData = metaRes.ok ? await metaRes.json() : [];
+      const metaData = await metaRes.json();
       const bidsData = bidsRes.ok ? await bidsRes.json() : [];
       const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
       const performanceData = performanceRes.ok ? await performanceRes.json() : [];
       const eoRatingsData = eoRatingsRes.ok ? await eoRatingsRes.json() : [];
-      let auctionSessionsData = auctionSessionsRes.ok ? await auctionSessionsRes.json() : [];
+      let auctionSessionsData = await auctionSessionsRes.json();
 
       setHasMoreEvents(eventsData.length >= 10);
 
