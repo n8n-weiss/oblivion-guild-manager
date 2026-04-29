@@ -9,7 +9,7 @@ import { writeAuditLog } from "../utils/audit";
 function EventsPage() {
   const {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
-    performance, setPerformance, absences, eoRatings, setEoRatings,
+    performance, setPerformance, absences, eoRatings,
     showToast, isAdmin, currentUser, sendDiscordEmbed, discordConfig
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);

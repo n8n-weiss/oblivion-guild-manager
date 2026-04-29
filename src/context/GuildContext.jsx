@@ -228,10 +228,6 @@ export const GuildProvider = ({ children, initialData }) => {
   const showToast = useCallback((message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
   }, []);
-  const triggerSyncRetry = () => {
-    if (navigator.onLine) setSyncStatus("saving");
-    fetchGlobalData(); // Manual refresh trigger
-  };
   useEffect(() => {
     liveAuctionRef.current = { auctionSessions, auctionTemplates, resourceCategories };
   }, [auctionSessions, auctionTemplates, resourceCategories]);
@@ -509,8 +505,12 @@ export const GuildProvider = ({ children, initialData }) => {
       setLoading(false);
       prevData.current.isFetching = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- we want to re-fetch when currentUser changes to get the correct closure
-  }, [showToast, getAuthHeaders, currentUser, processFetchedData]);
+  }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL]);
+
+  const triggerSyncRetry = useCallback(() => {
+    if (navigator.onLine) setSyncStatus("saving");
+    fetchGlobalData(); // Manual refresh trigger
+  }, [fetchGlobalData]);
 
   // Auth Listener (Native Supabase Mode)
   useEffect(() => {
@@ -653,7 +653,7 @@ export const GuildProvider = ({ children, initialData }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, []); // Only run once on mount to set up the listener
+  }, [currentUser?.id, fetchGlobalData, getAuthHeaders]);
 
 
 
@@ -746,7 +746,6 @@ export const GuildProvider = ({ children, initialData }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'performance' }, payload => {
         const { eventType, new: newRow, old: oldRow } = payload;
         if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          // eslint-disable-next-line no-unused-vars
           const { event_id, member_id, ...rest } = newRow;
           const mapped = { eventId: event_id, memberId: member_id, ...rest };
           setPerformance(prev => {
@@ -1295,7 +1294,7 @@ export const GuildProvider = ({ children, initialData }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- authLoading/currentUser/getAuthHeaders/loading/syncStatus excluded intentionally: adding them would re-trigger the 8s save debounce on every auth state change
   }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
-  const sendNotification = async (targetId, title, message, type = "info") => {
+  const sendNotification = useCallback(async (targetId, title, message, type = "info") => {
     const headers = getAuthHeaders();
 
     const notif = {
@@ -1318,9 +1317,9 @@ export const GuildProvider = ({ children, initialData }) => {
       console.error("Supabase notification error:", err);
       showToast("Failed to send notification", "error");
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-   const sendDiscordEmbed = async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
+   const sendDiscordEmbed = useCallback(async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
      const catConfig = category ? discordConfig.notifications?.[category] : null;
 
      if (catConfig && !catConfig.enabled) {
@@ -1391,9 +1390,9 @@ export const GuildProvider = ({ children, initialData }) => {
       console.error("Discord Webhook Network Error:", err);
       throw err;
     }
-  };
+  }, [discordConfig, isAdmin, showToast]);
 
-  const sendDiscordImage = async (blob, fileName, caption, category = "auction_results", placeholders = {}) => {
+  const sendDiscordImage = useCallback(async (blob, fileName, caption, category = "auction_results", placeholders = {}) => {
     const catConfig = discordConfig.notifications?.[category];
     if (catConfig && !catConfig.enabled) return;
 
@@ -1454,9 +1453,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to upload image to Discord", "error");
       throw err;
     }
-  };
+  }, [discordConfig, isAdmin, showToast]);
 
-  const markNotifRead = async (id) => {
+  const markNotifRead = useCallback(async (id) => {
     try {
       const headers = getAuthHeaders();
       await fetch(`${supabaseUrl}/rest/v1/notifications?id=eq.${id}`, {
@@ -1467,9 +1466,9 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch(err) {
       console.error(err);
     }
-  };
+  }, [getAuthHeaders]);
 
-  const resetMonthlyScores = async () => {
+  const resetMonthlyScores = useCallback(async () => {
     setLoading(true);
     try {
       const now = new Date();
@@ -1487,9 +1486,9 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
-  const resolveAuctionConflict = (action) => {
+  const resolveAuctionConflict = useCallback((action) => {
     if (!pendingAuctionConflict) return;
     if (action === "apply_remote") {
       const remote = pendingAuctionConflict.remote || {};
@@ -1508,9 +1507,9 @@ export const GuildProvider = ({ children, initialData }) => {
     }
     setPendingAuctionConflict(null);
     setMetadataNotice(null);
-  };
+  }, [pendingAuctionConflict, showToast]);
 
-  const submitJoinRequest = async (data) => {
+  const submitJoinRequest = useCallback(async (data) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1566,9 +1565,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit registration", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, members, joinRequests, sendDiscordEmbed, showToast]);
 
-  const submitReactivationRequest = async (data) => {
+  const submitReactivationRequest = useCallback(async (data) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1632,9 +1631,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit reactivation request", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, members, joinRequests, sendDiscordEmbed, showToast]);
 
-  const approveJoinRequest = async (requestId) => {
+  const approveJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1715,9 +1714,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to approve registration", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, joinRequests, members, sendDiscordEmbed, showToast, fetchGlobalData]);
 
-  const deleteEvent = async (eventId) => {
+  const deleteEvent = useCallback(async (eventId) => {
     try {
       const headers = getAuthHeaders();
       
@@ -1765,9 +1764,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to delete event from database", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const rejectJoinRequest = async (requestId) => {
+  const rejectJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1786,9 +1785,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to reject registration', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const deleteJoinRequest = async (requestId) => {
+  const deleteJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1807,9 +1806,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to delete record', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const deleteAuctionSession = async (sessionId) => {
+  const deleteAuctionSession = useCallback(async (sessionId) => {
     try {
       const headers = getAuthHeaders();
       const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions?id=eq.${sessionId}`, {
@@ -1831,9 +1830,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to delete auction session", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
   
-  const deleteMember = async (memberId) => {
+  const deleteMember = useCallback(async (memberId) => {
     try {
       const headers = getAuthHeaders();
       const res = await fetch(`${supabaseUrl}/rest/v1/roster?member_id=eq.${memberId}`, {
@@ -1855,9 +1854,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to delete member from database", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const submitRequest = async (memberId, newData) => {
+  const submitRequest = useCallback(async (memberId, newData) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1901,9 +1900,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit request", "error");
       return false;
     }
-  };
+  }, [getAuthHeaders, members, sendDiscordEmbed, showToast]);
 
-  const approveRequest = async (requestId) => {
+  const approveRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1956,9 +1955,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to approve request', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, requests, members, showToast]);
 
-  const rejectRequest = async (requestId) => {
+  const rejectRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1977,9 +1976,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to reject request', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const deleteRequest = async (requestId) => {
+  const deleteRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
 
@@ -1998,9 +1997,9 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to delete request', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, showToast]);
 
-  const clearProcessedRequests = async () => {
+  const clearProcessedRequests = useCallback(async () => {
     try {
       const headers = getAuthHeaders();
 
@@ -2037,7 +2036,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to clear history', 'error');
       return false;
     }
-  };
+  }, [getAuthHeaders, requests, joinRequests, showToast]);
 
   // Aggregate Member Loot Stats (derive from session data)
   const memberLootStats = React.useMemo(() => {
@@ -2071,7 +2070,7 @@ export const GuildProvider = ({ children, initialData }) => {
     return stats;
   }, [auctionSessions, members]);
 
-  const submitWishlistRequest = async (memberId, resourceType, metadata = {}) => {
+  const submitWishlistRequest = useCallback(async (memberId, resourceType, metadata = {}) => {
     try {
       const headers = getAuthHeaders();
 
@@ -2112,9 +2111,9 @@ export const GuildProvider = ({ children, initialData }) => {
       console.error("Wishlist submission failed:", err);
       return false;
     }
-  };
+  }, [getAuthHeaders]);
 
-  const updateWishlistMetadata = async (memberId, resourceType, metadata) => {
+  const updateWishlistMetadata = useCallback(async (memberId, resourceType, metadata) => {
     try {
       const headers = getAuthHeaders();
 
@@ -2141,9 +2140,9 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch (err) {
       console.error("Wishlist metadata update failed:", err);
     }
-  };
+  }, [getAuthHeaders]);
 
-  const removeWishlistRequest = async (memberId, resourceType) => {
+  const removeWishlistRequest = useCallback(async (memberId, resourceType) => {
     try {
       const headers = getAuthHeaders();
 
@@ -2168,7 +2167,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch (err) {
       console.error("Wishlist removal failed:", err);
     }
-  };
+  }, [getAuthHeaders]);
 
   const fetchHistoricalData = React.useCallback(async (startDate = null, endDate = null) => {
     try {
@@ -2266,7 +2265,8 @@ export const GuildProvider = ({ children, initialData }) => {
     resourceCategories, metadataNotice, metadataActivity, pendingAuctionConflict, syncStatus,
     memberLootStats, auctionWishlist, historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings,
     isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests,
-    deleteEvent, deleteAuctionSession, deleteMember
+    deleteEvent, deleteAuctionSession, deleteMember,
+    approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata
   ]);
 
   return (
