@@ -363,8 +363,17 @@ export const GuildProvider = ({ children, initialData }) => {
     }
 
     if (Array.isArray(absenceData)) {
-      setAbsences(absenceData);
-      prevData.current.absences = [...absenceData];
+      const mappedAbsences = absenceData.map(a => ({
+        id: a.id,
+        memberId: a.member_id,
+        eventType: a.event_type || a.eventType || 'Guild League',
+        eventDate: a.event_date || a.start_date || a.eventDate,
+        reason: a.reason,
+        onlineStatus: a.online_status || a.onlineStatus || 'No',
+        createdAt: a.created_at
+      }));
+      setAbsences(mappedAbsences);
+      prevData.current.absences = [...mappedAbsences];
     }
 
     if (Array.isArray(metaData)) {
@@ -839,9 +848,10 @@ export const GuildProvider = ({ children, initialData }) => {
           const mapped = { 
             id: newRow.id, 
             memberId: newRow.member_id, 
-            startDate: newRow.start_date, 
-            endDate: newRow.end_date, 
+            eventType: newRow.event_type || 'Guild League',
+            eventDate: newRow.event_date || newRow.start_date, 
             reason: newRow.reason,
+            onlineStatus: newRow.online_status || 'No',
             createdAt: newRow.created_at
           };
           setAbsences(prev => {
@@ -878,6 +888,54 @@ export const GuildProvider = ({ children, initialData }) => {
           setAuctionWishlist(prev => prev.filter(b => b.id !== (oldRow.member_id || oldRow.id)));
         }
       })
+      // 8. Join Requests
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'join_requests' }, payload => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const mapped = { ...newRow, requestType: newRow.request_type || newRow.requestType };
+          setJoinRequests(prev => {
+            // Deduplicate by ID OR Business Key (UID) for pending requests
+            const isDuplicate = prev.some(r => r.id === mapped.id || (mapped.status === 'pending' && r.uid === mapped.uid && r.status === 'pending'));
+            if (isDuplicate) {
+              return prev.map(r => (r.id === mapped.id || (mapped.status === 'pending' && r.uid === mapped.uid && r.status === 'pending')) ? mapped : r);
+            }
+            return [...prev, mapped];
+          });
+        } else if (eventType === 'DELETE') {
+          setJoinRequests(prev => prev.filter(r => r.id !== oldRow.id));
+        }
+      })
+      // 9. Profile Update Requests (Vanguard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, payload => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          setRequests(prev => {
+            // Deduplicate by ID OR Business Key (member_id) for pending requests
+            const isDuplicate = prev.some(r => r.id === newRow.id || (newRow.status === 'pending' && r.member_id === newRow.member_id && r.status === 'pending'));
+            if (isDuplicate) {
+              return prev.map(r => (r.id === newRow.id || (newRow.status === 'pending' && r.member_id === newRow.member_id && r.status === 'pending')) ? newRow : r);
+            }
+            return [...prev, newRow];
+          });
+        } else if (eventType === 'DELETE') {
+          setRequests(prev => prev.filter(r => r.id !== oldRow.id));
+        }
+      })
+      // 10. Notifications
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, payload => {
+        const { eventType, new: newRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          // Only add if it's for this user or 'all'
+          if (newRow.target_id === 'all' || (myMemberId && newRow.target_id === myMemberId)) {
+            const mapped = { ...newRow, id: newRow.id, ts: newRow.ts, targetId: newRow.target_id };
+            setNotifications(prev => {
+              const exists = prev.find(n => n.id === mapped.id);
+              const updated = exists ? prev.map(n => n.id === mapped.id ? mapped : n) : [mapped, ...prev];
+              return updated.slice(0, 30); // Keep last 30
+            });
+          }
+        }
+      })
       .subscribe();
 
     return () => {
@@ -889,10 +947,7 @@ export const GuildProvider = ({ children, initialData }) => {
     fetchGlobalData();
   }, [currentUser, fetchGlobalData, initialData]);
 
-  // Supabase notification poll interval — 5 minutes is sufficient for a guild.
-  const NOTIF_POLL_INTERVAL = 5 * 60 * 1000;
-
-  // Notifications Listener (Migrated to Supabase)
+  // Notifications Initial Fetch (Realtime handles subsequent updates)
   useEffect(() => {
     if (!currentUser || authLoading || loading) return;
     
@@ -918,10 +973,7 @@ export const GuildProvider = ({ children, initialData }) => {
     };
 
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, NOTIF_POLL_INTERVAL);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- NOTIF_POLL_INTERVAL is a module constant; getAuthHeaders is stable; adding them would restart the poll interval unnecessarily
-  }, [currentUser, authLoading, loading, myMemberId]);
+  }, [currentUser, authLoading, loading, myMemberId, getAuthHeaders]);
 
   const REQUESTS_CACHE_KEY = "requests_cache_v1";
   const REQUESTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -1065,11 +1117,33 @@ export const GuildProvider = ({ children, initialData }) => {
 
         // --- 1. Roster ---
         const prevMemberMap = new Map(
-          (prevData.current.members || []).map(m => [m.memberId, JSON.stringify(m)])
+          (prevData.current.members || []).map(m => [m.memberId, JSON.stringify({
+            memberId: m.memberId,
+            ign: m.ign,
+            class: m.class,
+            role: m.role || 'DPS',
+            discord: m.discord || '',
+            guildRank: m.guildRank,
+            status: m.status || 'active',
+            level: Number(m.level || 0),
+            cp: Number(m.cp || 0)
+          })])
         );
-        const dirtyMembers = members.filter(m =>
-          JSON.stringify(m) !== prevMemberMap.get(m.memberId)
-        );
+        const dirtyMembers = members.filter(m => {
+          const currentStr = JSON.stringify({
+            memberId: m.memberId,
+            ign: m.ign,
+            class: m.class,
+            role: m.role || 'DPS',
+            discord: m.discord || '',
+            guildRank: m.guildRank,
+            status: m.status || 'active',
+            level: Number(m.level || 0),
+            cp: Number(m.cp || 0)
+          });
+          return currentStr !== prevMemberMap.get(m.memberId);
+        });
+
         if (dirtyMembers.length > 0) {
           const payload = dirtyMembers.map(m => ({
             member_id: m.memberId,
@@ -1095,6 +1169,9 @@ export const GuildProvider = ({ children, initialData }) => {
           });
           if (!res.ok) throw new Error(`Roster Save Failed: ${res.status}`);
           prevData.current.members = [...members];
+        } else {
+          // Always update cache
+          prevData.current.members = [...members];
         }
 
         // --- 2. Metadata ---
@@ -1114,11 +1191,27 @@ export const GuildProvider = ({ children, initialData }) => {
 
         // --- 2.1 Auction Sessions (Individual Rows) ---
         const prevAuctionMap = new Map(
-          (prevData.current.auctionSessions || []).map(s => [s.id, JSON.stringify(s)])
+          (prevData.current.auctionSessions || []).map(s => [s.id, JSON.stringify({
+            id: s.id,
+            name: s.name,
+            date: s.date,
+            columns: s.columns || [],
+            members: s.members || [],
+            cells: s.cells || {}
+          })])
         );
-        const dirtyAuctions = auctionSessions.filter(s =>
-          JSON.stringify(s) !== prevAuctionMap.get(s.id)
-        );
+        const dirtyAuctions = auctionSessions.filter(s => {
+          const currentStr = JSON.stringify({
+            id: s.id,
+            name: s.name,
+            date: s.date,
+            columns: s.columns || [],
+            members: s.members || [],
+            cells: s.cells || {}
+          });
+          return currentStr !== prevAuctionMap.get(s.id);
+        });
+
         if (dirtyAuctions.length > 0) {
           const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
             method: 'POST',
@@ -1129,6 +1222,9 @@ export const GuildProvider = ({ children, initialData }) => {
             body: JSON.stringify(dirtyAuctions)
           });
           if (!res.ok) throw new Error(`Auction Sessions Save Failed: ${res.status}`);
+          prevData.current.auctionSessions = [...auctionSessions];
+        } else {
+          // Always update cache to match current state
           prevData.current.auctionSessions = [...auctionSessions];
         }
 
@@ -1172,11 +1268,33 @@ export const GuildProvider = ({ children, initialData }) => {
         }));
 
         const prevEventMap = new Map(
-          (prevData.current.events || []).map(e => [e.eventId, JSON.stringify(e)])
+          (prevData.current.events || []).map(e => [e.eventId, JSON.stringify({
+            eventId: e.eventId,
+            eventDate: e.eventDate,
+            eventType: e.eventType || e.type,
+            title: e.title || '',
+            glMode: e.glMode || 'vale',
+            battlelogAudit: e.battlelogAudit || null,
+            attendanceData: e.attendanceData || {},
+            performanceData: e.performanceData || {},
+            eoRatingsData: e.eoRatingsData || {}
+          })])
         );
-        const dirtyEvents = mappedEvents.filter(e =>
-          JSON.stringify(e) !== prevEventMap.get(e.eventId)
-        );
+
+        const dirtyEvents = mappedEvents.filter(e => {
+          const currentStr = JSON.stringify({
+            eventId: e.eventId,
+            eventDate: e.eventDate,
+            eventType: e.eventType || e.type,
+            title: e.title || '',
+            glMode: e.glMode || 'vale',
+            battlelogAudit: e.battlelogAudit || null,
+            attendanceData: e.attendanceData || {},
+            performanceData: e.performanceData || {},
+            eoRatingsData: e.eoRatingsData || {}
+          });
+          return currentStr !== prevEventMap.get(e.eventId);
+        });
 
         if (dirtyEvents.length > 0) {
           const payload = dirtyEvents.map(e => ({
@@ -1204,6 +1322,10 @@ export const GuildProvider = ({ children, initialData }) => {
           });
           if (!res.ok) throw new Error(`Events Save Failed: ${res.status}`);
           prevData.current.events = [...mappedEvents];
+        } else {
+          // Even if no events were dirty, update prevData with current mapped state 
+          // to ensure future checks compare against the latest derived values.
+          prevData.current.events = [...mappedEvents];
         }
 
         // --- 4. Absences ---
@@ -1217,9 +1339,11 @@ export const GuildProvider = ({ children, initialData }) => {
           const payload = dirtyAbsences.map(a => ({
             id: a.id,
             member_id: a.memberId,
-            start_date: a.startDate,
-            end_date: a.endDate,
+            event_type: a.eventType,
+            event_date: a.eventDate,
+            start_date: a.eventDate, // backward compatibility
             reason: a.reason,
+            online_status: a.onlineStatus,
             status: a.status || 'pending'
           }));
 
@@ -1862,6 +1986,14 @@ export const GuildProvider = ({ children, initialData }) => {
 
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
+
+      // Duplicate Check: Already pending request for this member?
+      const alreadyPending = requests.some(r => r.member_id === memberId && r.status === "pending");
+      if (alreadyPending) {
+        showToast("You already have a pending profile update request.", "error");
+        return false;
+      }
+
       const req = {
         id: crypto.randomUUID?.() || Date.now().toString(),
         member_id: memberId,
@@ -1900,7 +2032,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit request", "error");
       return false;
     }
-  }, [getAuthHeaders, members, sendDiscordEmbed, showToast]);
+  }, [getAuthHeaders, members, requests, sendDiscordEmbed, showToast]);
 
   const approveRequest = useCallback(async (requestId) => {
     try {
