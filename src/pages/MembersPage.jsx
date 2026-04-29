@@ -8,7 +8,7 @@ import StatePanel from '../components/common/StatePanel';
 import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers } = useGuild();
+  const { members, setMembers, deleteMember, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers } = useGuild();
   const onlineUsers = Array.isArray(_onlineUsers) ? _onlineUsers : [];
   const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
   const MEMBERS_PRESETS_KEY = "members_view_presets_v1";
@@ -119,21 +119,14 @@ function MembersPage({ onViewProfile }) {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isRestoring ? "member_restore" : "member_archive", `${isRestoring ? "Restored" : "Archived"} member ${m?.ign} (${id})`);
   };
 
-  const deleteMemberRecord = (id) => {
+  const deleteMemberRecord = async (id) => {
     const m = members.find(x => x.memberId === id);
     if (!window.confirm(`PERMANENTLY DELETE ${m?.ign}? This cannot be undone and will remove them from the roster totally.`)) return;
     
-    const beforeMembers = members;
-    setMembers(prev => prev.filter(x => x.memberId !== id));
-    showToast(`Member ${m?.ign} deleted permanently`, "success");
-    showToast("Member removed from list", "warning", {
-      label: "Undo",
-      onClick: () => {
-        setMembers(beforeMembers);
-        showToast("Delete undone", "success");
-      }
-    });
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
+    const success = await deleteMember(id);
+    if (success) {
+      writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
+    }
   };
 
   const classThemes = useMemo(() => {

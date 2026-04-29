@@ -785,7 +785,35 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         }
       })
-      // 6. Metadata (Auctions, Discord Config, etc.)
+      // 6. Roster (Members)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'roster' }, payload => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const mapped = { 
+            ...newRow,
+            ...newRow.metadata, 
+            memberId: newRow.member_id,
+            discord: newRow.discord || newRow.metadata?.discord || "",
+            guildRank: newRow.guild_rank,
+            isDonator: newRow.is_donator
+          };
+          setMembers(prev => {
+            const exists = prev.find(m => m.memberId === mapped.memberId);
+            const updated = exists 
+              ? prev.map(m => m.memberId === mapped.memberId ? mapped : m)
+              : [...prev, mapped].sort((a, b) => a.ign.localeCompare(b.ign));
+            prevData.current.members = [...updated];
+            return updated;
+          });
+        } else if (eventType === 'DELETE') {
+          setMembers(prev => {
+            const updated = prev.filter(m => m.memberId !== oldRow.member_id);
+            prevData.current.members = [...updated];
+            return updated;
+          });
+        }
+      })
+      // 7. Metadata (Auctions, Discord Config, etc.)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metadata' }, payload => {
         const { eventType, new: newRow } = payload;
         if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -793,7 +821,6 @@ export const GuildProvider = ({ children, initialData }) => {
           const data = newRow.data || {};
           
           if (key === 'auction') {
-            setAuctionSessions(data.auctionSessions || []);
             setAuctionTemplates(data.auctionTemplates || []);
             setResourceCategories(data.resourceCategories || ["Card Album", "Light & Dark"]);
             prevData.current.auctionData = { ...data };
@@ -1805,6 +1832,30 @@ export const GuildProvider = ({ children, initialData }) => {
       return false;
     }
   };
+  
+  const deleteMember = async (memberId) => {
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch(`${supabaseUrl}/rest/v1/roster?member_id=eq.${memberId}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!res.ok) throw new Error(`Member deletion failed: ${res.status}`);
+
+      setMembers(prev => {
+        const updated = prev.filter(m => m.memberId !== memberId);
+        prevData.current.members = [...updated];
+        return updated;
+      });
+
+      showToast("Member deleted permanently", "success");
+      return true;
+    } catch (err) {
+      console.error("Delete member error:", err);
+      showToast("Failed to delete member from database", "error");
+      return false;
+    }
+  };
 
   const submitRequest = async (memberId, newData) => {
     try {
@@ -2179,7 +2230,7 @@ export const GuildProvider = ({ children, initialData }) => {
     onlineUsers,
     page, setPage,
     toast, setToast, showToast,
-    members, setMembers,
+    members, setMembers, deleteMember,
     events, setEvents, deleteEvent,
     auctionSessions, setAuctionSessions, deleteAuctionSession,
     attendance, setAttendance,
@@ -2214,7 +2265,8 @@ export const GuildProvider = ({ children, initialData }) => {
     eoRatings, auctionTemplates, notifications, requests, joinRequests, discordConfig, battlelogConfig,
     resourceCategories, metadataNotice, metadataActivity, pendingAuctionConflict, syncStatus,
     memberLootStats, auctionWishlist, historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings,
-    isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests
+    isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests,
+    deleteEvent, deleteAuctionSession, deleteMember
   ]);
 
   return (
