@@ -14,6 +14,18 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
 }
+@keyframes shine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+@keyframes floating {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-10px) scale(1.02); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(99, 130, 230, 0.2); }
+  50% { box-shadow: 0 0 25px rgba(99, 130, 230, 0.5); }
+}
 
 :root {
     --bg-deepest: #04060b;
@@ -229,6 +241,75 @@
     transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 0 10px var(--accent-glow);
   }
+
+  .glass-panel {
+    background: rgba(13, 18, 30, 0.45);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+  }
+
+  .premium-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: rgba(20, 25, 40, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: all 0.3s ease;
+  }
+
+  .presence-avatar-list {
+    display: flex;
+    align-items: center;
+    flex-direction: row-reverse;
+  }
+
+  .presence-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--bg-card2);
+    border: 2px solid var(--bg-dark);
+    margin-left: -10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+    position: relative;
+    cursor: help;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  .presence-avatar:hover {
+    transform: translateY(-4px) scale(1.1);
+    z-index: 50;
+    border-color: var(--accent);
+  }
+
+  .status-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-dark);
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  }
+
+  .status-online { background: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.6); }
+  .status-away { background: #f59e0b; opacity: 0.7; }
 
   /* ── Login ── */
   .login-page-container {

@@ -63,6 +63,51 @@ const pagePrefetchers = {
 };
 const prefetchedPages = new Set();
 
+// --- Helper Components for Premium UI ---
+const SyncPill = ({ status, onRetry }) => {
+  const isSaving = status === 'saving';
+  const isError = status === 'error';
+  const isOffline = status === 'offline';
+  
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] animate-float" style={{ animationDelay: '1s' }}>
+      <div className="premium-pill glass-panel" style={{ padding: '8px 16px', gap: 10 }}>
+        <div className={`status-dot ${isSaving ? 'animate-pulse' : ''}`} style={{ 
+          background: isError ? '#ef4444' : isSaving || isOffline ? '#f59e0b' : '#10b981',
+          boxShadow: `0 0 12px ${isError ? '#ef4444' : isSaving || isOffline ? '#f59e0b' : '#10b981'}`
+        }} />
+        <span style={{ color: 'var(--text-primary)', fontSize: 10 }}>
+          {isSaving ? 'CLOUD SAVING...' : isError ? 'SYNC ERROR' : isOffline ? 'OFFLINE' : 'CLOUD SYNCED'}
+        </span>
+        <button onClick={onRetry} className="btn-ghost" style={{ padding: 4, borderRadius: 6 }}>
+          <Icon name="rotate-cw" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const PresenceUI = ({ users }) => {
+  const userList = Object.values(users || {}).slice(0, 5);
+  const extraCount = Object.keys(users || {}).length - 5;
+
+  return (
+    <div className="presence-avatar-list">
+      {extraCount > 0 && (
+        <div className="presence-avatar" style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', fontSize: 10 }}>
+          +{extraCount}
+        </div>
+      )}
+      {userList.map((u, i) => (
+        <div key={i} className="presence-avatar" title={`${u.ign} is on ${u.page}`}>
+          {u.ign?.slice(0, 2).toUpperCase()}
+          <div className={`status-dot ${u.status === 'online' ? 'status-online' : 'status-away'}`} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const PageWrapper = ({ children, id }) => (
   <MotionDiv
     key={id}
@@ -104,12 +149,11 @@ export default function App() {
   const [profileMember, setProfileMember] = useState(null);
   const [showTreasury, setShowTreasury] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [retryBusy, setRetryBusy] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [diagCopied, setDiagCopied] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [densityMode, setDensityMode] = useState(() => localStorage.getItem("ui_density_mode") || "comfy");
-  const [highContrastMode, setHighContrastMode] = useState(() => localStorage.getItem("ui_high_contrast_mode") === "1");
+  const [highContrastMode] = useState(() => localStorage.getItem("ui_high_contrast_mode") === "1");
   const [themeMode] = useState(() => localStorage.getItem("ui_theme_mode") || "dark");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -529,8 +573,9 @@ export default function App() {
 
   return (
     <div className={`app-root density-${densityMode} ${highContrastMode ? "high-contrast" : ""}`}>
+      <SyncPill status={syncStatus} onRetry={triggerSyncRetry} />
       {/* Sidebar */}
-      <nav className="sidebar">
+      <nav className="sidebar glass-panel">
         <div className="sidebar-logo" style={{ textAlign: "center", overflow: "visible" }}>
           <div className="logo-halo-container" style={{ margin: "16px auto 12px", transform: "scale(0.7)", transformOrigin: "center top" }}>
             <div className="logo-halo" />
@@ -620,33 +665,34 @@ export default function App() {
         <div className="sidebar-footer">
 
           {currentUser && (
-            <div className="sidebar-user-profile">
+            <div className="sidebar-user-profile glass-panel" style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.2)' }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <div style={{ 
-                  width: 30, height: 30, borderRadius: 6, 
-                  background: isArchitect ? "rgba(255,77,77,0.18)" : isAdmin ? "rgba(240,192,64,0.18)" : "rgba(99,130,230,0.18)", 
-                  color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : "var(--accent)", 
-                  display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 700, flexShrink: 0, 
-                  boxShadow: isArchitect ? "0 0 10px rgba(255,77,77,0.3)" : "inset 0 0 8px rgba(0,0,0,0.2)" 
+                  width: 32, height: 32, borderRadius: 8, 
+                  background: isArchitect ? "linear-gradient(135deg, #ff4d4d, #b91c1c)" : isAdmin ? "linear-gradient(135deg, var(--gold), #b45309)" : "linear-gradient(135deg, var(--accent), #1e3a8a)", 
+                  color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel,serif", fontSize: 11, fontWeight: 900, flexShrink: 0, 
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
                 }}>
                   {(currentUser.displayName || currentUser.email || "").slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {currentUser.displayName || currentUser.email}
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {currentUser.displayName || currentUser.ign || currentUser.email}
                   </div>
                   <div style={{ 
-                    fontSize: 10, 
+                    fontSize: 9, 
+                    fontWeight: 900,
                     color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : isOfficer ? "var(--accent)" : "var(--text-muted)", 
                     letterSpacing: 1,
-                    textShadow: isArchitect ? "0 0 8px rgba(255,77,77,0.4)" : "none"
+                    textTransform: 'uppercase'
                   }}>
-                    {isArchitect ? "👁️‍🗨️ Architect" : isAdmin ? "★ Admin" : isOfficer ? "🛡 Officer" : "👤 Member"}
+                    {isArchitect ? "Architect" : isAdmin ? "Admin" : isOfficer ? "Officer" : "Member"}
                   </div>
                 </div>
               </div>
-              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 11, border: "1px solid var(--border)" }} onClick={handleSignOut}>
-                Sign Out
+              <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 10, borderRadius: 6, opacity: 0.7 }} onClick={handleSignOut}>
+                Disconnect
               </button>
             </div>
           )}
@@ -795,120 +841,27 @@ export default function App() {
           </div>
         )}
         <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
-        <div className="status-bar">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 10px",
-                borderRadius: 999,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                border: "1px solid rgba(255,255,255,0.12)",
-                color:
-                  syncStatus === "saving" ? "#f6d277"
-                    : syncStatus === "offline" ? "#ff9f66"
-                    : syncStatus === "error" ? "#ff7a7a"
-                    : "var(--text-secondary)",
-                background:
-                  syncStatus === "saving" ? "rgba(246,210,119,0.12)"
-                    : syncStatus === "offline" ? "rgba(255,159,102,0.12)"
-                    : syncStatus === "error" ? "rgba(255,122,122,0.12)"
-                    : "rgba(120,255,170,0.1)"
-              }}
-            >
-              {syncStatus === "saving" ? "Saving..." : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync issue" : "Synced"}
-            </span>
-            <button 
-              className="btn btn-ghost btn-sm" 
-              style={{ padding: "4px 8px", fontSize: 10, border: "1px solid var(--border)" }}
-              onClick={() => triggerSyncRetry()}
-              title="Manually fetch latest data from cloud"
-            >
-              <Icon name="refresh" size={12} /> Sync
-            </button>
-          </div>
-          <span
-            title="Current display density mode"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 10px",
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 0.2,
-              border: "1px solid rgba(99,130,230,0.28)",
-              color: "var(--accent)",
-              background: "rgba(99,130,230,0.1)"
-            }}
-          >
-            Density: {densityMode === "compact" ? "Compact" : "Comfy"}
-          </span>
-          {highContrastMode && (
-            <button
-              type="button"
-              aria-label="Toggle high contrast mode"
-              title="Accessibility mode is enabled. Click to toggle."
-              onClick={() => setHighContrastMode(v => !v)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 10px",
-                borderRadius: 999,
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: 0.2,
-                border: "1px solid rgba(240,192,64,0.35)",
-                color: "var(--gold)",
-                background: "rgba(240,192,64,0.12)",
-                cursor: "pointer"
-              }}
-            >
-              A11y: High Contrast
-            </button>
-          )}
-          {(syncStatus === "offline" || syncStatus === "error") && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ border: "1px solid rgba(255,255,255,0.2)", opacity: retryBusy ? 0.6 : 1 }}
-              disabled={retryBusy}
-              onClick={() => {
-                if (retryBusy) return;
-                setRetryBusy(true);
-                triggerSyncRetry();
-                window.setTimeout(() => setRetryBusy(false), 2000);
-              }}
-            >
-              {retryBusy ? "Retrying..." : "Retry now"}
-            </button>
-          )}
-        </div>
-        {metadataActivity.length > 0 && (
-          <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {metadataActivity.slice(0, 4).map(item => (
-              <span
-                key={item.id}
-                style={{
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  borderRadius: 999,
-                  border: "1px solid rgba(99,130,230,0.25)",
-                  background: "rgba(99,130,230,0.08)",
-                  color: "var(--text-secondary)"
-                }}
-                title={`Updated by ${item.by}`}
-              >
-                {item.area} updated
+        <div className="status-bar glass-panel" style={{ padding: '8px 16px', borderRadius: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', letterSpacing: 1 }}>STATUS</div>
+              <span className="premium-pill" style={{ background: 'rgba(99,130,230,0.05)', border: 'none', boxShadow: 'none' }}>
+                Density: {densityMode.toUpperCase()}
               </span>
-            ))}
+              {highContrastMode && (
+                <span className="premium-pill" style={{ background: 'rgba(240,192,64,0.05)', border: 'none', boxShadow: 'none', color: 'var(--gold)' }}>
+                  A11Y ON
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>
+                ACTIVE OFFICERS
+              </div>
+              <PresenceUI users={onlineUsers} />
+            </div>
           </div>
-        )}
+        </div>
         {metadataNotice && (
           <div
             style={{

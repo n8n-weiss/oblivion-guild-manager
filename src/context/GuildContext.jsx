@@ -102,7 +102,7 @@ export const GuildProvider = ({ children, initialData }) => {
       return Array.isArray(parsed) ? parsed : (parsed.data || defaults);
     } catch { return ["Card Album", "Light & Dark"]; }
   });
-  const [onlineUsers] = useState([]); // array of { uid, memberId, displayName, lastSeen }
+  const [onlineUsers, setOnlineUsers] = useState({}); // mapped by memberId for easy de-duplication
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity] = useState([]); // recent shared metadata updates
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
@@ -675,6 +675,172 @@ export const GuildProvider = ({ children, initialData }) => {
 
 
 
+  // --- Smart Presence Implementation ---
+  const isStaff = React.useMemo(() => {
+    if (!currentUser) return false;
+    const rank = String(currentUser.guildRank || "").toLowerCase();
+    const staffRanks = ["officer", "charisma baby", "baby charisma", "guild master", "vice guild master", "commander", "system architect", "creator"];
+    return staffRanks.some(r => rank.includes(r));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || !isStaff) return;
+
+    const channel = supabase.channel('guild_presence', {
+      config: { presence: { key: currentUser.memberId } }
+    });
+
+    const handlePresenceSync = () => {
+      const state = channel.presenceState();
+      const simplified = {};
+      Object.keys(state).forEach(key => {
+        if (state[key] && state[key][0]) {
+          simplified[key] = state[key][0];
+        }
+      });
+      setOnlineUsers(simplified);
+    };
+
+    const trackPresence = (status = 'online') => {
+      const path = page || 'dashboard';
+      channel.track({
+        ign: currentUser.ign,
+        status,
+        page: path,
+        lastSeen: new Date().toISOString()
+      });
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, handlePresenceSync)
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          trackPresence('online');
+        }
+      });
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        trackPresence('away');
+      } else {
+        trackPresence('online');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    
+    // Also track when the 'page' state changes in context
+    trackPresence('online');
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      channel.unsubscribe();
+    };
+  }, [currentUser, isStaff, page]);
+
+  useEffect(() => {
+    fetchGlobalData();
+  }, [currentUser, fetchGlobalData, initialData]);
+
+  // Notifications Initial Fetch (Realtime handles subsequent updates)
+  useEffect(() => {
+    if (!currentUser || authLoading || loading) return;
+    
+    const fetchNotifs = async () => {
+      try {
+        const headers = getAuthHeaders();
+
+        let url = `${supabaseUrl}/rest/v1/notifications?select=*&order=ts.desc&limit=30`;
+        if (myMemberId) {
+          url += `&or=(target_id.eq.all,target_id.eq.${myMemberId})`;
+        }
+
+        const res = await fetch(url, {
+          headers
+        });
+        const data = await res.json().catch(() => []);
+        if (Array.isArray(data)) {
+          setNotifications(data.map(n => ({ ...n, id: n.id, ts: n.ts, targetId: n.target_id })));
+        }
+      } catch (err) {
+        console.error("Supabase notif fetch error:", err);
+      }
+    };
+
+    fetchNotifs();
+  }, [currentUser, authLoading, loading, myMemberId, getAuthHeaders]);
+
+  const REQUESTS_CACHE_KEY = "requests_cache_v1";
+  const REQUESTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const fetchRequests = useCallback(async (forceRefresh = false) => {
+    if (!currentUser || !canSeeRequestData || isFetchingRequests) return;
+    
+    // Check sessionStorage cache first (skip if force-refreshing)
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem(REQUESTS_CACHE_KEY);
+        if (cached) {
+          const { requests: cachedReqs, joinRequests: cachedJoin, fetchedAt } = JSON.parse(cached);
+          if (Date.now() - fetchedAt < REQUESTS_CACHE_TTL) {
+            setRequests(cachedReqs || []);
+            setJoinRequests(cachedJoin || []);
+            return; // Serve from cache — no network call
+          }
+        }
+      } catch { /* ignore bad cache */ }
+    }
+
+    setIsFetchingRequests(true);
+    try {
+      const headers = getAuthHeaders();
+
+      const [reqsRes, joinRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/requests?select=*&order=timestamp.desc&limit=50`, {
+          headers
+        }),
+        fetch(`${supabaseUrl}/rest/v1/join_requests?select=*&order=timestamp.desc&limit=50`, {
+          headers
+        })
+      ]);
+
+      const reqsData = await reqsRes.json().catch(() => []);
+      const joinData = await joinRes.json().catch(() => []);
+      
+      const mappedReqs = (Array.isArray(reqsData) ? reqsData : []).map(r => ({
+        ...r,
+        memberId: r.member_id || r.memberId,
+        requesterIgn: r.requester_ign || r.requesterIgn,
+        oldData: r.old_data || r.oldData,
+        newData: r.new_data || r.newData,
+        timestamp: r.timestamp || r.created_at
+      }));
+
+      const mappedJoin = (Array.isArray(joinData) ? joinData : []).map(r => ({
+        ...r,
+        // Ensure standard fields for join requests too
+        jobClass: r.jobClass || r.class,
+        requestType: r.request_type || r.requestType || 'join',
+        timestamp: r.timestamp || r.created_at
+      }));
+
+      setRequests(mappedReqs);
+      setJoinRequests(mappedJoin);
+
+      // Cache to sessionStorage
+      sessionStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
+        requests: mappedReqs,
+        joinRequests: mappedJoin,
+        fetchedAt: Date.now()
+      }));
+    } catch (err) {
+      console.error("Fetch requests error (Supabase):", err);
+    } finally {
+      setIsFetchingRequests(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- REQUESTS_CACHE_TTL is a constant; getAuthHeaders is stable; excluded intentionally
+  }, [currentUser, canSeeRequestData, isFetchingRequests]);
+
 
   // --- Real-time Subscriptions ---
   useEffect(() => {
@@ -879,22 +1045,10 @@ export const GuildProvider = ({ children, initialData }) => {
       })
       // 7. Auction Bids / Wishlist
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_bids' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = { ...newRow, id: newRow.member_id || newRow.id };
-          setAuctionBids(prev => {
-            const exists = prev.find(b => b.id === mapped.id);
-            const updated = exists ? prev.map(b => b.id === mapped.id ? mapped : b) : [...prev, mapped];
-            return updated;
-          });
-          setAuctionWishlist(prev => {
-            const exists = prev.find(b => b.id === mapped.id);
-            const updated = exists ? prev.map(b => b.id === mapped.id ? mapped : b) : [...prev, mapped];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setAuctionBids(prev => prev.filter(b => b.id !== (oldRow.member_id || oldRow.id)));
-          setAuctionWishlist(prev => prev.filter(b => b.id !== (oldRow.member_id || oldRow.id)));
+        const { eventType } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE' || eventType === 'DELETE') {
+          // Instead of incremental update, just trigger refresh to keep complex logic safe
+          fetchGlobalData(); 
         }
       })
       // 8. Join Requests
@@ -950,110 +1104,7 @@ export const GuildProvider = ({ children, initialData }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser, authLoading, loading, myMemberId]);
-
-  useEffect(() => {
-    fetchGlobalData();
-  }, [currentUser, fetchGlobalData, initialData]);
-
-  // Notifications Initial Fetch (Realtime handles subsequent updates)
-  useEffect(() => {
-    if (!currentUser || authLoading || loading) return;
-    
-    const fetchNotifs = async () => {
-      try {
-        const headers = getAuthHeaders();
-
-        let url = `${supabaseUrl}/rest/v1/notifications?select=*&order=ts.desc&limit=30`;
-        if (myMemberId) {
-          url += `&or=(target_id.eq.all,target_id.eq.${myMemberId})`;
-        }
-
-        const res = await fetch(url, {
-          headers
-        });
-        const data = await res.json().catch(() => []);
-        if (Array.isArray(data)) {
-          setNotifications(data.map(n => ({ ...n, id: n.id, ts: n.ts, targetId: n.target_id })));
-        }
-      } catch (err) {
-        console.error("Supabase notif fetch error:", err);
-      }
-    };
-
-    fetchNotifs();
-  }, [currentUser, authLoading, loading, myMemberId, getAuthHeaders]);
-
-  const REQUESTS_CACHE_KEY = "requests_cache_v1";
-  const REQUESTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-  const fetchRequests = useCallback(async (forceRefresh = false) => {
-    if (!currentUser || !canSeeRequestData || isFetchingRequests) return;
-    
-    // Check sessionStorage cache first (skip if force-refreshing)
-    if (!forceRefresh) {
-      try {
-        const cached = sessionStorage.getItem(REQUESTS_CACHE_KEY);
-        if (cached) {
-          const { requests: cachedReqs, joinRequests: cachedJoin, fetchedAt } = JSON.parse(cached);
-          if (Date.now() - fetchedAt < REQUESTS_CACHE_TTL) {
-            setRequests(cachedReqs || []);
-            setJoinRequests(cachedJoin || []);
-            return; // Serve from cache — no network call
-          }
-        }
-      } catch { /* ignore bad cache */ }
-    }
-
-    setIsFetchingRequests(true);
-    try {
-      const headers = getAuthHeaders();
-
-      const [reqsRes, joinRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/requests?select=*&order=timestamp.desc&limit=50`, {
-          headers
-        }),
-        fetch(`${supabaseUrl}/rest/v1/join_requests?select=*&order=timestamp.desc&limit=50`, {
-          headers
-        })
-      ]);
-
-      const reqsData = await reqsRes.json().catch(() => []);
-      const joinData = await joinRes.json().catch(() => []);
-      
-      const mappedReqs = (Array.isArray(reqsData) ? reqsData : []).map(r => ({
-        ...r,
-        memberId: r.member_id || r.memberId,
-        requesterIgn: r.requester_ign || r.requesterIgn,
-        oldData: r.old_data || r.oldData,
-        newData: r.new_data || r.newData,
-        timestamp: r.timestamp || r.created_at
-      }));
-
-      const mappedJoin = (Array.isArray(joinData) ? joinData : []).map(r => ({
-        ...r,
-        // Ensure standard fields for join requests too
-        jobClass: r.jobClass || r.class,
-        requestType: r.request_type || r.requestType || 'join',
-        timestamp: r.timestamp || r.created_at
-      }));
-
-      setRequests(mappedReqs);
-      setJoinRequests(mappedJoin);
-
-      // Cache to sessionStorage
-      sessionStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
-        requests: mappedReqs,
-        joinRequests: mappedJoin,
-        fetchedAt: Date.now()
-      }));
-    } catch (err) {
-      console.error("Fetch requests error (Supabase):", err);
-    } finally {
-      setIsFetchingRequests(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- REQUESTS_CACHE_TTL is a constant; getAuthHeaders is stable; excluded intentionally
-  }, [currentUser, canSeeRequestData, isFetchingRequests]);
+  }, [currentUser, authLoading, loading, myMemberId, fetchGlobalData]);
 
 
 
