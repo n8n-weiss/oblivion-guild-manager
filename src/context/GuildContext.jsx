@@ -102,12 +102,37 @@ export const GuildProvider = ({ children, initialData }) => {
       return Array.isArray(parsed) ? parsed : (parsed.data || defaults);
     } catch { return ["Card Album", "Light & Dark"]; }
   });
+
+  const channelRef = useRef(null);
+
+  const broadcastStateSync = useCallback((table, data, action = 'UPDATE') => {
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'state_sync',
+        payload: { table, data, action }
+      }).catch(() => {});
+    }
+  }, []);
+
+  const broadcastActivity = useCallback((activityPayload) => {
+    if (channelRef.current && myMemberId) {
+      const myMember = (members || []).find(m => m.memberId === myMemberId);
+      const name = myMember?.ign || currentUser?.user_metadata?.ign || currentUser?.email?.split('@')[0] || "Officer";
+      
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'officer_activity',
+        payload: { memberId: myMemberId, ign: name, ...activityPayload }
+      }).catch(() => {});
+    }
+  }, [myMemberId, currentUser, members]);
+
   const [onlineUsers, setOnlineUsers] = useState([]); // Array of { memberId, ign, status, page }
   const [officerActivities, setOfficerActivities] = useState({});
   const [channelStatus, setChannelStatus] = useState('connecting'); // WebSocket status
   const [isIdle, setIsIdle] = useState(false);
-  const idleTimerRef = React.useRef(null); // { memberId: { activityData, lastSeen } }
-  const channelRef = useRef(null);
+  const idleTimerRef = React.useRef(null);
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity] = useState([]); // recent shared metadata updates
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
@@ -2532,29 +2557,7 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   }, [getAuthHeaders, broadcastStateSync]);
 
-  // Collaboration Broadcast Helper
-  const broadcastActivity = useCallback((activityPayload) => {
-    if (channelRef.current && myMemberId) {
-      const myMember = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
-      const name = myMember?.ign || currentUser?.user_metadata?.ign || currentUser?.email?.split('@')[0] || "Officer";
-      
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'officer_activity',
-        payload: { memberId: myMemberId, ign: name, ...activityPayload }
-      }).catch(() => {}); // Fire and forget
-    }
-  }, [myMemberId, currentUser]);
 
-  const broadcastStateSync = useCallback((table, data, action = 'UPDATE') => {
-    if (channelRef.current) {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'state_sync',
-        payload: { table, data, action }
-      }).catch(() => {});
-    }
-  }, []);
 
   const value = React.useMemo(() => ({
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
