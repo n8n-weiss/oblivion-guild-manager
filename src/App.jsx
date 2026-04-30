@@ -214,14 +214,16 @@ export default function App() {
 
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(item => {
-            if (item.id === 'users' && !isAdmin) return null;
-            if (item.id === 'auditlog' && !isOfficer) return null;
-            if (item.id === 'requests' && !isOfficer) return null;
-            if (item.id === 'import' && !isOfficer) return null;
-            if (item.id === 'auction' && !isOfficer) return null;
+            const hasStaffAccess = isOfficer || isAdmin || isArchitect;
+            if (item.id === 'users' && !isAdmin && !isArchitect) return null;
+            if (item.id === 'auditlog' && !hasStaffAccess) return null;
+            if (item.id === 'requests' && !hasStaffAccess) return null;
+            if (item.id === 'import' && !hasStaffAccess) return null;
+            if (item.id === 'auction' && !hasStaffAccess) return null;
             
             const label = item.label;
-            const count = item.id === 'requests' ? (requests.length + joinRequests.length) : undefined;
+            const pendingCount = (requests.filter(r => r.status === 'pending').length) + (joinRequests.filter(r => r.status === 'pending').length);
+            const count = item.id === 'requests' ? pendingCount : undefined;
 
             return (
               <motion.div
@@ -238,7 +240,18 @@ export default function App() {
                   {label}
                 </div>
                 {count !== undefined && !isMember && count > 0 && (
-                  <span style={{ background: "rgba(99,130,230,0.15)", color: "var(--accent)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700, minWidth: 20, textAlign: "center" }}>
+                  <span style={{ 
+                    background: "rgba(239, 68, 68, 0.2)", 
+                    color: "#ef4444", 
+                    borderRadius: 10, 
+                    padding: "2px 8px", 
+                    fontSize: 11, 
+                    fontWeight: 800, 
+                    minWidth: 20, 
+                    textAlign: "center",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    boxShadow: "0 0 10px rgba(239, 68, 68, 0.2)"
+                  }}>
                     {count}
                   </span>
                 )}
@@ -359,11 +372,11 @@ export default function App() {
                 )}
                 {effectivePage === "events" && <PageWrapper id="events"><EventsPage /></PageWrapper>}
                 {effectivePage === "absences" && <PageWrapper id="absences"><AbsencesPage /></PageWrapper>}
-                {effectivePage === "import" && (isOfficer ? <PageWrapper id="import"><ImportPage /></PageWrapper> : <Dashboard />)}
-                {effectivePage === "auction" && (isOfficer ? <PageWrapper id="auction"><AuctionBuilder /></PageWrapper> : <Dashboard />)}
-                {effectivePage === "users" && (isAdmin ? <PageWrapper id="users"><UserManagementPage /></PageWrapper> : <Dashboard />)}
-                {effectivePage === "auditlog" && (isOfficer ? <PageWrapper id="auditlog"><AuditLogPage /></PageWrapper> : <Dashboard />)}
-                {effectivePage === "requests" && (isOfficer ? <PageWrapper id="requests"><RequestsPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "import" && ((isOfficer || isAdmin || isArchitect) ? <PageWrapper id="import"><ImportPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "auction" && ((isOfficer || isAdmin || isArchitect) ? <PageWrapper id="auction"><AuctionBuilder /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "users" && ((isAdmin || isArchitect) ? <PageWrapper id="users"><UserManagementPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "auditlog" && ((isOfficer || isAdmin || isArchitect) ? <PageWrapper id="auditlog"><AuditLogPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "requests" && ((isOfficer || isAdmin || isArchitect) ? <PageWrapper id="requests"><RequestsPage /></PageWrapper> : <Dashboard />)}
               </React.Suspense>
             </PageErrorBoundary>
           )}

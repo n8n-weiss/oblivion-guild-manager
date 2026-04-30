@@ -462,30 +462,35 @@ export const GuildProvider = ({ children, initialData }) => {
       return;
     }
     
-    // Check Cache
+    // Check Cache for Instant Hydration
     if (!force) {
       try {
         const cached = sessionStorage.getItem(GLOBAL_CACHE_KEY);
         if (cached) {
           const { data, fetchedAt } = JSON.parse(cached);
-          if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL) {
-            // Force refresh if roster is empty
-            if (!data.rosterData || data.rosterData.length === 0) {
-              console.log("GuildContext: Cache has empty roster, forcing refresh");
-            } else {
-              processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData, data.auctionSessionsData);
-              setLoading(false);
-              setSyncStatus("synced");
-              return;
-            }
+          // Hydrate immediately so UI is not blank
+          processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData, data.auctionSessionsData);
+          setSyncStatus("synced");
+          setLoading(false); // Stop the full-screen spinner as we have cached data to show
+          
+          // If cache is still very fresh, we can skip the background fetch
+          if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL && (data.rosterData && data.rosterData.length > 0)) {
+            setLoading(false);
+            return;
           }
+          // Otherwise, we continue to fetch in background without showing a loading spinner
         }
-      } catch (e) { console.warn("Cache read failed", e); }
+      } catch (err) {
+        console.warn("Cache hydration failed:", err);
+      }
     }
 
     try {
       prevData.current.isFetching = true;
-      setSyncStatus("loading");
+      // Only show loading status if we don't have cached data yet
+      if (syncStatus !== "synced") {
+        setSyncStatus("loading");
+      }
       const headers = getAuthHeaders();
       // Optimization: Initial load only gets last 60 days to keep app snappy
       const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -824,16 +829,18 @@ export const GuildProvider = ({ children, initialData }) => {
   const fetchRequests = useCallback(async (forceRefresh = false) => {
     if (!currentUser || !canSeeRequestData || isFetchingRequests) return;
     
-    // Check sessionStorage cache first (skip if force-refreshing)
+    // Check sessionStorage cache first for Instant Hydration
     if (!forceRefresh) {
       try {
         const cached = sessionStorage.getItem(REQUESTS_CACHE_KEY);
         if (cached) {
           const { requests: cachedReqs, joinRequests: cachedJoin, fetchedAt } = JSON.parse(cached);
+          // Hydrate immediately
+          setRequests(cachedReqs || []);
+          setJoinRequests(cachedJoin || []);
+          
           if (Date.now() - fetchedAt < REQUESTS_CACHE_TTL) {
-            setRequests(cachedReqs || []);
-            setJoinRequests(cachedJoin || []);
-            return; // Serve from cache — no network call
+            return; // Cache is fresh enough
           }
         }
       } catch { /* ignore bad cache */ }

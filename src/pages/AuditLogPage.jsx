@@ -15,8 +15,20 @@ function AuditLogPage() {
   const [isClearing, setIsClearing] = useState(false);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
+  const LOGS_CACHE_KEY = "guild_audit_logs_cache";
+
   useEffect(() => {
     const loadLogs = async () => {
+      // Instant Hydration from Cache
+      try {
+        const cached = sessionStorage.getItem(LOGS_CACHE_KEY);
+        if (cached) {
+          const { data } = JSON.parse(cached);
+          setLogs(data || []);
+          setLoading(false);
+        }
+      } catch (e) { console.warn("Audit logs cache failed", e); }
+
       try {
         const { data, error } = await supabase
           .from('audit_logs')
@@ -26,6 +38,7 @@ function AuditLogPage() {
         
         if (error) throw error;
         setLogs(data || []);
+        sessionStorage.setItem(LOGS_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
       } catch (err) {
         console.error("Load audit log error:", err);
       } finally {

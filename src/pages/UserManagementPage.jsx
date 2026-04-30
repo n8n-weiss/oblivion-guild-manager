@@ -137,13 +137,23 @@ function UserManagementPage() {
   const [roleFilter, setRoleFilter] = useState("all");
 
 
+  const USERS_CACHE_KEY = "guild_users_cache";
+
   const loadUsers = async () => {
+    // Instant Hydration from Cache
+    try {
+      const cached = sessionStorage.getItem(USERS_CACHE_KEY);
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        setUsers(sortUsers(data || []));
+      }
+    } catch (e) { console.warn("Users cache hydration failed", e); }
+
     try {
       const { data, error } = await supabase.from('user_roles').select('*');
       if (error) throw error;
-      console.log("DEBUG: Raw User Data from Supabase:");
-      console.table(data); 
       setUsers(sortUsers(data || []));
+      sessionStorage.setItem(USERS_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
     } catch (err) {
       console.error("DEBUG: Fetch Error:", err);
       showToast("Failed to load user list.", "error");
