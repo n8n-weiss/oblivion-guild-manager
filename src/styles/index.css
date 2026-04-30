@@ -2912,3 +2912,56 @@ tbody tr:hover {
 
 .hidden { display: none !important; }
 
+/* ── Presence Avatar UI ── */
+.presence-avatar-list {
+  display: flex;
+  align-items: center;
+  gap: -4px; /* overlap slightly */
+  padding-left: 8px;
+}
+
+.presence-avatar {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--bg-hover), var(--bg-card2));
+  border: 1px solid var(--border-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
+  cursor: help;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  margin-left: -8px; /* overlap */
+}
+
+.presence-avatar:hover {
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--accent);
+  z-index: 10;
+}
+
+.status-dot {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+}
+
+.status-online {
+  background-color: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.status-away {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}

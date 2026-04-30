@@ -102,7 +102,9 @@ export const GuildProvider = ({ children, initialData }) => {
       return Array.isArray(parsed) ? parsed : (parsed.data || defaults);
     } catch { return ["Card Album", "Light & Dark"]; }
   });
-  const [onlineUsers, setOnlineUsers] = useState({}); // mapped by memberId for easy de-duplication
+  const [onlineUsers, setOnlineUsers] = useState([]); // Array of { memberId, ign, status, page }
+  const [officerActivities, setOfficerActivities] = useState({}); // { memberId: { activityData, lastSeen } }
+  const channelRef = useRef(null);
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity] = useState([]); // recent shared metadata updates
   const [pendingAuctionConflict, setPendingAuctionConflict] = useState(null);
@@ -585,7 +587,8 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setLoadingHistory(false);
     }
-  }, [loadingHistory, hasMoreEvents, getAuthHeaders, events, supabaseUrl, showToast]);
+   
+  }, [loadingHistory, hasMoreEvents, getAuthHeaders, events, showToast]);
 
   const triggerSyncRetry = useCallback(() => {
     if (navigator.onLine) setSyncStatus("saving");
@@ -740,66 +743,21 @@ export const GuildProvider = ({ children, initialData }) => {
   // --- Smart Presence Implementation ---
   const isStaff = React.useMemo(() => {
     if (!currentUser || !userRole) return false;
-    return ['admin', 'officer', 'architect'].includes(userRole);
+    return ['admin', 'officer', 'architect'].includes(String(userRole).toLowerCase());
   }, [currentUser, userRole]);
 
+  const presenceChannelRef = useRef(null);
+
   useEffect(() => {
-    if (!currentUser || !isStaff || !myMemberId) return;
-
-    const channel = supabase.channel('guild_presence', {
-      config: { presence: { key: myMemberId } }
-    });
-
-    const handlePresenceSync = () => {
-      const state = channel.presenceState();
-      const simplified = {};
-      Object.keys(state).forEach(key => {
-        if (state[key] && state[key][0]) {
-          simplified[key] = state[key][0];
-        }
-      });
-      setOnlineUsers(simplified);
-    };
-
-    const trackPresence = (status = 'online') => {
-      const path = page || 'dashboard';
-      const myMember = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
-      const ign = myMember?.ign || currentUser.user_metadata?.ign || currentUser.email?.split('@')[0] || "Officer";
-
-      channel.track({
-        ign,
-        status,
-        page: path,
-        lastSeen: new Date().toISOString()
-      });
-    };
-
-    channel
-      .on('presence', { event: 'sync' }, handlePresenceSync)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          trackPresence('online');
-        }
-      });
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        trackPresence('away');
-      } else {
-        trackPresence('online');
+    // Presence tracking has been moved to the guild_changes broadcast system (officer_ping broadcasts)
+    // This block is kept to clean up any lingering old presence channel if it still exists
+    if (!currentUser?.id || !isStaff || !myMemberId) {
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.unsubscribe();
+        presenceChannelRef.current = null;
       }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    
-    // Also track when the 'page' state changes in context
-    trackPresence('online');
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      channel.unsubscribe();
-    };
-  }, [currentUser, isStaff, page, myMemberId]);
+    }
+  }, [currentUser?.id, isStaff, myMemberId]);
 
   useEffect(() => {
     fetchGlobalData();
@@ -918,7 +876,25 @@ export const GuildProvider = ({ children, initialData }) => {
     console.log("GuildContext: Initializing Real-time Subscriptions...");
 
     const channel = supabase
-      .channel('guild_changes')
+      .channel('guild_changes', { config: { broadcast: { self: true } } })
+      // 0. Custom Presence Broadcasts
+      .on('broadcast', { event: 'officer_ping' }, payload => {
+        const data = payload.payload;
+        if (!data || !data.memberId) return;
+        setOnlineUsers(prev => {
+          const now = Date.now();
+          const existing = prev.filter(u => u.memberId !== data.memberId && (now - u.lastPing < 25000));
+          return [...existing, { ...data, lastPing: now }];
+        });
+      })
+      .on('broadcast', { event: 'officer_activity' }, payload => {
+        const data = payload.payload;
+        if (!data || !data.memberId) return;
+        setOfficerActivities(prev => ({
+          ...prev,
+          [data.memberId]: { ...data, lastSeen: Date.now() }
+        }));
+      })
       // 1. Roster
       .on('postgres_changes', { event: '*', schema: 'public', table: 'roster' }, payload => {
         const { eventType, new: newRow, old: oldRow } = payload;
@@ -1153,27 +1129,70 @@ export const GuildProvider = ({ children, initialData }) => {
           setRequests(prev => prev.filter(r => r.id !== oldRow.id));
         }
       })
-      // 10. Notifications
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, payload => {
-        const { eventType, new: newRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          // Only add if it's for this user or 'all'
-          if (newRow.target_id === 'all' || (myMemberId && newRow.target_id === myMemberId)) {
-            const mapped = { ...newRow, id: newRow.id, ts: newRow.ts, targetId: newRow.target_id };
-            setNotifications(prev => {
-              const exists = prev.find(n => n.id === mapped.id);
-              const updated = exists ? prev.map(n => n.id === mapped.id ? mapped : n) : [mapped, ...prev];
-              return updated.slice(0, 30); // Keep last 30
-            });
-          }
-        }
+      // 10. Notifications — via WebSocket Broadcast (zero DB egress for real-time)
+      .on('broadcast', { event: 'notification_push' }, payload => {
+        const notif = payload.payload;
+        if (!notif || !notif.id) return;
+        // Only show if it targets this user or everyone
+        if (notif.target_id !== 'all' && notif.target_id !== myMemberId) return;
+        setNotifications(prev => {
+          const exists = prev.find(n => n.id === notif.id);
+          const updated = exists ? prev.map(n => n.id === notif.id ? notif : n) : [notif, ...prev];
+          return updated.slice(0, 30);
+        });
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Ping our own presence to the channel immediately, then every 10 seconds
+          const pingPresence = () => {
+            if (!myMemberId) return;
+            const path = window.location.pathname.replace('/', '') || 'dashboard';
+            const member = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
+            const name = member?.ign || currentUser.user_metadata?.ign || currentUser.email?.split('@')[0] || "Officer";
+            
+            const payload = { memberId: myMemberId, ign: name, page: path, status: document.hidden ? 'away' : 'online' };
+            channel.send({ type: 'broadcast', event: 'officer_ping', payload }).catch(() => {});
+            
+            // Self-update
+            setOnlineUsers(prev => {
+              const now = Date.now();
+              const existing = prev.filter(u => u.memberId !== myMemberId && (now - u.lastPing < 25000));
+              return [...existing, { ...payload, lastPing: now }];
+            });
+          };
+          
+          pingPresence();
+          channel.pingInterval = setInterval(pingPresence, 10000);
+        }
+      });
+
+    // Cull stale offline users every 5 seconds
+    const cullInterval = setInterval(() => {
+      const now = Date.now();
+      setOnlineUsers(prev => {
+        const active = prev.filter(u => (now - u.lastPing < 25000));
+        return active.length !== prev.length ? active : prev;
+      });
+      setOfficerActivities(prev => {
+        let changed = false;
+        const culled = {};
+        Object.entries(prev).forEach(([key, val]) => {
+          if (now - val.lastSeen < 10000) culled[key] = val; // Activities expire after 10 seconds
+          else changed = true;
+        });
+        return changed ? culled : prev;
+      });
+    }, 5000);
+
+    channelRef.current = channel;
 
     return () => {
+      if (channel.pingInterval) clearInterval(channel.pingInterval);
+      clearInterval(cullInterval);
       supabase.removeChannel(channel);
+      channelRef.current = null;
     };
-  }, [currentUser, authLoading, loading, myMemberId, fetchGlobalData]);
+  }, [currentUser, authLoading, loading, myMemberId, fetchGlobalData, isStaff]);
 
 
 
@@ -1553,30 +1572,7 @@ export const GuildProvider = ({ children, initialData }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- authLoading/currentUser/getAuthHeaders/loading/syncStatus excluded intentionally: adding them would re-trigger the 8s save debounce on every auth state change
   }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
-  const sendNotification = useCallback(async (targetId, title, message, type = "info") => {
-    const headers = getAuthHeaders();
 
-    const notif = {
-      target_id: targetId,
-      title,
-      message,
-      type,
-      ts: new Date().toISOString(),
-      readBy: []
-    };
-    try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/notifications`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify([notif])
-      });
-      if (!res.ok) throw new Error(`Notification failed: ${res.status}`);
-      showToast("Notification sent", "success");
-    } catch(err) {
-      console.error("Supabase notification error:", err);
-      showToast("Failed to send notification", "error");
-    }
-  }, [getAuthHeaders, showToast]);
 
    const sendDiscordEmbed = useCallback(async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
      const catConfig = category ? discordConfig.notifications?.[category] : null;
@@ -1714,18 +1710,6 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   }, [discordConfig, isAdmin, showToast]);
 
-  const markNotifRead = useCallback(async (id) => {
-    try {
-      const headers = getAuthHeaders();
-      await fetch(`${supabaseUrl}/rest/v1/notifications?id=eq.${id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ read_at: new Date().toISOString() })
-      });
-    } catch(err) {
-      console.error(err);
-    }
-  }, [getAuthHeaders]);
 
   const resetMonthlyScores = useCallback(async () => {
     setLoading(true);
@@ -1808,7 +1792,8 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit registration", "error");
       return false;
     }
-  }, [getAuthHeaders, members, joinRequests, sendDiscordEmbed, showToast]);
+   
+  }, [getAuthHeaders, members, joinRequests, showToast]);
 
   const submitReactivationRequest = useCallback(async (data) => {
     try {
@@ -1860,7 +1845,8 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit reactivation request", "error");
       return false;
     }
-  }, [getAuthHeaders, members, joinRequests, sendDiscordEmbed, showToast]);
+   
+  }, [getAuthHeaders, members, joinRequests, showToast]);
 
   const approveJoinRequest = useCallback(async (requestId) => {
     try {
@@ -2129,7 +2115,8 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit request", "error");
       return false;
     }
-  }, [getAuthHeaders, members, requests, sendDiscordEmbed, showToast]);
+   
+  }, [getAuthHeaders, members, requests, showToast]);
 
   const approveRequest = useCallback(async (requestId) => {
     try {
@@ -2452,6 +2439,82 @@ export const GuildProvider = ({ children, initialData }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storageKey is a stable string derived from guild config; not reactive
   }, [showToast]);
 
+  // ─── Notification System ───────────────────────────────────────────────────
+  // Broadcast a notification to all online officers/members (zero DB egress)
+  const broadcastNotification = useCallback((notifPayload) => {
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'notification_push',
+        payload: notifPayload
+      }).catch(() => {});
+    }
+  }, []);
+
+  const sendNotification = useCallback(async (targetId, type, message, metadata = {}) => {
+    try {
+      const headers = getAuthHeaders();
+      const notif = {
+        id: crypto.randomUUID?.() || `notif_${Date.now()}`,
+        target_id: targetId,
+        type,
+        message,
+        metadata,
+        ts: Date.now(),
+        read: false
+      };
+
+      // 1. Persist to DB (for offline officers who miss the broadcast)
+      await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify([notif])
+      });
+
+      // 2. Broadcast to all online users (zero egress, instant delivery)
+      broadcastNotification({ ...notif, targetId: notif.target_id });
+
+      // 3. Update own state immediately
+      if (notif.target_id === 'all' || notif.target_id === myMemberId) {
+        setNotifications(prev => [{ ...notif, targetId: notif.target_id }, ...prev].slice(0, 30));
+      }
+
+      return true;
+    } catch (err) {
+      console.error('sendNotification failed:', err);
+      return false;
+    }
+  }, [getAuthHeaders, myMemberId, broadcastNotification]);
+
+  const markNotifRead = useCallback(async (notifId) => {
+    try {
+      const headers = getAuthHeaders();
+      // Optimistically update local state first
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
+      // Persist to DB silently
+      await fetch(`${supabaseUrl}/rest/v1/notifications?id=eq.${notifId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ read: true })
+      });
+    } catch (err) {
+      console.error('markNotifRead failed:', err);
+    }
+  }, [getAuthHeaders]);
+
+  // Collaboration Broadcast Helper
+  const broadcastActivity = useCallback((activityPayload) => {
+    if (channelRef.current && myMemberId) {
+      const myMember = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
+      const name = myMember?.ign || currentUser?.user_metadata?.ign || currentUser?.email?.split('@')[0] || "Officer";
+      
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'officer_activity',
+        payload: { memberId: myMemberId, ign: name, ...activityPayload }
+      }).catch(() => {}); // Fire and forget
+    }
+  }, [myMemberId, currentUser]);
 
   const value = React.useMemo(() => ({
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
@@ -2486,7 +2549,8 @@ export const GuildProvider = ({ children, initialData }) => {
     fetchGlobalData, fetchRequests, isFetchingRequests,
     hasMoreEvents, loadingHistory, fetchFullHistory,
     auctionBids, setAuctionBids,
-    isOfflineMode, setIsOfflineMode
+    isOfflineMode, setIsOfflineMode,
+    officerActivities, broadcastActivity
   }), [
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers, page, toast, members, events, auctionSessions, attendance, performance, absences,
@@ -2497,7 +2561,8 @@ export const GuildProvider = ({ children, initialData }) => {
     isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests,
     hasMoreEvents, loadingHistory, fetchFullHistory,
     deleteEvent, deleteAuctionSession, deleteMember,
-    approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata
+    approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
+    officerActivities, broadcastActivity
   ]);
 
   return (

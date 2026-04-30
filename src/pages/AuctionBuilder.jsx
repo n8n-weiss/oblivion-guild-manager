@@ -368,7 +368,8 @@ function AuctionBuilder() {
     resourceCategories, setResourceCategories,
     sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig, isOfflineMode,
     memberLootStats, auctionWishlist,
-    members, auctionSessions, setAuctionSessions, deleteAuctionSession
+    members, auctionSessions, setAuctionSessions, deleteAuctionSession,
+    officerActivities, broadcastActivity
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -1892,14 +1893,37 @@ function AuctionBuilder() {
                         {session.columns.map(col => {
                           const tags = getCellTags(m.memberId, col.id);
                           const isEditing = editingCell?.memberId === m.memberId && editingCell?.colId === col.id;
+                          
+                          // Calculate if another officer is hovering this cell
+                          const activeCursors = Object.values(officerActivities || {}).filter(a => 
+                              a.type === 'auction_focus' && 
+                              a.sessionId === session.id && 
+                              a.targetMemberId === m.memberId && 
+                              a.colId === col.id &&
+                              a.memberId !== myMemberId &&
+                              (Date.now() - a.lastSeen < 10000)
+                          );
+                          const hasCursor = activeCursors.length > 0;
+                          
                           return (
-                            <td key={col.id} style={{ 
-                                padding: "10px 16px", borderLeft: "1px solid var(--border)", verticalAlign: "top",
-                                background: isEditing ? "rgba(64,201,122,0.05)" : "transparent",
-                                border: isEditing ? "2px solid rgba(64,201,122,0.4)" : "none",
-                                boxShadow: isEditing ? "inset 0 0 10px rgba(64,201,122,0.1)" : "none",
+                            <td key={col.id} 
+                                onMouseEnter={() => {
+                                  if (broadcastActivity) {
+                                    broadcastActivity({ type: 'auction_focus', sessionId: session.id, targetMemberId: m.memberId, colId: col.id });
+                                  }
+                                }}
+                                style={{ 
+                                padding: "10px 16px", borderLeft: "1px solid var(--border)", verticalAlign: "top", position: "relative",
+                                background: isEditing ? "rgba(64,201,122,0.05)" : (hasCursor ? "rgba(99,130,230,0.05)" : "transparent"),
+                                border: isEditing ? "2px solid rgba(64,201,122,0.4)" : (hasCursor ? "2px solid var(--accent)" : "none"),
+                                boxShadow: isEditing ? "inset 0 0 10px rgba(64,201,122,0.1)" : (hasCursor ? "inset 0 0 10px rgba(99,130,230,0.2)" : "none"),
                                 transition: "all 0.2s"
                               }}>
+                              {hasCursor && (
+                                <div style={{ position: "absolute", top: -10, right: 4, background: "var(--accent)", color: "white", fontSize: 9, padding: "2px 6px", borderRadius: 4, fontWeight: 800, zIndex: 10, animation: "fade-in 0.2s" }}>
+                                  {activeCursors[0].ign}
+                                </div>
+                              )}
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, cursor: "default", minHeight: 28, alignItems: "flex-start" }}>
                                   {tags.map((tag, ti) => {
                                     const tc = tagColor(tag, col.name);

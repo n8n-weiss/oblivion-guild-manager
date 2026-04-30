@@ -172,6 +172,35 @@ serve(async (req) => {
         }] 
       };
     }
+    else if (table === 'requests' && type === 'INSERT') {
+      const config = notifications.vanguard || {};
+      if (config.enabled === false) return new Response("Disabled", { status: 200 });
+      webhookUrl = config.webhookUrl || globalWebhookUrl;
+      const mentionsStr = getMentionsStr(config.mentions);
+      
+      const tpl = templates.vanguard || {};
+      const data = { ign: record.requester_ign };
+
+      const oldData = record.old_data || {};
+      const newData = record.new_data || {};
+      const changesFields = [];
+
+      if (oldData.ign !== newData.ign) changesFields.push({ name: "IGN", value: `~~${oldData.ign || "—"}~~ ➔ **${newData.ign || "—"}**`, inline: false });
+      if (oldData.class !== newData.class) changesFields.push({ name: "Class", value: `~~${oldData.class || "—"}~~ ➔ **${newData.class || "—"}**`, inline: false });
+      if (oldData.role !== newData.role) changesFields.push({ name: "Role", value: `~~${oldData.role || "—"}~~ ➔ **${newData.role || "—"}**`, inline: false });
+
+      discordPayload = { 
+        content: mentionsStr,
+        embeds: [{ 
+          title: replacePlaceholders(tpl.title || "🛡️ Vanguard Request", data), 
+          description: replacePlaceholders(tpl.description || `Member **${data.ign}** has submitted a profile update request.`, data),
+          color: 0x9b59b6, 
+          fields: changesFields.length > 0 ? changesFields : [{ name: "Changes", value: "No visible changes." }],
+          footer: { text: `Member ID: ${record.member_id}` },
+          thumbnail: { url: "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" }
+        }] 
+      };
+    }
     else if (table === 'events' && type === 'INSERT') {
       const config = notifications.events || {};
       if (config.enabled === false) return new Response("Disabled", { status: 200 });

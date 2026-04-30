@@ -12,7 +12,8 @@ function RequestsPage() {
   const { 
     requests, approveRequest, rejectRequest,
     joinRequests, approveJoinRequest, rejectJoinRequest,
-    isOfficer, members, currentUser, fetchRequests, isFetchingRequests 
+    isOfficer, members, currentUser, fetchRequests, isFetchingRequests,
+    officerActivities, broadcastActivity, myMemberId
   } = useGuild();
   
   const [subTab, setSubTab] = useState("profile"); // profile, join, reactivation
@@ -172,14 +173,35 @@ function RequestsPage() {
                 if (r.oldData?.class !== r.newData?.class) changes.push({ label: 'Class', old: r.oldData?.class || "—", new: r.newData?.class || "—" });
                 if (r.oldData?.role !== r.newData?.role) changes.push({ label: 'Role', old: r.oldData?.role || "—", new: r.newData?.role || "—" });
 
+                const activeReviewers = Object.values(officerActivities || {}).filter(a =>
+                  a.type === 'reviewing_request' &&
+                  a.requestId === r.id &&
+                  a.memberId !== myMemberId &&
+                  (Date.now() - a.lastSeen < 10000)
+                );
+                const hasReviewers = activeReviewers.length > 0;
+
                 return (
-                  <div key={r.id} className="card animate-slide-up" style={{ animationDelay: `${idx * 0.1}s`, padding: 0, overflow: 'hidden' }}>
-                    <div style={{ padding: 20, background: 'rgba(99, 130, 230, 0.05)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <MemberAvatar ign={r.requesterIgn} index={mIndex} size={48} />
-                      <div>
-                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.requesterIgn}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{r.memberId}</div>
+                  <div key={r.id} 
+                    className="card animate-slide-up" 
+                    style={{ animationDelay: `${idx * 0.1}s`, padding: 0, overflow: 'hidden', border: hasReviewers ? '1px solid var(--accent)' : '1px solid var(--border)' }}
+                    onMouseEnter={() => {
+                      if (broadcastActivity) broadcastActivity({ type: 'reviewing_request', requestId: r.id });
+                    }}
+                  >
+                    <div style={{ padding: 20, background: hasReviewers ? 'rgba(99, 130, 230, 0.15)' : 'rgba(99, 130, 230, 0.05)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <MemberAvatar ign={r.requesterIgn} index={mIndex} size={48} />
+                        <div>
+                          <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.requesterIgn}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{r.memberId}</div>
+                        </div>
                       </div>
+                      {hasReviewers && (
+                        <div style={{ background: 'var(--accent)', color: 'white', fontSize: 10, padding: '4px 8px', borderRadius: 20, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4, animation: 'fade-in 0.2s' }}>
+                          <Icon name="eye" size={12} /> {activeReviewers[0].ign} is reviewing
+                        </div>
+                      )}
                     </div>
                     
                     <div style={{ padding: 20 }}>
@@ -237,15 +259,36 @@ function RequestsPage() {
                 const dups = getDuplicateInfo(r, members);
                 const isDup = dups.length > 0;
 
+                const activeReviewers = Object.values(officerActivities || {}).filter(a =>
+                  a.type === 'reviewing_request' &&
+                  a.requestId === r.id &&
+                  a.memberId !== myMemberId &&
+                  (Date.now() - a.lastSeen < 10000)
+                );
+                const hasReviewers = activeReviewers.length > 0;
+
                 return (
-                  <div key={r.id} className="card animate-slide-up" style={{ 
-                    animationDelay: `${idx * 0.1}s`, padding: 0, overflow: 'hidden', 
-                    border: isDup ? '1px solid rgba(224, 80, 80, 0.4)' : '1px solid rgba(130,90,230,0.2)',
-                    boxShadow: isDup ? '0 0 20px rgba(224, 80, 80, 0.1)' : 'none'
-                  }}>
+                  <div key={r.id} 
+                    className="card animate-slide-up" 
+                    style={{ 
+                      animationDelay: `${idx * 0.1}s`, padding: 0, overflow: 'hidden', 
+                      border: isDup ? '1px solid rgba(224, 80, 80, 0.4)' : (hasReviewers ? '1px solid var(--accent)' : '1px solid rgba(130,90,230,0.2)'),
+                      boxShadow: isDup ? '0 0 20px rgba(224, 80, 80, 0.1)' : (hasReviewers ? '0 0 20px rgba(99, 130, 230, 0.15)' : 'none')
+                    }}
+                    onMouseEnter={() => {
+                      if (broadcastActivity) broadcastActivity({ type: 'reviewing_request', requestId: r.id });
+                    }}
+                  >
                     <div style={{ padding: 20, background: isDup ? 'linear-gradient(135deg, rgba(224, 80, 80, 0.1), transparent)' : 'linear-gradient(135deg, rgba(130,90,230,0.1), transparent)', borderBottom: `1px solid ${isDup ? 'rgba(224,80,80,0.1)' : 'rgba(130,90,230,0.1)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.ign}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{r.ign}</div>
+                          {hasReviewers && (
+                            <div style={{ background: 'var(--accent)', color: 'white', fontSize: 9, padding: '2px 6px', borderRadius: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4, animation: 'fade-in 0.2s' }}>
+                              <Icon name="eye" size={10} /> {activeReviewers[0].ign} is reviewing
+                            </div>
+                          )}
+                        </div>
                         <div style={{ fontSize: 12, color: isDup ? 'var(--red)' : 'var(--accent)', fontWeight: 700 }}>UID: {r.uid}</div>
                       </div>
                       <div style={{ background: isDup ? 'rgba(224, 80, 80, 0.2)' : 'rgba(130,90,230,0.2)', padding: '4px 8px', borderRadius: 6, fontSize: 10, color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>
