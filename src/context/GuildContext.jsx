@@ -1511,6 +1511,9 @@ export const GuildProvider = ({ children, initialData }) => {
               type: e.eventType || e.type,
               title: e.title,
               auditor: e.auditor,
+              gl_mode: e.glMode,
+              battlelog_audit: e.battlelogAudit,
+              digest_meta: e.digestMeta,
               attendance_data: e.attendanceData,
               performance_data: e.performanceData,
               eo_ratings_data: e.eoRatingsData
@@ -1982,6 +1985,8 @@ export const GuildProvider = ({ children, initialData }) => {
         return updated;
       });
 
+      sessionStorage.removeItem(GLOBAL_CACHE_KEY);
+
       showToast("Event deleted permanently", "success");
       return true;
     } catch (err) {
@@ -2048,6 +2053,8 @@ export const GuildProvider = ({ children, initialData }) => {
         return updated;
       });
 
+      sessionStorage.removeItem(GLOBAL_CACHE_KEY);
+
       showToast("Auction session deleted permanently", "success");
       return true;
     } catch (err) {
@@ -2071,6 +2078,8 @@ export const GuildProvider = ({ children, initialData }) => {
         prevData.current.members = [...updated];
         return updated;
       });
+
+      sessionStorage.removeItem(GLOBAL_CACHE_KEY);
 
       showToast("Member deleted permanently", "success");
       return true;
