@@ -1158,6 +1158,15 @@ export const GuildProvider = ({ children, initialData }) => {
       });
     }, 5000);
 
+    // --- Heartbeat Sync (15 minutes) ---
+    // Background re-fetch to ensure local state hasn't drifted from DB
+    const heartbeatInterval = setInterval(() => {
+      if (isStaff && !document.hidden && !isIdle) {
+        console.log("GuildContext: Heartbeat Sync triggered.");
+        fetchGlobalData(false); // Background fetch (silent)
+      }
+    }, 15 * 60 * 1000); 
+
     // --- Idle Tracking (5 minutes) ---
     const resetIdleTimer = () => {
       setIsIdle(false);
@@ -1177,6 +1186,7 @@ export const GuildProvider = ({ children, initialData }) => {
     return () => {
       if (channel.pingInterval) clearInterval(channel.pingInterval);
       clearInterval(cullInterval);
+      clearInterval(heartbeatInterval);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       window.removeEventListener('mousemove', resetIdleTimer);
       window.removeEventListener('mousedown', resetIdleTimer);
