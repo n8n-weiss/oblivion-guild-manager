@@ -1012,6 +1012,21 @@ export const GuildProvider = ({ children, initialData }) => {
                : [...prev, data];
            });
         }
+        else if (table === 'requests' || table === 'join_requests') {
+           fetchRequests(); 
+        }
+        else if (table === 'notifications') {
+            if (data.target_id === 'all' || data.target_id === myMemberId || data.targetId === myMemberId) {
+              setNotifications(prev => {
+                const exists = prev.find(n => n.id === data.id);
+                return exists ? prev.map(n => n.id === data.id ? data : n) : [data, ...prev];
+              });
+              // Show toast for incoming notifications
+              if (data.id && !data.isRead) {
+                showToast(data.message || "New notification", "info");
+              }
+            }
+        }
       })
       // 6. Metadata (Auctions, Discord Config, etc.)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metadata' }, payload => {
@@ -1852,6 +1867,9 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!reqRes.ok) throw new Error(`Join request cleanup failed: ${reqRes.status}`);
 
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+      if (broadcastStateSync) {
+        broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
+      }
       sessionStorage.removeItem("requests_cache_v1");
 
       if (r.request_type !== "reactivation" && r.requestType !== "reactivation") {
@@ -1879,7 +1897,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to approve registration", "error");
       return false;
     }
-  }, [getAuthHeaders, joinRequests, members, sendDiscordEmbed, showToast, fetchGlobalData]);
+  }, [getAuthHeaders, joinRequests, members, sendDiscordEmbed, showToast, fetchGlobalData, broadcastStateSync]);
 
   const deleteEvent = useCallback(async (eventId) => {
     try {
@@ -1944,6 +1962,9 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
 
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+      if (broadcastStateSync) {
+        broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
+      }
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Registration rejected and removed', 'info');
       return true;
@@ -1952,7 +1973,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to reject registration', 'error');
       return false;
     }
-  }, [getAuthHeaders, showToast]);
+  }, [getAuthHeaders, showToast, broadcastStateSync]);
 
   const deleteJoinRequest = useCallback(async (requestId) => {
     try {
@@ -2113,6 +2134,9 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!reqRes.ok) throw new Error(`Request cleanup failed: ${reqRes.status}`);
 
       setRequests(prev => prev.filter(x => x.id !== requestId));
+      if (broadcastStateSync) {
+        broadcastStateSync('requests', { id: requestId }, 'DELETE');
+      }
       sessionStorage.removeItem("requests_cache_v1");
       showToast(`Request approved for ${r.requester_ign}`, 'success');
       return true;
@@ -2121,7 +2145,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to approve request', 'error');
       return false;
     }
-  }, [getAuthHeaders, requests, members, showToast]);
+  }, [getAuthHeaders, requests, members, showToast, broadcastStateSync]);
 
   const rejectRequest = useCallback(async (requestId) => {
     try {
@@ -2134,6 +2158,9 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
 
       setRequests(prev => prev.filter(r => r.id !== requestId));
+      if (broadcastStateSync) {
+        broadcastStateSync('requests', { id: requestId }, 'DELETE');
+      }
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Request rejected and removed', 'info');
       return true;
@@ -2142,7 +2169,7 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast('Failed to reject request', 'error');
       return false;
     }
-  }, [getAuthHeaders, showToast]);
+  }, [getAuthHeaders, showToast, broadcastStateSync]);
 
   const deleteRequest = useCallback(async (requestId) => {
     try {
@@ -2406,15 +2433,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // ─── Notification System ───────────────────────────────────────────────────
   // Broadcast a notification to all online officers/members (zero DB egress)
-  const broadcastNotification = useCallback((notifPayload) => {
-    if (channelRef.current) {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'notification_push',
-        payload: notifPayload
-      }).catch(() => {});
-    }
-  }, []);
+
 
   const sendNotification = useCallback(async (targetId, type, message, metadata = {}) => {
     try {
@@ -2437,9 +2456,11 @@ export const GuildProvider = ({ children, initialData }) => {
       });
 
       // 2. Broadcast to all online users (zero egress, instant delivery)
-      broadcastNotification({ ...notif, targetId: notif.target_id });
+      if (broadcastStateSync) {
+        broadcastStateSync('notifications', { ...notif, targetId: notif.target_id });
+      }
 
-      // 3. Update own state immediately
+      // 3. Update own state immediately if we are the target
       if (notif.target_id === 'all' || notif.target_id === myMemberId) {
         setNotifications(prev => [{ ...notif, targetId: notif.target_id }, ...prev].slice(0, 30));
       }
@@ -2449,13 +2470,20 @@ export const GuildProvider = ({ children, initialData }) => {
       console.error('sendNotification failed:', err);
       return false;
     }
-  }, [getAuthHeaders, myMemberId, broadcastNotification]);
+  }, [getAuthHeaders, myMemberId, broadcastStateSync]);
 
   const markNotifRead = useCallback(async (notifId) => {
     try {
       const headers = getAuthHeaders();
       // Optimistically update local state first
-      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
+      setNotifications(prev => {
+        const next = prev.map(n => n.id === notifId ? { ...n, isRead: true } : n);
+        if (broadcastStateSync) {
+          const updated = next.find(n => n.id === notifId);
+          if (updated) broadcastStateSync('notifications', updated);
+        }
+        return next;
+      });
       // Persist to DB silently
       await fetch(`${supabaseUrl}/rest/v1/notifications?id=eq.${notifId}`, {
         method: 'PATCH',
@@ -2465,7 +2493,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch (err) {
       console.error('markNotifRead failed:', err);
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, broadcastStateSync]);
 
   // Collaboration Broadcast Helper
   const broadcastActivity = useCallback((activityPayload) => {
