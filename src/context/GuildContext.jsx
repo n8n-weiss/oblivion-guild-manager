@@ -739,17 +739,15 @@ export const GuildProvider = ({ children, initialData }) => {
 
   // --- Smart Presence Implementation ---
   const isStaff = React.useMemo(() => {
-    if (!currentUser) return false;
-    const rank = String(currentUser.guildRank || "").toLowerCase();
-    const staffRanks = ["officer", "charisma baby", "baby charisma", "guild master", "vice guild master", "commander", "system architect", "creator"];
-    return staffRanks.some(r => rank.includes(r));
-  }, [currentUser]);
+    if (!currentUser || !userRole) return false;
+    return ['admin', 'officer', 'architect'].includes(userRole);
+  }, [currentUser, userRole]);
 
   useEffect(() => {
-    if (!currentUser || !isStaff) return;
+    if (!currentUser || !isStaff || !myMemberId) return;
 
     const channel = supabase.channel('guild_presence', {
-      config: { presence: { key: currentUser.memberId } }
+      config: { presence: { key: myMemberId } }
     });
 
     const handlePresenceSync = () => {
@@ -765,8 +763,11 @@ export const GuildProvider = ({ children, initialData }) => {
 
     const trackPresence = (status = 'online') => {
       const path = page || 'dashboard';
+      const myMember = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
+      const ign = myMember?.ign || currentUser.user_metadata?.ign || currentUser.email?.split('@')[0] || "Officer";
+
       channel.track({
-        ign: currentUser.ign,
+        ign,
         status,
         page: path,
         lastSeen: new Date().toISOString()
@@ -798,7 +799,7 @@ export const GuildProvider = ({ children, initialData }) => {
       document.removeEventListener('visibilitychange', handleVisibility);
       channel.unsubscribe();
     };
-  }, [currentUser, isStaff, page]);
+  }, [currentUser, isStaff, page, myMemberId]);
 
   useEffect(() => {
     fetchGlobalData();
