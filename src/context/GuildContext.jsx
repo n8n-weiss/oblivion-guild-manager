@@ -1069,10 +1069,15 @@ export const GuildProvider = ({ children, initialData }) => {
       })
       // 7. Auction Bids / Wishlist
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_bids' }, payload => {
-        const { eventType } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE' || eventType === 'DELETE') {
-          // Instead of incremental update, just trigger refresh to keep complex logic safe
-          fetchGlobalData(); 
+        const { eventType, new: newRow, old: oldRow } = payload;
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const mapped = { id: newRow.member_id, bids: newRow.bids || [] };
+          setAuctionWishlist(prev => {
+            const exists = prev.find(p => p.id === mapped.id);
+            return exists ? prev.map(p => p.id === mapped.id ? mapped : p) : [...prev, mapped];
+          });
+        } else if (eventType === 'DELETE') {
+          setAuctionWishlist(prev => prev.filter(p => p.id !== oldRow.member_id));
         }
       })
       // 8. Join Requests

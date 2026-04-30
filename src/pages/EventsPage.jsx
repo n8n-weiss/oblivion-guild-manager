@@ -11,7 +11,8 @@ function EventsPage() {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
     showToast, isAdmin, currentUser, sendDiscordEmbed,
-    hasMoreEvents, loadingHistory, fetchFullHistory, broadcastStateSync
+    hasMoreEvents, loadingHistory, fetchFullHistory, broadcastStateSync,
+    officerActivities, broadcastActivity, myMemberId
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const officerPool = React.useMemo(() => {
@@ -280,6 +281,15 @@ function EventsPage() {
     if (!currentUser) return;
   // Reminders are now handled by Server-Side Cron Job.
   }, [events, setEvents, currentUser]);
+
+  // Broadcast auditing activity
+  React.useEffect(() => {
+    if (selectedEvent) {
+      broadcastActivity({ action: "auditing_event", eventId: selectedEvent.eventId });
+    } else {
+      broadcastActivity({ action: "idle" });
+    }
+  }, [selectedEvent, broadcastActivity]);
 
   const toggleAtt = (memberId, eventId) => {
     const mId = (memberId || "").trim().toLowerCase();
@@ -638,6 +648,16 @@ function EventsPage() {
                                       <div className="flex items-center justify-between">
                                         <div className="text-[10px] text-muted">{present}/{evAtt.length} present</div>
                                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                          {/* Auditors Indicator */}
+                                          {Object.values(officerActivities || {})
+                                            .filter(a => a.memberId !== myMemberId && a.action === 'auditing_event' && a.eventId === ev.eventId && (Date.now() - (a.lastSeen || 0) < 30000))
+                                            .map(a => (
+                                              <span key={a.memberId} title={`${a.ign} is auditing...`} 
+                                                style={{ fontSize: 10, animation: "pulse 2s infinite", filter: "drop-shadow(0 0 2px var(--accent))" }}>
+                                                👁️
+                                              </span>
+                                            ))
+                                          }
                                           {getAuditStatus(ev) === "submitted" && <span title="Audited" style={{ color: "var(--green)", fontSize: 10 }}>●</span>}
                                           {getAuditStatus(ev) === "overdue" && <span title="Overdue" style={{ color: "var(--red)", fontSize: 10 }}>●</span>}
                                         </div>
