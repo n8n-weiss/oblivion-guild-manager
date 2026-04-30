@@ -1004,6 +1004,14 @@ export const GuildProvider = ({ children, initialData }) => {
               });
            }
         }
+        else if (table === 'wishlist') {
+           setAuctionWishlist(prev => {
+             const exists = prev.find(p => p.id === data.id);
+             return exists 
+               ? prev.map(p => p.id === data.id ? data : p)
+               : [...prev, data];
+           });
+        }
       })
       // 6. Metadata (Auctions, Discord Config, etc.)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metadata' }, payload => {
@@ -2260,8 +2268,11 @@ export const GuildProvider = ({ children, initialData }) => {
 
       setAuctionWishlist(prev => {
         const existing = prev.find(p => p.id === memberId);
-        if (existing) return prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p);
-        return [...prev, { id: memberId, bids: updatedBids }];
+        const updated = existing ? prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p) : [...prev, { id: memberId, bids: updatedBids }];
+        if (broadcastStateSync) {
+          broadcastStateSync('wishlist', { id: memberId, bids: updatedBids });
+        }
+        return updated;
       });
 
       return true;
@@ -2269,7 +2280,7 @@ export const GuildProvider = ({ children, initialData }) => {
       console.error("Wishlist submission failed:", err);
       return false;
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, broadcastStateSync]);
 
   const updateWishlistMetadata = useCallback(async (memberId, resourceType, metadata) => {
     try {
@@ -2294,11 +2305,17 @@ export const GuildProvider = ({ children, initialData }) => {
         body: JSON.stringify({ member_id: memberId, bids: updatedBids })
       });
 
-      setAuctionWishlist(prev => prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p));
+      setAuctionWishlist(prev => {
+        const updated = prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p);
+        if (broadcastStateSync) {
+          broadcastStateSync('wishlist', { id: memberId, bids: updatedBids });
+        }
+        return updated;
+      });
     } catch (err) {
       console.error("Wishlist metadata update failed:", err);
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, broadcastStateSync]);
 
   const removeWishlistRequest = useCallback(async (memberId, resourceType) => {
     try {
@@ -2321,11 +2338,17 @@ export const GuildProvider = ({ children, initialData }) => {
         body: JSON.stringify({ member_id: memberId, bids: updatedBids })
       });
 
-      setAuctionWishlist(prev => prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p));
+      setAuctionWishlist(prev => {
+        const updated = prev.map(p => p.id === memberId ? { id: memberId, bids: updatedBids } : p);
+        if (broadcastStateSync) {
+          broadcastStateSync('wishlist', { id: memberId, bids: updatedBids });
+        }
+        return updated;
+      });
     } catch (err) {
       console.error("Wishlist removal failed:", err);
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, broadcastStateSync]);
 
   const fetchHistoricalData = React.useCallback(async (startDate = null, endDate = null) => {
     try {

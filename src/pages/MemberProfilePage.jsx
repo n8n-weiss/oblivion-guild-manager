@@ -137,7 +137,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
     auctionSessions, migrateMemberData,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
-    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData
+    historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData,
+    broadcastStateSync
   } = useGuild();
 
   useEffect(() => {
@@ -428,6 +429,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       onlineStatus: "No"
     };
     setAbsences(prev => [...prev, newAbsence]);
+    if (broadcastStateSync) {
+      broadcastStateSync('absences', newAbsence);
+    }
     showToast(`Absence filed for ${nextEvent.eventDate}`, "success");
     // writeAuditLog removed (member-initiated)
   };
@@ -528,6 +532,9 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     const id = `ABS${Date.now()}`;
     const newAbsence = { ...absenceForm, memberId: member.memberId, id };
     setAbsences(prev => [...prev, newAbsence]);
+    if (broadcastStateSync) {
+      broadcastStateSync('absences', newAbsence);
+    }
     showToast("Absence filed successfully!", "success");
     // writeAuditLog removed (member-initiated)
     setShowAbsenceForm(false);
@@ -541,6 +548,10 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         : m
     );
     setMembers(updatedMembers);
+    if (broadcastStateSync) {
+      const updatedMember = updatedMembers.find(m => m.memberId === member.memberId);
+      if (updatedMember) broadcastStateSync('roster', updatedMember);
+    }
     setIsEditingBio(false);
     showToast("Profile updated!", "success");
   };
@@ -550,6 +561,10 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       m.memberId === member.memberId ? { ...m, isDonator: !m.isDonator } : m
     );
     setMembers(updatedMembers);
+    if (broadcastStateSync) {
+      const updatedMember = updatedMembers.find(m => m.memberId === member.memberId);
+      if (updatedMember) broadcastStateSync('roster', updatedMember);
+    }
     showToast(member.isDonator ? "Patron badge revoked." : "Patron badge granted!", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "patron_toggle", `${member.isDonator ? "Revoked" : "Granted"} Patron status for ${member.ign}`);
   };
