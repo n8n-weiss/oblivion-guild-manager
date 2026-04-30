@@ -516,7 +516,7 @@ export const GuildProvider = ({ children, initialData }) => {
       processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, [], [], [], auctionSessionsData);
 
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-        data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData },
+        data: { rosterData, eventsData, absenceData, metaData, bidsData, auctionSessionsData },
         fetchedAt: Date.now()
       }));
 

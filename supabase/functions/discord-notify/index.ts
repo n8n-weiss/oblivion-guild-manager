@@ -143,6 +143,26 @@ serve(async (req) => {
             description: replacePlaceholders(tpl.description || `The absence record for **${displayName}** on **${record.event_date}** has been cancelled. They are now expected to attend.`, data) 
           }] 
         };
+      } else if (type === 'UPDATE') {
+        const oldRecord = payload.old_record || {};
+        const tpl = templates.absence_updated || {};
+        const changes = [];
+        if (oldRecord.event_date !== record.event_date) changes.push(`Date: ~~${oldRecord.event_date}~~ ➔ **${record.event_date}**`);
+        if (oldRecord.reason !== record.reason) changes.push(`Reason: "${record.reason}"`);
+        if (oldRecord.online_status !== record.online_status) changes.push(`Online: **${record.online_status}**`);
+
+        if (changes.length > 0) {
+          discordPayload = {
+            content: mentionsStr,
+            embeds: [{
+              title: replacePlaceholders(tpl.title || "📝 Absence Record Updated", data),
+              description: replacePlaceholders(tpl.description || `Absence record for **${displayName}** has been modified.`, data),
+              color: 0xe67e22,
+              fields: [{ name: "Changes", value: changes.join("\n") }],
+              thumbnail: { url: "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" }
+            }]
+          };
+        }
       }
     } 
     else if (table === 'join_requests' && type === 'INSERT') {

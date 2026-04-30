@@ -461,6 +461,12 @@ function EventsPage() {
       const rowText = (list, scoreKey = "eventScore", suffix = "pts") =>
         list.length ? list.map((m, i) => `${i + 1}. ${m.ign} — ${m[scoreKey]} ${suffix}`).join("\n") : "No data yet";
 
+      const presentCount = withEventScore.length;
+      const totalScore = withEventScore.reduce((acc, m) => acc + (m.eventScore || 0), 0);
+      const avgScore = presentCount > 0 ? (totalScore / presentCount).toFixed(1) : 0;
+      const totalActiveMembers = members.filter(m => (m.status || 'active') === 'active').length;
+      const participationPct = totalActiveMembers > 0 ? ((presentCount / totalActiveMembers) * 100).toFixed(1) : 0;
+
       await sendDiscordEmbed(
         `🛡️  __**OBLIVION EVENT COMBAT RESULTS**__  🛡️`,
         isFinalize 
@@ -468,6 +474,7 @@ function EventsPage() {
           : `Updated combat results for ${selectedEvent.eventType} on ${selectedEvent.eventDate}.\n\u200B`,
         selectedEvent.glMode === 'stellar' ? 0x9333ea : 0x6382E6,
         [
+          { name: "📊 GUILD SUMMARY", value: `👥 **Participation:** ${participationPct}% (${presentCount}/${totalActiveMembers})\n📈 **Average Score:** ${avgScore} pts`, inline: false },
           { name: "🏆 TOP 10 OVERALL", value: rowText(withEventScore.sort((a, b) => b.eventScore - a.eventScore).slice(0, 10)), inline: false },
           { name: "⚔️ TOP 10 DPS", value: rowText(digest.topDps), inline: true },
           { name: "🛡️ TOP 10 SUPPORT", value: rowText(digest.topSupport), inline: true },

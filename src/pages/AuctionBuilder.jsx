@@ -485,6 +485,28 @@ function AuctionBuilder() {
   }, []);
 
   React.useEffect(() => {
+    if (!broadcastActivity || !myMemberId) return;
+    
+    // Broadcast activity when in editor view
+    if (view === "editor" && activeSession) {
+      broadcastActivity({
+        type: 'auction_audit',
+        sessionId: activeSession,
+        sessionName: auctionSessions.find(s => s.id === activeSession)?.name
+      });
+
+      const interval = setInterval(() => {
+        broadcastActivity({
+          type: 'auction_audit',
+          sessionId: activeSession,
+          sessionName: auctionSessions.find(s => s.id === activeSession)?.name
+        });
+      }, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [view, activeSession, broadcastActivity, myMemberId, auctionSessions]);
+
+  React.useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
@@ -1442,29 +1464,52 @@ function AuctionBuilder() {
                             
                             {isWeekExpanded && (
                               <div className="flex flex-col gap-2 mt-2" style={{ animation: "fade-in 0.15s", paddingLeft: 4 }}>
-                                {weekSessions.map(s => (
-                                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer", borderColor: activeSession === s.id ? "var(--accent)" : "var(--border)" }}
-                                    onClick={() => { setActiveSession(s.id); setView("editor"); }}>
-                                    <div style={{ flex: 1 }}>
-                                      <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
-                                      <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>{new Date(s.date).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })} · {s.members.length} members</div>
+                                {weekSessions.map(s => {
+                                  // Find if any OTHER officer is auditing this session
+                                  const otherAuditors = Object.values(officerActivities || {}).filter(act => 
+                                    act.type === 'auction_audit' && 
+                                    act.sessionId === s.id && 
+                                    act.memberId !== myMemberId &&
+                                    (Date.now() - act.lastSeen < 30000)
+                                  );
+                                  return (
+                                    <div key={s.id} className="card session-card animate-fade-in" style={{ 
+                                      borderLeft: otherAuditors.length > 0 ? "4px solid var(--gold)" : "4px solid var(--accent)",
+                                      position: "relative", cursor: "pointer", borderColor: activeSession === s.id ? "var(--accent)" : "var(--border)"
+                                    }}
+                                      onClick={() => { setActiveSession(s.id); setView("editor"); }}>
+                                      {otherAuditors.length > 0 && (
+                                        <div 
+                                          style={{ position: "absolute", top: 12, right: 12, display: "flex", alignItems: "center", gap: 6, background: "rgba(212,175,55,0.15)", padding: "4px 8px", borderRadius: 20, border: "1px solid var(--gold)" }}
+                                          title={`${otherAuditors.map(a => a.displayName || a.memberId).join(", ")} is currently editing this session`}
+                                        >
+                                          <span className="pulse-eye" style={{ fontSize: 14 }}>👁️</span>
+                                          <span style={{ fontSize: 10, fontWeight: 800, color: "var(--gold)", textTransform: "uppercase", letterSpacing: 0.5 }}>Auditing</span>
+                                        </div>
+                                      )}
+                                      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
+                                        <div style={{ flex: 1 }}>
+                                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                                          <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>{new Date(s.date).toLocaleDateString("en-US", { weekday: 'short', day: 'numeric' })} · {s.members.length} members</div>
+                                        </div>
+                                        <button 
+                                          className="btn btn-ghost btn-sm btn-icon" 
+                                          onClick={(e) => { e.stopPropagation(); handleEditSessionClick(s); }}
+                                        >
+                                          <Icon name="edit" size={12} />
+                                        </button>
+                                        <ConfirmTwiceButton
+                                          className="btn btn-danger btn-sm btn-icon"
+                                          onClick={(e) => e.stopPropagation()}
+                                          onConfirm={() => deleteSession(s.id)}
+                                          icon={<Icon name="trash" size={12} />}
+                                          iconOnly
+                                          title="Delete session"
+                                        />
+                                      </div>
                                     </div>
-                                      <button 
-                                        className="btn btn-ghost btn-sm btn-icon" 
-                                        onClick={(e) => { e.stopPropagation(); handleEditSessionClick(s); }}
-                                      >
-                                        <Icon name="edit" size={12} />
-                                      </button>
-                                      <ConfirmTwiceButton
-                                        className="btn btn-danger btn-sm btn-icon"
-                                        onClick={(e) => e.stopPropagation()}
-                                        onConfirm={() => deleteSession(s.id)}
-                                        icon={<Icon name="trash" size={12} />}
-                                        iconOnly
-                                        title="Delete session"
-                                      />
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
