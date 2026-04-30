@@ -13,15 +13,41 @@ serve(async (req) => {
     const { data: meta } = await supabase.from('metadata').select('data').eq('key', 'discord').single();
     
     if (!meta) throw new Error("Discord config not found");
-    const notifications = meta.data?.discord?.notifications || {};
+    const discordConfig = meta.data?.discord || {};
+    const notifications = discordConfig.notifications || {};
+    const templates = discordConfig.templates || {};
+    const globalWebhookUrl = discordConfig.webhookUrl;
+
+    const getMentionsStr = (mentionsConfig) => {
+        if (!mentionsConfig) return "";
+        let str = "";
+        if (mentionsConfig.master && discordConfig.masterRoleId) str += `<@&${discordConfig.masterRoleId}> `;
+        if (mentionsConfig.officer && discordConfig.officerRoleId) str += `<@&${discordConfig.officerRoleId}> `;
+        if (mentionsConfig.oblivion && discordConfig.oblivionRoleId) str += `<@&${discordConfig.oblivionRoleId}> `;
+        if (mentionsConfig.member) str += `@everyone `;
+        return str.trim();
+    };
+
+    const replacePlaceholders = (text, data) => {
+        if (!text) return "";
+        let res = text;
+        for (const [key, value] of Object.entries(data)) {
+            res = res.replace(new RegExp(`\\{${key}\\}`, 'gi'), value || "");
+        }
+        return res;
+    };
 
     let discordPayload = null;
     let webhookUrl = null;
 
     // --- CASE 1: AUTOMATED REMINDERS (CRON JOB) ---
     if (action === 'check-reminders') {
-      webhookUrl = notifications.battlelog_reminder?.webhookUrl || notifications.events?.webhookUrl;
-      if (!webhookUrl) return new Response("No webhook for reminders", { status: 200 });
+      const config = notifications.battlelog_reminder || {};
+      webhookUrl = config.webhookUrl || notifications.events?.webhookUrl || globalWebhookUrl;
+      if (!webhookUrl || config.enabled === false) return new Response("No webhook or disabled for reminders", { status: 200 });
+
+      const mentionsStr = getMentionsStr(config.mentions);
+      const tpl = templates.battlelog_reminder || {};
 
       // Get pending events
       const { data: events } = await supabase
@@ -36,12 +62,15 @@ serve(async (req) => {
         const dueAt = audit.dueAt ? new Date(audit.dueAt) : null;
         const eventStart = new Date(`${ev.event_date}T${ev.type === 'Guild League' ? '20:55' : '20:00'}:00`);
         
+        const data = { type: ev.type, date: ev.event_date, auditor: audit.assignedIgn || "TBA" };
+
         // 1. Soft Reminder (55 mins after event)
         if (!audit.postEventReminderSentAt && now.getTime() > eventStart.getTime() + (55 * 60 * 1000)) {
            await sendToDiscord(webhookUrl, {
+             content: mentionsStr,
              embeds: [{
-               title: "🔔 Battlelog Soft Reminder",
-               description: `The event **${ev.title}** has ended. Please audit the logs!`,
+               title: replacePlaceholders(tpl.title || "🔔 Battlelog Soft Reminder", data),
+               description: replacePlaceholders(tpl.description || `The event **${ev.title}** has ended. Please audit the logs!`, data),
                color: 0x3498db,
                fields: [{ name: "Auditor", value: audit.assignedIgn || "TBA" }]
              }]
@@ -55,9 +84,10 @@ serve(async (req) => {
         // 2. Hard Reminder (Overdue)
         if (dueAt && !audit.reminderSentAt && now > dueAt) {
           await sendToDiscord(webhookUrl, {
+             content: mentionsStr,
              embeds: [{
-               title: "📘 Battlelog Overdue Alert",
-               description: `Audit for **${ev.title}** is now overdue!`,
+               title: replacePlaceholders(tpl.title || "📘 Battlelog Overdue Alert", data),
+               description: replacePlaceholders(tpl.description || `Audit for **${ev.title}** is now overdue!`, data),
                color: 0xf1c40f,
                fields: [{ name: "Auditor", value: audit.assignedIgn || "TBA" }]
              }]
@@ -72,10 +102,11 @@ serve(async (req) => {
     }
 
     // --- CASE 2: TABLE TRIGGERS ---
-    const globalWebhookUrl = meta.data?.discord?.webhookUrl;
     
     if (table === 'absences') {
-      webhookUrl = notifications.absences?.webhookUrl || globalWebhookUrl || Deno.env.get("DISCORD_ABSENCE_WEBHOOK_URL");
+      const config = notifications.absences || {};
+      if (config.enabled === false) return new Response("Disabled", { status: 200 });
+      webhookUrl = config.webhookUrl || globalWebhookUrl || Deno.env.get("DISCORD_ABSENCE_WEBHOOK_URL");
       
       let displayName = record.ign;
       if (!displayName && record.member_id) {
@@ -84,11 +115,16 @@ serve(async (req) => {
       }
       displayName = displayName || record.member_id || "Unknown";
 
+      const mentionsStr = getMentionsStr(config.mentions);
+      const data = { ign: displayName, event: record.event_id || "Unknown", date: record.event_date, reason: record.reason || "No reason", online: record.online_status || "Unknown" };
+
       if (type === 'INSERT') {
+        const tpl = templates.absence_filed || {};
         discordPayload = { 
+          content: mentionsStr,
           embeds: [{ 
-            title: "🚨 Absence Notice Filed", 
-            description: `**${displayName}** will not be able to attend an upcoming event.`,
+            title: replacePlaceholders(tpl.title || "🚨 Absence Notice Filed", data), 
+            description: replacePlaceholders(tpl.description || `**${displayName}** will not be able to attend an upcoming event.`, data),
             color: 0xff4757, 
             fields: [
               { name: "Date", value: record.event_date, inline: true }, 
@@ -98,22 +134,32 @@ serve(async (req) => {
           }] 
         };
       } else if (type === 'DELETE') {
+        const tpl = templates.absence_removed || {};
         discordPayload = { 
+          content: mentionsStr,
           embeds: [{ 
-            title: "✅ Absence Cancelled", 
+            title: replacePlaceholders(tpl.title || "✅ Absence Cancelled", data), 
             color: 0x2ecc71, 
-            description: `The absence record for **${displayName}** on **${record.event_date}** has been cancelled. They are now expected to attend.` 
+            description: replacePlaceholders(tpl.description || `The absence record for **${displayName}** on **${record.event_date}** has been cancelled. They are now expected to attend.`, data) 
           }] 
         };
       }
     } 
     else if (table === 'join_requests' && type === 'INSERT') {
-      webhookUrl = notifications.join_requests?.webhookUrl || globalWebhookUrl;
+      const config = notifications.join_requests || {};
+      if (config.enabled === false) return new Response("Disabled", { status: 200 });
+      webhookUrl = config.webhookUrl || globalWebhookUrl;
       const isRe = record.request_type === 'reactivation';
+      const mentionsStr = getMentionsStr(config.mentions);
+      
+      const tpl = templates.new_join || {};
+      const data = { ign: record.ign, class: record.class, role: record.role, uid: record.uid, discord: record.discord };
+
       discordPayload = { 
+        content: mentionsStr,
         embeds: [{ 
-          title: isRe ? "♻️ Account Reactivation Request" : "📩 New Guild Application", 
-          description: `Please review this request in the Guild Portal.`,
+          title: replacePlaceholders(tpl.title || (isRe ? "♻️ Account Reactivation Request" : "📩 New Guild Application"), data), 
+          description: replacePlaceholders(tpl.description || `Please review this request in the Guild Portal.`, data),
           color: isRe ? 0x6382E6 : 0x3498db, 
           fields: [
             { name: "IGN", value: record.ign || "Unknown", inline: true }, 
@@ -127,11 +173,21 @@ serve(async (req) => {
       };
     }
     else if (table === 'events' && type === 'INSERT') {
-      webhookUrl = notifications.events?.webhookUrl || globalWebhookUrl;
+      const config = notifications.events || {};
+      if (config.enabled === false) return new Response("Disabled", { status: 200 });
+      webhookUrl = config.webhookUrl || globalWebhookUrl;
+      
+      const mentionsStr = getMentionsStr(config.mentions);
+      const tpl = templates.event_created || {};
+      const eventTimeStr = discordConfig.eventTimeText ? `\n\n**Time:**\n${discordConfig.eventTimeText}` : "";
+      
+      const data = { type: record.type, date: record.event_date };
+      
       discordPayload = { 
+        content: mentionsStr,
         embeds: [{ 
-          title: `📅 New Event Scheduled: ${record.title}`, 
-          description: `A new guild event has been posted to the calendar.`,
+          title: replacePlaceholders(tpl.title || `📅 New Event Scheduled: ${record.title}`, data), 
+          description: replacePlaceholders(tpl.description || `A new guild event has been posted to the calendar.`, data) + eventTimeStr,
           color: 0x9b59b6, 
           fields: [
             { name: "Type", value: record.type, inline: true }, 
