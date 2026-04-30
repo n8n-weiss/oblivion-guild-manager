@@ -11,7 +11,7 @@ function EventsPage() {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
     showToast, isAdmin, currentUser, sendDiscordEmbed,
-    hasMoreEvents, loadingHistory, fetchFullHistory
+    hasMoreEvents, loadingHistory, fetchFullHistory, broadcastStateSync
   } = useGuild();
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const officerPool = React.useMemo(() => {
@@ -291,10 +291,15 @@ function EventsPage() {
     
     setAttendance(prev => {
       const exists = prev.some(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
-      if (exists) {
-        return prev.map(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a);
+      const next = exists 
+        ? prev.map(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a)
+        : [...prev, { memberId: memberId.trim(), eventId, status: newStatus }];
+        
+      const updatedItem = next.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
+      if (updatedItem && broadcastStateSync) {
+        broadcastStateSync('attendance', updatedItem);
       }
-      return [...prev, { memberId: memberId.trim(), eventId, status: newStatus }];
+      return next;
     });
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
   };
@@ -324,13 +329,22 @@ function EventsPage() {
 
     setPerformance(prev => {
       const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
-      if (exists) return prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
-      // Default fields depend on GL mode
-      const isStellar = ev?.glMode === 'stellar';
-      const defaultFields = isStellar
-        ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
-        : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
-      return [...prev, { memberId: memberId.trim(), eventId, ...defaultFields, ...edits }];
+      let next;
+      if (exists) {
+        next = prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
+      } else {
+        const isStellar = ev?.glMode === 'stellar';
+        const defaultFields = isStellar
+          ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
+          : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
+        next = [...prev, { memberId: memberId.trim(), eventId, ...defaultFields, ...edits }];
+      }
+
+      const updatedItem = next.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
+      if (updatedItem && broadcastStateSync) {
+        broadcastStateSync('performance', updatedItem);
+      }
+      return next;
     });
     showToast("Performance saved", "success");
     const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
@@ -359,6 +373,11 @@ function EventsPage() {
             ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
             : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
           next.push({ memberId: memberId.trim(), eventId: selectedEvent.eventId, ...defaultFields, ...edits });
+        }
+        
+        const updatedItem = next.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === selectedEvent.eventId);
+        if (updatedItem && broadcastStateSync) {
+          broadcastStateSync('performance', updatedItem);
         }
       });
       return next;

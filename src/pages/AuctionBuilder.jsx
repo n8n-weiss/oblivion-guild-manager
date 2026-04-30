@@ -369,7 +369,7 @@ function AuctionBuilder() {
     sendDiscordImage, pendingAuctionConflict, resolveAuctionConflict, myMemberId, discordConfig, isOfflineMode,
     memberLootStats, auctionWishlist,
     members, auctionSessions, setAuctionSessions, deleteAuctionSession,
-    officerActivities, broadcastActivity
+    officerActivities, broadcastActivity, broadcastStateSync
   } = useGuild();
   const [view, setView] = useState("sessions"); // "sessions" | "editor" | "history"
   const [activeSession, setActiveSession] = useState(null);
@@ -807,8 +807,15 @@ function AuctionBuilder() {
   };
 
   const updateSession = React.useCallback((updater) => {
-    setAuctionSessions(prev => prev.map(s => s.id === activeSession ? updater(s) : s));
-  }, [activeSession, setAuctionSessions]);
+    setAuctionSessions(prev => {
+      const next = prev.map(s => s.id === activeSession ? updater(s) : s);
+      const updatedSession = next.find(s => s.id === activeSession);
+      if (updatedSession && broadcastStateSync) {
+        broadcastStateSync('auction_sessions', updatedSession);
+      }
+      return next;
+    });
+  }, [activeSession, setAuctionSessions, broadcastStateSync]);
 
   const availableCategories = resourceCategories || ["Card Album", "Light & Dark"];
   const addColumn = () => {

@@ -915,102 +915,81 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         }
       })
-      // 2. Events
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = {
-            eventId: newRow.event_id,
-            eventDate: newRow.event_date,
-            type: newRow.type,
-            eventType: newRow.type,
-            title: newRow.title,
-            auditor: newRow.auditor,
-            glMode: newRow.gl_mode || 'vale',
-            battlelogAudit: newRow.battlelog_audit,
-            digestMeta: newRow.digest_meta,
-            attendanceData: newRow.attendance_data || {},
-            performanceData: newRow.performance_data || {},
-            eoRatingsData: newRow.eo_ratings_data || {},
-            createdAt: newRow.created_at
-          };
-          setEvents(prev => {
-            const exists = prev.find(e => e.eventId === mapped.eventId);
-            const updated = exists 
-              ? prev.map(e => e.eventId === mapped.eventId ? mapped : e)
-              : [...prev, mapped].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
-            prevData.current.events = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setEvents(prev => {
-            const updated = prev.filter(e => e.eventId !== oldRow.event_id);
-            prevData.current.events = [...updated];
-            return updated;
-          });
+      // 2. State Sync Broadcasts (Zero Egress for Events, Attendance, Performance, Auction Sessions)
+      .on('broadcast', { event: 'state_sync' }, payload => {
+        const { table, data, action = 'UPDATE' } = payload.payload;
+        
+        if (table === 'auction_sessions') {
+          if (action === 'DELETE') {
+            setAuctionSessions(prev => {
+              const updated = prev.filter(s => s.id !== data.id);
+              prevData.current.auctionSessions = [...updated];
+              return updated;
+            });
+          } else {
+            setAuctionSessions(prev => {
+              const exists = prev.find(s => s.id === data.id);
+              const updated = exists 
+                ? prev.map(s => s.id === data.id ? data : s)
+                : [...prev, data].sort((a, b) => new Date(b.date) - new Date(a.date));
+              prevData.current.auctionSessions = [...updated];
+              return updated;
+            });
+          }
+        } 
+        else if (table === 'attendance') {
+          if (action === 'DELETE') {
+             setAttendance(prev => {
+               const updated = prev.filter(a => !(a.eventId === data.eventId && a.memberId === data.memberId));
+               prevData.current.attendance = [...updated];
+               return updated;
+             });
+          } else {
+             setAttendance(prev => {
+               const exists = prev.find(a => a.eventId === data.eventId && a.memberId === data.memberId);
+               const updated = exists 
+                 ? prev.map(a => (a.eventId === data.eventId && a.memberId === data.memberId) ? data : a)
+                 : [...prev, data];
+               prevData.current.attendance = [...updated];
+               return updated;
+             });
+          }
         }
-      })
-      // 3. Attendance
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = { memberId: newRow.member_id, eventId: newRow.event_id, status: newRow.status };
-          setAttendance(prev => {
-            const exists = prev.find(a => a.eventId === mapped.eventId && a.memberId === mapped.memberId);
-            const updated = exists 
-              ? prev.map(a => (a.eventId === mapped.eventId && a.memberId === mapped.memberId) ? mapped : a)
-              : [...prev, mapped];
-            prevData.current.attendance = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setAttendance(prev => {
-            const updated = prev.filter(a => !(a.eventId === oldRow.event_id && a.memberId === oldRow.member_id));
-            prevData.current.attendance = [...updated];
-            return updated;
-          });
+        else if (table === 'performance') {
+           if (action === 'DELETE') {
+             setPerformance(prev => {
+               const updated = prev.filter(p => !(p.eventId === data.eventId && p.memberId === data.memberId));
+               prevData.current.performance = [...updated];
+               return updated;
+             });
+           } else {
+             setPerformance(prev => {
+               const exists = prev.find(p => p.eventId === data.eventId && p.memberId === data.memberId);
+               const updated = exists 
+                 ? prev.map(p => (p.eventId === data.eventId && p.memberId === data.memberId) ? data : p)
+                 : [...prev, data];
+               prevData.current.performance = [...updated];
+               return updated;
+             });
+           }
         }
-      })
-      // 4. Performance
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'performance' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const { event_id, member_id, ...rest } = newRow;
-          const mapped = { eventId: event_id, memberId: member_id, ...rest };
-          setPerformance(prev => {
-            const exists = prev.find(p => p.eventId === mapped.eventId && p.memberId === mapped.memberId);
-            const updated = exists 
-              ? prev.map(p => (p.eventId === mapped.eventId && p.memberId === mapped.memberId) ? mapped : p)
-              : [...prev, mapped];
-            prevData.current.performance = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setPerformance(prev => {
-            const updated = prev.filter(p => !(p.eventId === oldRow.event_id && p.memberId === oldRow.member_id));
-            prevData.current.performance = [...updated];
-            return updated;
-          });
-        }
-      })
-      // 5. Auction Sessions (Individual Rows)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_sessions' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          setAuctionSessions(prev => {
-            const exists = prev.find(s => s.id === newRow.id);
-            const updated = exists 
-              ? prev.map(s => s.id === newRow.id ? newRow : s)
-              : [...prev, newRow].sort((a, b) => new Date(b.date) - new Date(a.date));
-            prevData.current.auctionSessions = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setAuctionSessions(prev => {
-            const updated = prev.filter(s => s.id !== oldRow.id);
-            prevData.current.auctionSessions = [...updated];
-            return updated;
-          });
+        else if (table === 'events') {
+           if (action === 'DELETE') {
+             setEvents(prev => {
+               const updated = prev.filter(e => e.eventId !== data.eventId);
+               prevData.current.events = [...updated];
+               return updated;
+             });
+           } else {
+             setEvents(prev => {
+               const exists = prev.find(e => e.eventId === data.eventId);
+               const updated = exists 
+                 ? prev.map(e => e.eventId === data.eventId ? data : e)
+                 : [...prev, data].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+               prevData.current.events = [...updated];
+               return updated;
+             });
+           }
         }
       })
       // 6. Roster (Members)
@@ -2516,6 +2495,16 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   }, [myMemberId, currentUser]);
 
+  const broadcastStateSync = useCallback((table, data, action = 'UPDATE') => {
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'state_sync',
+        payload: { table, data, action }
+      }).catch(() => {});
+    }
+  }, []);
+
   const value = React.useMemo(() => ({
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers,
@@ -2550,7 +2539,7 @@ export const GuildProvider = ({ children, initialData }) => {
     hasMoreEvents, loadingHistory, fetchFullHistory,
     auctionBids, setAuctionBids,
     isOfflineMode, setIsOfflineMode,
-    officerActivities, broadcastActivity
+    officerActivities, broadcastActivity, broadcastStateSync
   }), [
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers, page, toast, members, events, auctionSessions, attendance, performance, absences,
@@ -2562,7 +2551,7 @@ export const GuildProvider = ({ children, initialData }) => {
     hasMoreEvents, loadingHistory, fetchFullHistory,
     deleteEvent, deleteAuctionSession, deleteMember,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
-    officerActivities, broadcastActivity
+    officerActivities, broadcastActivity, broadcastStateSync
   ]);
 
   return (
