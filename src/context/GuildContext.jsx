@@ -465,7 +465,7 @@ export const GuildProvider = ({ children, initialData }) => {
         fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=gte.${cutoffDate}&order=event_date.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/absences?select=*&event_date=gte.${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&order=event_date.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/metadata?select=key,data,updated_at`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=member_id,id,data,updated_at`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/auction_bids?select=member_id,bids,updated_at`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }), // Attendance will be filtered in processFetchedData or kept if small
         fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }), 
         fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers }),
