@@ -91,8 +91,8 @@
     --font-subtitle: 15px;
     --font-card-title: 15px;
     --font-body: 16px;
-    --content-padding: calc(var(--space-6) + var(--space-2));
-    --content-padding-x: calc(var(--space-7) + var(--space-6));
+    --content-padding: 32px;
+    --content-padding-x: 60px;
   }
 
   [data-theme="light"] {
@@ -449,10 +449,9 @@
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    bottom: 0;
+    height: 100vh;
     z-index: 100;
     overflow: hidden;
   }
@@ -605,14 +604,14 @@
 
   /* ── Main ── */
   .main-content {
-    margin-left: var(--sidebar-w);
+    padding: var(--content-padding) var(--space-6);
     flex: 1;
-    min-width: 0; /* prevents flex child from overflowing the viewport */
-    padding: var(--content-padding) var(--content-padding-x);
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 100vh;
     background: transparent;
     position: relative;
-    overflow-x: hidden; /* contain page-level overflow, tables use .table-responsive */
+    overflow-x: hidden; 
   }
 
   .page-header {

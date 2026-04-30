@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
@@ -131,6 +131,32 @@ function EventsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editEventId, setEditEventId] = useState(null);
   const [perfEdits, setPerfEdits] = useState({});
+  const [attEdits, setAttEdits] = useState({});
+  const [autoSaveStatus, setAutoSaveStatus] = useState("synced"); // "synced", "dirty", "saving"
+  const autoSaveTimerRef = useRef(null);
+
+  // Auto-save logic
+  useEffect(() => {
+    const hasPerfPending = Object.keys(perfEdits).filter(k => k.endsWith(`_${selectedEvent?.eventId}`)).length > 0;
+    const hasAttPending = Object.keys(attEdits).filter(k => k.endsWith(`_${selectedEvent?.eventId}`)).length > 0;
+
+    if (hasPerfPending || hasAttPending) {
+      setAutoSaveStatus("dirty");
+      
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      
+      autoSaveTimerRef.current = setTimeout(() => {
+        setAutoSaveStatus("saving");
+        if (hasPerfPending) saveAllPerformance();
+        if (hasAttPending) saveAllAttendance();
+        setTimeout(() => setAutoSaveStatus("synced"), 1000);
+      }, 5000); 
+    }
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [perfEdits, attEdits]);
   const getNextAuditor = React.useCallback(() => {
     if (!duoOfficerPool.length) return null;
     let idx = 0;
@@ -292,37 +318,44 @@ function EventsPage() {
   }, [selectedEvent, broadcastActivity]);
 
   const toggleAtt = (memberId, eventId) => {
-    const mId = (memberId || "").trim().toLowerCase();
-    const current = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
-    
-    const newStatus = (current?.status === "present") ? "absent" : "present";
-    const member = members.find(m => (m.memberId || "").toLowerCase() === mId);
-    const ev = events.find(e => e.eventId === eventId);
-    
-    setAttendance(prev => {
-      const exists = prev.some(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
-      const next = exists 
-        ? prev.map(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId ? { ...a, status: newStatus } : a)
-        : [...prev, { memberId: memberId.trim(), eventId, status: newStatus }];
-        
-      const updatedItem = next.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
-      if (updatedItem && broadcastStateSync) {
-        broadcastStateSync('attendance', updatedItem);
-      }
-      return next;
-    });
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_toggle", `Marked ${member?.ign} as ${newStatus} — ${ev?.eventType} ${ev?.eventDate}`);
+    const key = `${memberId}_${eventId}`;
+    const currentStatus = attEdits[key] || attendance.find(a => a.eventId === eventId && (a.memberId || "").trim().toLowerCase() === memberId.trim().toLowerCase())?.status || "present";
+    const newStatus = currentStatus === "present" ? "absent" : "present";
+    setAttEdits(prev => ({ ...prev, [key]: newStatus }));
   };
 
   const markAllPresent = (eventId) => {
     const activeIds = activeMembers.map(m => (m.memberId || "").trim());
-    setAttendance(prev => {
-      const otherEvents = prev.filter(a => a.eventId !== eventId);
-      const newAttendance = activeIds.map(id => ({ memberId: id, eventId, status: "present" }));
-      return [...otherEvents, ...newAttendance];
+    const newEdits = {};
+    activeIds.forEach(id => {
+      newEdits[`${id}_${eventId}`] = "present";
     });
-    showToast("All active members marked as present", "success");
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_bulk", `Marked all as present — ${events.find(e => e.eventId === eventId)?.eventDate}`);
+    setAttEdits(prev => ({ ...prev, ...newEdits }));
+    showToast("All active members marked as present (pending save)", "success");
+  };
+
+  const saveAllAttendance = () => {
+    const keys = Object.keys(attEdits).filter(k => k.endsWith(`_${selectedEvent?.eventId}`));
+    if (keys.length === 0) return;
+
+    setAttendance(prev => {
+      let next = [...prev];
+      keys.forEach(key => {
+        const [mId] = key.split('_');
+        const status = attEdits[key];
+        const exists = next.some(a => (a.memberId || "").trim().toLowerCase() === mId.toLowerCase() && a.eventId === selectedEvent.eventId);
+        if (exists) {
+          next = next.map(a => (a.memberId || "").trim().toLowerCase() === mId.toLowerCase() && a.eventId === selectedEvent.eventId ? { ...a, status } : a);
+        } else {
+          next.push({ memberId: mId.trim(), eventId: selectedEvent.eventId, status });
+        }
+      });
+      return next;
+    });
+
+    setAttEdits({});
+    showToast(`Saved attendance batch for ${selectedEvent.eventType}`, "success");
+    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_bulk", `Batch saved attendance for ${selectedEvent.eventType} on ${selectedEvent.eventDate}`);
   };
 
   const savePerformance = (memberId, eventId) => {
@@ -734,7 +767,24 @@ function EventsPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
+                  {autoSaveStatus !== "synced" && (
+                    <div style={{ 
+                      display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 12, 
+                      background: autoSaveStatus === "dirty" ? "rgba(240,192,64,0.15)" : "rgba(99,130,230,0.15)",
+                      border: `1px solid ${autoSaveStatus === "dirty" ? "rgba(240,192,64,0.3)" : "rgba(99,130,230,0.3)"}`,
+                      animation: autoSaveStatus === "saving" ? "pulse 2s infinite" : "none"
+                    }}>
+                      <div style={{ 
+                        width: 8, height: 8, borderRadius: "50%", 
+                        background: autoSaveStatus === "dirty" ? "var(--gold)" : "#6382E6",
+                        boxShadow: `0 0 8px ${autoSaveStatus === "dirty" ? "var(--gold)" : "#6382E6"}`
+                      }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: autoSaveStatus === "dirty" ? "var(--gold)" : "#6382E6" }}>
+                        {autoSaveStatus === "dirty" ? "UNSAVED CHANGES" : "AUTO-SAVING..."}
+                      </span>
+                    </div>
+                  )}
                   <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
                     <Icon name="edit" size={12} /> Edit
                   </button>
@@ -747,7 +797,7 @@ function EventsPage() {
                       style={{ padding: "6px 12px", borderRadius: 8, background: "var(--green)", borderColor: "var(--green)", boxShadow: "0 4px 12px rgba(34,197,94,0.3)" }}
                       onClick={saveAllPerformance}
                     >
-                      <Icon name="save" size={12} /> Save All Changes
+                      <Icon name="save" size={12} /> Save Now
                     </button>
                   )}
                 </div>
@@ -816,27 +866,6 @@ function EventsPage() {
                         <th></th>
                       </>}
                       {selectedEvent.eventType === "Emperium Overrun" && <>
-                        <th style={{ color: "var(--gold)", fontSize: 11 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            Rating
-                            <button 
-                              className="btn btn-ghost btn-sm" 
-                              style={{ padding: '2px 6px', fontSize: 9, color: 'var(--gold)', border: '1px solid rgba(240,192,64,0.3)' }}
-                              onClick={() => {
-                                const activeIds = activeMembers.map(m => (m.memberId || "").trim());
-                                setEoRatings(prev => {
-                                  const others = prev.filter(r => r.eventId !== selectedEvent.eventId);
-                                  const batch = activeIds.map(id => ({ memberId: id, eventId: selectedEvent.eventId, rating: 4 }));
-                                  return [...others, ...batch];
-                                });
-                                showToast("All active members rated as Good (4★)", "success");
-                              }}
-                            >
-                              <Icon name="star" size={10} /> Rate All 4★
-                            </button>
-                          </div>
-                        </th>
-                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
                         <th></th>
                       </>}
                     </tr>
@@ -844,6 +873,9 @@ function EventsPage() {
                   <tbody>
                     {evtMembers.map(m => {
                       const key = `${m.memberId}_${selectedEvent.eventId}`;
+                      const isDirty = !!perfEdits[key];
+                      const isAttDirty = !!attEdits[key];
+                      const attStatus = attEdits[key] || m.att?.status || "present";
                       const curPerf = perfEdits[key] || {};
                       const ctf1 = curPerf.ctf1 !== undefined ? curPerf.ctf1 : (m.perf?.ctf1 ?? m.perf?.ctfPoints ?? 0);
                       const ctf2 = curPerf.ctf2 !== undefined ? curPerf.ctf2 : (m.perf?.ctf2 ?? 0);
@@ -852,10 +884,10 @@ function EventsPage() {
                       const pp = curPerf.performancePoints !== undefined ? curPerf.performancePoints : (m.perf?.performancePoints ?? 0);
                       const kills = curPerf.kills !== undefined ? curPerf.kills : (m.perf?.kills ?? 0);
                       const assists = curPerf.assists !== undefined ? curPerf.assists : (m.perf?.assists ?? 0);
-                      const score = computeScore({ event: selectedEvent, att: m.att, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
+                      const score = computeScore({ event: selectedEvent, att: { ...m.att, status: attStatus }, perf: { ctf1, ctf2, ctf3, performancePoints: pp, kills, assists } });
                       return (
-                         <tr key={m.memberId}>
-                          <td className="sticky-col" style={{ padding: "12px 16px", background: "var(--bg-card2)", borderRight: "1px solid var(--border)" }}>
+                         <tr key={m.memberId} style={{ background: isDirty ? "rgba(240,192,64,0.03)" : undefined }}>
+                          <td className="sticky-col" style={{ padding: "12px 16px", background: isDirty ? "rgba(240,192,64,0.05)" : "var(--bg-card2)", borderRight: "1px solid var(--border)" }}>
                             <div style={{ fontWeight: 800, color: "var(--text-primary)", fontSize: 13 }}>{m.ign}</div>
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
@@ -879,11 +911,8 @@ function EventsPage() {
                               <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
                               {/* Score pill */}
                               <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
-                              {/* Save button */}
                               <td>
-                                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "3px 8px", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => savePerformance(m.memberId, selectedEvent.eventId)} title="Save scores">
-                                  <Icon name="save" size={11} /> Save
-                                </button>
+                                {isDirty && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
                               </td>
                             </>
                           )}
@@ -922,52 +951,22 @@ function EventsPage() {
                                 <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
                                 {/* Computed Score pill */}
                                 <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{sScore}</span></td>
-                                {/* Save button */}
                                 <td>
-                                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "3px 8px", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => savePerformance(m.memberId, selectedEvent.eventId)} title="Save scores">
-                                    <Icon name="save" size={11} /> Save
-                                  </button>
+                                  {isDirty && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
                                 </td>
                               </>
                             );
                           })()}
-                          {selectedEvent.eventType === "Emperium Overrun" && (() => {
-                            const curRating = m.att?.status === "absent" ? 0 : (m.eoRating || 0);
-                            const score = computeScore({ event: selectedEvent, att: m.att, eoRating: curRating });
-                            return (
-                              <>
-                                <td>
-                                  <div style={{ display: 'flex', gap: 2 }}>
-                                    {[1, 2, 3, 4, 5].map(star => (
-                                      <button
-                                        key={star}
-                                        onClick={() => {
-                                          setEoRatings(prev => {
-                                            const others = prev.filter(r => !(r.memberId === m.memberId && r.eventId === selectedEvent.eventId));
-                                            return [...others, { memberId: m.memberId, eventId: selectedEvent.eventId, rating: star }];
-                                          });
-                                          if (m.att?.status === "absent") {
-                                            setAttendance(prev => prev.map(a => (a.memberId === m.memberId && a.eventId === selectedEvent.eventId) ? { ...a, status: "present" } : a));
-                                          }
-                                        }}
-                                        style={{ 
-                                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                                          color: star <= curRating ? 'var(--gold)' : 'rgba(255,255,255,0.1)',
-                                          fontSize: 14, transition: 'transform 0.1s'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
-                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                      >
-                                        ★
-                                      </button>
-                                    ))}
-                                  </div>
-                                </td>
-                                <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
-                                <td></td>
-                              </>
-                            );
-                          })()}
+                          {selectedEvent.eventType === "Emperium Overrun" && (
+                            <>
+                              <td colSpan={2}>
+                                <div className="text-muted" style={{ fontSize: 11, fontStyle: 'italic' }}>Pure attendance mode</div>
+                              </td>
+                              <td>
+                                {isAttDirty && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       );
                     })}

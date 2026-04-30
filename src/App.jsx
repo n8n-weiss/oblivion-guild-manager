@@ -65,28 +65,7 @@ const pagePrefetchers = {
 const prefetchedPages = new Set();
 
 // --- Helper Components for Premium UI ---
-function SyncPill({ status, onRetry }) {
-  const isSyncing = status === 'syncing';
-  const isError = status === 'error';
-  const isOffline = status === 'offline';
-  
-  return (
-    <div className="fixed bottom-6 right-6 z-[200] animate-float" style={{ animationDelay: '1s' }}>
-      <div className="premium-pill glass-panel" style={{ padding: '8px 16px', gap: 10 }}>
-        <div className={`status-dot ${isSyncing ? 'animate-pulse' : ''}`} style={{ 
-          background: isError ? '#ef4444' : isSyncing || isOffline ? '#f59e0b' : '#10b981',
-          boxShadow: `0 0 12px ${isError ? '#ef4444' : isSyncing || isOffline ? '#f59e0b' : '#10b981'}`
-        }} />
-        <span style={{ color: 'var(--text-primary)', fontSize: 10 }}>
-          {isSyncing ? 'CLOUD SYNCING...' : isError ? 'SYNC ERROR' : isOffline ? 'OFFLINE' : 'CLOUD SYNCED'}
-        </span>
-        <button onClick={onRetry} className="btn-ghost" style={{ padding: 4, borderRadius: 6 }}>
-          <Icon name="rotate-cw" size={12} />
-        </button>
-      </div>
-    </div>
-  );
-}
+
 
 function PresenceUI({ users }) {
   const userList = Object.values(users || {}).slice(0, 5);
@@ -149,7 +128,7 @@ export default function App() {
     toast, setToast, showToast,
     notifications, requests, joinRequests, onlineUsers,
     syncStatus, triggerSyncRetry,
-    channelStatus
+    channelStatus, isFetchingRequests
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -189,7 +168,7 @@ export default function App() {
       className={`app-container ${densityMode}-density ${highContrastMode ? "high-contrast" : ""} theme-${themeMode}`}
       style={{ display: "flex", minHeight: "100vh", background: "var(--bg-deepest)" }}
     >
-      <SyncPill status={syncStatus} onRetry={triggerSyncRetry} />
+
       
       {/* Sidebar - Desktop */}
       <aside className="sidebar hide-mobile">
@@ -287,11 +266,11 @@ export default function App() {
               </div>
             </div>
             
-            <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {!isMember ? (
                 <button 
                   className="btn btn-ghost btn-sm" 
-                  style={{ flex: 1, fontSize: 10, justifyContent: "center" }}
+                  style={{ width: "100%", fontSize: 10, justifyContent: "center", border: "1px solid rgba(255,255,255,0.05)" }}
                   onClick={() => {
                     triggerSyncRetry();
                     showToast("Re-fetching global data...", "info");
@@ -301,22 +280,39 @@ export default function App() {
                   <Icon name="rotate-cw" size={12} /> Force Refresh
                 </button>
               ) : (
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} onClick={() => setProfileMember(myMemberId)}>
+                <button className="btn btn-ghost btn-sm" style={{ width: "100%", fontSize: 10, justifyContent: "center" }} onClick={() => setProfileMember(myMemberId)}>
                   My Stats & Profile
                 </button>
               )}
-            </div>
 
-              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid var(--border)" }} onClick={() => setShowTreasury(true)}>
+              <button 
+                className="btn btn-primary" 
+                style={{ 
+                  width: "100%", 
+                  justifyContent: "center", 
+                  background: "linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05))", 
+                  color: "var(--gold)", 
+                  border: "1px solid rgba(240,192,64,0.2)",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  height: 36
+                }} 
+                onClick={() => setShowTreasury(true)}
+              >
                 <Icon name="star" size={14} /> Buy Me A Beer
               </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: 8, border: "1px solid var(--border)", fontSize: 10 }}>
+            <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: 12, border: "1px solid var(--border)", fontSize: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-muted)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "synced" ? "#10b981" : syncStatus === "saving" ? "var(--gold)" : "#ef4444", boxShadow: syncStatus === "synced" ? "0 0 8px #10b981" : "none" }} />
-                  {syncStatus.toUpperCase()}
+                  <div style={{ 
+                    width: 6, height: 6, borderRadius: "50%", 
+                    background: syncStatus === "synced" ? (isFetchingRequests ? "#6382e6" : "#10b981") : syncStatus === "saving" ? "var(--gold)" : "#ef4444", 
+                    boxShadow: syncStatus === "synced" ? (isFetchingRequests ? "0 0 8px #6382e6" : "0 0 8px #10b981") : "none",
+                    animation: isFetchingRequests ? "pulse 2s infinite" : "none"
+                  }} />
+                  {(isFetchingRequests ? "SYNCING" : syncStatus).toUpperCase()}
                 </div>
                 <div style={{ width: 1, height: 10, background: "var(--border)" }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -326,7 +322,7 @@ export default function App() {
               </div>
             </div>
 
-            <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 10, marginTop: 8, opacity: 0.6 }} onClick={handleSignOut}>
+            <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 10, marginTop: 8, opacity: 0.6, border: "1px solid rgba(255,255,255,0.03)" }} onClick={handleSignOut}>
               Exit System
             </button>
 
@@ -338,11 +334,12 @@ export default function App() {
               <div style={{ fontSize: 10, color: "var(--text-muted)", opacity: 0.8, display: "flex", alignItems: "center", gap: 4 }}>
                 Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "#ff4d4d", letterSpacing: 2, fontWeight: 900, textShadow: "0 0 10px rgba(255,77,77,0.4)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>
               </div>
+            </div>
           </div>
         </div>
       </aside>
 
-      <main className="main-content" style={{ flex: 1, padding: "var(--content-padding)", position: "relative" }}>
+      <main className="main-content">
         <AnimatePresence mode="wait">
           {!isStatusActive ? (
             <PageWrapper key="inactive" id="inactive">
@@ -383,7 +380,20 @@ export default function App() {
         </AnimatePresence>
 
         {/* Global Floating Elements */}
-        <div style={{ position: "fixed", top: 24, right: 32, zIndex: 100, display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ 
+          position: "fixed", 
+          top: 24, 
+          right: 48, 
+          zIndex: 100, 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 20,
+          padding: "8px 16px",
+          borderRadius: 20,
+          background: "rgba(10,15,25,0.4)",
+          backdropFilter: "blur(8px)",
+          border: "1px solid rgba(255,255,255,0.05)"
+        }}>
           <PresenceUI users={onlineUsers} />
           <div className="cursor-pointer hover:scale-110 transition-transform" onClick={() => setShowNotifications(true)}>
             <div className="relative">

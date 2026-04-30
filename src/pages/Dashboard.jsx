@@ -45,13 +45,13 @@ function Dashboard() {
           </div>
           <p className="page-subtitle">Guild command center & performance at a glance</p>
         </div>
-        <div className="guild-xp-container">
-          <div className="flex justify-between items-end mb-1" style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)" }}>
-            <span>GUILD RANK: {guildLevel}</span>
-            <span className="text-muted" style={{ fontWeight: 400 }}>{totalGuildScore} / {nextLevelXP} XP</span>
+        <div className="guild-xp-container" style={{ maxWidth: 280, width: "100%", marginLeft: "auto" }}>
+          <div className="flex justify-between items-end mb-1" style={{ fontSize: 11, fontWeight: 700, color: "var(--gold)" }}>
+            <span>RANK: {guildLevel}</span>
+            <span className="text-muted" style={{ fontWeight: 400, fontSize: 10 }}>{totalGuildScore.toLocaleString()} / {nextLevelXP.toLocaleString()} XP</span>
           </div>
-          <div className="progress-bar-wrap" style={{ height: 6 }}>
-            <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "linear-gradient(90deg, #d4af37, #f0c040)", boxShadow: "0 0 10px rgba(240,192,64,0.4)" }} />
+          <div className="progress-bar-wrap" style={{ height: 6, background: "rgba(255,255,255,0.05)" }}>
+            <div className="progress-bar-fill" style={{ width: `${xpProgress}%`, background: "linear-gradient(90deg, #d4af37, #f0c040)", boxShadow: "0 0 10px rgba(240,192,64,0.3)" }} />
           </div>
         </div>
       </div>

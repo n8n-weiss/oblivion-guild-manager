@@ -470,23 +470,22 @@ function MembersPage({ onViewProfile }) {
 
                       {/* Actions */}
                       <td>
-                        <div className="flex gap-1 justify-end" style={{ flexWrap: "nowrap" }}>
-                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => onViewProfile && onViewProfile(m)}>View</button>
+                        <div className="flex gap-2 justify-end items-center" style={{ flexWrap: "nowrap", minWidth: 160 }}>
+                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => onViewProfile && onViewProfile(m)}>View</button>
                           {isOfficer && (
-                            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={13} /></button>
+                            <button className="btn btn-ghost btn-sm btn-icon" style={{ width: 32, height: 32 }} onClick={() => openEdit(m)} title="Edit"><Icon name="edit" size={13} /></button>
                           )}
                           {isAdmin && (
                             <button
                               className={`btn btn-sm ${statusFilter === "active" ? "btn-archive" : "btn-restore"}`}
-                              style={{ fontSize: 10, padding: "4px 8px" }}
+                              style={{ fontSize: 10, padding: "4px 12px", height: 32, minWidth: 70 }}
                               onClick={() => toggleArchive(m.memberId)}
-                              title={statusFilter === "active" ? "Archive" : "Restore"}
                             >
                               {statusFilter === "active" ? "Archive" : "Restore"}
                             </button>
                           )}
                           {isArchitect && (
-                            <button className="btn btn-ghost btn-sm btn-icon text-red" onClick={() => deleteMemberRecord(m.memberId)} title="Permanent Delete">
+                            <button className="btn btn-ghost btn-sm btn-icon text-red" style={{ width: 32, height: 32 }} onClick={() => deleteMemberRecord(m.memberId)} title="Permanent Delete">
                               <Icon name="trash" size={13} />
                             </button>
                           )}
