@@ -4,7 +4,7 @@ import Icon from '../components/ui/icons';
 import { writeAuditLog } from "../utils/audit";
 
 function AbsencesPage() {
-  const { members, absences, setAbsences, showToast, currentUser } = useGuild();
+  const { members, absences, setAbsences, showToast, currentUser, broadcastStateSync } = useGuild();
   const [form, setForm] = useState({
     memberId: members?.[0]?.memberId || "",
     eventType: "Guild League",
@@ -16,7 +16,11 @@ function AbsencesPage() {
   const submitAbsence = () => {
     if (!form.memberId || !form.reason.trim()) { showToast("Fill all fields", "error"); return; }
     const id = `ABS${Date.now()}`;
-    setAbsences(prev => [...prev, { ...form, id }]);
+    const payload = { ...form, id };
+    setAbsences(prev => [...prev, payload]);
+    if (broadcastStateSync) {
+      broadcastStateSync('absences', payload);
+    }
     const member = members.find(m => m.memberId === form.memberId);
     showToast("Absence submitted successfully", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_submit", `Submitted absence for ${member?.ign} — ${form.eventType} ${form.eventDate}: "${form.reason}"`);
@@ -29,6 +33,9 @@ function AbsencesPage() {
     const absence = absences.find(a => a.id === id);
     const member = members.find(m => m.memberId === absence?.memberId);
     setAbsences(prev => prev.filter(a => a.id !== id));
+    if (broadcastStateSync) {
+      broadcastStateSync('absences', { id }, 'DELETE');
+    }
     showToast("Absence removed", "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_delete", `Removed absence for ${member?.ign} — ${absence?.eventType} ${absence?.eventDate}`);
     

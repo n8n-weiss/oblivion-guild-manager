@@ -462,15 +462,12 @@ export const GuildProvider = ({ children, initialData }) => {
       // Optimization: Initial load only gets last 60 days to keep app snappy
       const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, attendanceRes, performanceRes, eoRatingsRes, auctionSessionsRes] = await Promise.all([
+      const [rosterRes, eventsRes, absenceRes, metaRes, bidsRes, auctionSessionsRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/roster?select=member_id,ign,class,role,discord,guild_rank,status,level,cp,metadata,is_donator`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=gte.${cutoffDate}&order=event_date.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/absences?select=*&event_date=gte.${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&order=event_date.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/metadata?select=key,data,updated_at`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/auction_bids?select=member_id,bids,updated_at`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }), // Attendance will be filtered in processFetchedData or kept if small
-        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }), 
-        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/auction_sessions?select=id,name,date,columns,members,cells&order=date.desc`, { headers })
       ]);
 
@@ -487,9 +484,6 @@ export const GuildProvider = ({ children, initialData }) => {
       }
       const metaData = await metaRes.json();
       const bidsData = bidsRes.ok ? await bidsRes.json() : [];
-      const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
-      const performanceData = performanceRes.ok ? await performanceRes.json() : [];
-      const eoRatingsData = eoRatingsRes.ok ? await eoRatingsRes.json() : [];
       let auctionSessionsData = await auctionSessionsRes.json();
 
       setHasMoreEvents(eventsData.length >= 10);
@@ -519,7 +513,7 @@ export const GuildProvider = ({ children, initialData }) => {
         }
       }
 
-      processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData);
+      processFetchedData(rosterData, Array.isArray(eventsData) ? eventsData : [], absenceData, metaData, bidsData, [], [], [], auctionSessionsData);
 
       sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
         data: { rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData },
@@ -544,36 +538,41 @@ export const GuildProvider = ({ children, initialData }) => {
       const headers = getAuthHeaders();
       const oldestLoaded = events.length > 0 ? events[events.length - 1].eventDate : new Date().toISOString().split('T')[0];
       
-      const [eventsRes, attendanceRes, performanceRes, eoRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=lt.${oldestLoaded}&order=event_date.desc&limit=50`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/attendance?select=member_id,event_id,status`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/performance?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/eo_ratings?select=event_id,member_id,rating`, { headers })
+      const [eventsRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/events?select=event_id,event_date,type,title,auditor,gl_mode,battlelog_audit,digest_meta,attendance_data,performance_data,eo_ratings_data,created_at&event_date=lt.${oldestLoaded}&order=event_date.desc&limit=50`, { headers })
       ]);
-
       const newEvents = eventsRes.ok ? await eventsRes.json() : [];
-      const newAtt = attendanceRes.ok ? await attendanceRes.json() : [];
-      const newPerf = performanceRes.ok ? await performanceRes.json() : [];
-      const newEo = eoRes.ok ? await eoRes.json() : [];
 
       if (newEvents.length === 0) {
         setHasMoreEvents(false);
       } else {
+        // Flatten nested data from history events
+        const histAtt = [];
+        const histPerf = [];
+        const histEo = [];
+
+        newEvents.forEach(e => {
+          const eventId = e.event_id || e.eventId;
+          if (e.attendance_data) Object.entries(e.attendance_data).forEach(([mId, s]) => histAtt.push({ eventId, memberId: mId, status: s }));
+          if (e.performance_data) Object.entries(e.performance_data).forEach(([mId, p]) => histPerf.push({ eventId, memberId: mId, ...p }));
+          if (e.eo_ratings_data) Object.entries(e.eo_ratings_data).forEach(([mId, r]) => histEo.push({ eventId, memberId: mId, rating: r }));
+        });
+
         setEvents(prev => [...prev, ...newEvents]);
         setAttendance(prev => {
-          const combined = [...prev, ...newAtt.map(a => ({ ...a, memberId: a.member_id, eventId: a.event_id }))];
+          const combined = [...prev, ...histAtt];
           const map = new Map();
           combined.forEach(a => map.set(`${a.memberId}_${a.eventId}`, a));
           return Array.from(map.values());
         });
         setPerformance(prev => {
-          const combined = [...prev, ...newPerf.map(p => ({ ...p, memberId: p.member_id, eventId: p.event_id }))];
+          const combined = [...prev, ...histPerf];
           const map = new Map();
           combined.forEach(p => map.set(`${p.memberId}_${p.eventId}`, p));
           return Array.from(map.values());
         });
         setEoRatings(prev => {
-          const combined = [...prev, ...newEo.map(r => ({ ...r, memberId: r.member_id, eventId: r.event_id }))];
+          const combined = [...prev, ...histEo];
           const map = new Map();
           combined.forEach(r => map.set(`${r.memberId}_${r.eventId}`, r));
           return Array.from(map.values());
@@ -895,27 +894,7 @@ export const GuildProvider = ({ children, initialData }) => {
           [data.memberId]: { ...data, lastSeen: Date.now() }
         }));
       })
-      // 1. Roster
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'roster' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          setMembers(prev => {
-            const exists = prev.find(m => m.memberId === newRow.member_id);
-            const updated = exists 
-              ? prev.map(m => m.memberId === newRow.member_id ? { ...m, ...newRow.metadata, memberId: newRow.member_id } : m)
-              : [...prev, { ...newRow.metadata, memberId: newRow.member_id }];
-            prevData.current.members = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setMembers(prev => {
-            const updated = prev.filter(m => m.memberId !== oldRow.member_id);
-            prevData.current.members = [...updated];
-            return updated;
-          });
-        }
-      })
-      // 2. State Sync Broadcasts (Zero Egress for Events, Attendance, Performance, Auction Sessions)
+      // 2. State Sync Broadcasts (Zero Egress for Events, Attendance, Performance, Auction Sessions, Roster, Absences)
       .on('broadcast', { event: 'state_sync' }, payload => {
         const { table, data, action = 'UPDATE' } = payload.payload;
         
@@ -991,36 +970,42 @@ export const GuildProvider = ({ children, initialData }) => {
              });
            }
         }
-      })
-      // 6. Roster (Members)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'roster' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = { 
-            ...newRow,
-            ...newRow.metadata, 
-            memberId: newRow.member_id,
-            discord: newRow.discord || newRow.metadata?.discord || "",
-            guildRank: newRow.guild_rank,
-            isDonator: newRow.is_donator
-          };
-          setMembers(prev => {
-            const exists = prev.find(m => m.memberId === mapped.memberId);
-            const updated = exists 
-              ? prev.map(m => m.memberId === mapped.memberId ? mapped : m)
-              : [...prev, mapped].sort((a, b) => a.ign.localeCompare(b.ign));
-            prevData.current.members = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setMembers(prev => {
-            const updated = prev.filter(m => m.memberId !== oldRow.member_id);
-            prevData.current.members = [...updated];
-            return updated;
-          });
+        else if (table === 'roster') {
+           if (action === 'DELETE') {
+              setMembers(prev => {
+                const updated = prev.filter(m => m.memberId !== data.memberId);
+                prevData.current.members = [...updated];
+                return updated;
+              });
+           } else {
+              setMembers(prev => {
+                const exists = prev.find(m => m.memberId === data.memberId);
+                const updated = exists 
+                  ? prev.map(m => m.memberId === data.memberId ? data : m)
+                  : [...prev, data].sort((a, b) => a.ign.localeCompare(b.ign));
+                prevData.current.members = [...updated];
+                return updated;
+              });
+           }
+        }
+        else if (table === 'absences') {
+           if (action === 'DELETE') {
+              setAbsences(prev => {
+                const updated = prev.filter(a => a.id !== data.id);
+                prevData.current.absences = [...updated];
+                return updated;
+              });
+           } else {
+              setAbsences(prev => {
+                const exists = prev.find(a => a.id === data.id);
+                const updated = exists ? prev.map(a => a.id === data.id ? data : a) : [...prev, data];
+                prevData.current.absences = [...updated];
+                return updated;
+              });
+           }
         }
       })
-      // 7. Metadata (Auctions, Discord Config, etc.)
+      // 6. Metadata (Auctions, Discord Config, etc.)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metadata' }, payload => {
         const { eventType, new: newRow } = payload;
         if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -1038,33 +1023,6 @@ export const GuildProvider = ({ children, initialData }) => {
             setBattlelogConfig(data || {});
             prevData.current.battlelogConfig = { ...data };
           }
-        }
-      })
-      // 6. Absences
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'absences' }, payload => {
-        const { eventType, new: newRow, old: oldRow } = payload;
-        if (eventType === 'INSERT' || eventType === 'UPDATE') {
-          const mapped = { 
-            id: newRow.id, 
-            memberId: newRow.member_id, 
-            eventType: newRow.event_type || 'Guild League',
-            eventDate: newRow.event_date || newRow.start_date, 
-            reason: newRow.reason,
-            onlineStatus: newRow.online_status || 'No',
-            createdAt: newRow.created_at
-          };
-          setAbsences(prev => {
-            const exists = prev.find(a => a.id === mapped.id);
-            const updated = exists ? prev.map(a => a.id === mapped.id ? mapped : a) : [...prev, mapped];
-            prevData.current.absences = [...updated];
-            return updated;
-          });
-        } else if (eventType === 'DELETE') {
-          setAbsences(prev => {
-            const updated = prev.filter(a => a.id !== oldRow.id);
-            prevData.current.absences = [...updated];
-            return updated;
-          });
         }
       })
       // 7. Auction Bids / Wishlist

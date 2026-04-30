@@ -8,7 +8,7 @@ import StatePanel from '../components/common/StatePanel';
 import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, deleteMember, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers } = useGuild();
+  const { members, setMembers, deleteMember, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers, broadcastStateSync } = useGuild();
   const onlineUsers = Array.isArray(_onlineUsers) ? _onlineUsers : [];
   const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
   const MEMBERS_PRESETS_KEY = "members_view_presets_v1";
@@ -109,6 +109,10 @@ function MembersPage({ onViewProfile }) {
     const beforeMembers = members;
     const nextMembers = members.map(m => m.memberId === id ? { ...m, status: isRestoring ? "active" : "left" } : m);
     setMembers(nextMembers);
+    const updatedMember = nextMembers.find(m => m.memberId === id);
+    if (updatedMember && broadcastStateSync) {
+      broadcastStateSync('roster', updatedMember);
+    }
     showToast(isRestoring ? "Member restored" : "Member archived", "success");
     showToast(`Action applied to ${members.find(x => x.memberId === id)?.ign || id}`, "info", {
       label: "Undo",
@@ -127,6 +131,9 @@ function MembersPage({ onViewProfile }) {
     
     const success = await deleteMember(id);
     if (success) {
+      if (broadcastStateSync) {
+        broadcastStateSync('roster', { memberId: id }, 'DELETE');
+      }
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_delete_permanent", `PERMANENTLY DELETED member ${m?.ign} (${id})`);
     }
   };
@@ -190,8 +197,13 @@ function MembersPage({ onViewProfile }) {
       setMemberEdits(prev => ({ ...prev, [editMember]: { ...form } }));
       showToast("Changes queued. Remember to save all.", "info");
     } else {
-      if (members.find(m => m.memberId === form.memberId)) { showToast("ID already exists", "error"); return; }
-      setMembers(prev => [...prev, { ...form }]);
+      setMembers(prev => {
+        const next = [...prev, { ...form }];
+        if (broadcastStateSync) {
+          broadcastStateSync('roster', { ...form });
+        }
+        return next;
+      });
       showToast("Member added", "success");
       writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_add", `Added new member ${form.ign} (${form.memberId}) — ${form.class}, ${form.role}`);
     }
@@ -203,7 +215,15 @@ function MembersPage({ onViewProfile }) {
     const editCount = Object.keys(memberEdits).length;
     if (editCount === 0) return;
 
-    setMembers(prev => prev.map(m => memberEdits[m.memberId] ? { ...memberEdits[m.memberId] } : m));
+    setMembers(prev => {
+      const next = prev.map(m => memberEdits[m.memberId] ? { ...memberEdits[m.memberId] } : m);
+      if (broadcastStateSync) {
+        Object.keys(memberEdits).forEach(id => {
+          broadcastStateSync('roster', memberEdits[id]);
+        });
+      }
+      return next;
+    });
     setMemberEdits({});
     showToast(`Saved ${editCount} member updates`, "success");
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "member_bulk_edit", `Bulk saved ${editCount} member updates`);
