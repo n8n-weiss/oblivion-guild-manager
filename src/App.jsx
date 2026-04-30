@@ -99,9 +99,9 @@ const PresenceUI = ({ users }) => {
         </div>
       )}
       {userList.map((u, i) => (
-        <div key={i} className="presence-avatar" title={`${u.ign} is on ${u.page}`}>
+        <div key={i} className="presence-avatar" title={`${u.ign} is on ${u.page} (${u.status})`}>
           {u.ign?.slice(0, 2).toUpperCase()}
-          <div className={`status-dot ${u.status === 'online' ? 'status-online' : 'status-away'}`} />
+          <div className={`status-dot ${u.status === 'online' ? 'status-online' : u.status === 'idle' ? 'status-idle' : 'status-away'}`} />
         </div>
       ))}
     </div>
@@ -143,7 +143,8 @@ export default function App() {
     toast, setToast, showToast,
     members, events, absences,
     notifications, requests, joinRequests, onlineUsers,
-    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, syncStatus, triggerSyncRetry,
+    channelStatus
   } = useGuild();
 
   const [profileMember, setProfileMember] = useState(null);
@@ -708,13 +709,24 @@ export default function App() {
               border: "1px solid var(--border)",
               fontSize: 10
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-muted)" }}>
-                <div style={{ 
-                  width: 6, height: 6, borderRadius: "50%", 
-                  background: syncStatus === "synced" ? "#10b981" : syncStatus === "saving" ? "var(--gold)" : "#ef4444",
-                  boxShadow: syncStatus === "synced" ? "0 0 8px #10b981" : "none"
-                }} />
-                {syncStatus.toUpperCase()}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-muted)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ 
+                    width: 6, height: 6, borderRadius: "50%", 
+                    background: syncStatus === "synced" ? "#10b981" : syncStatus === "saving" ? "var(--gold)" : "#ef4444",
+                    boxShadow: syncStatus === "synced" ? "0 0 8px #10b981" : "none"
+                  }} />
+                  {syncStatus.toUpperCase()}
+                </div>
+                <div style={{ width: 1, height: 10, background: "var(--border)" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ 
+                    width: 6, height: 6, borderRadius: "50%", 
+                    background: channelStatus === "subscribed" ? "#6382e6" : "var(--text-muted)",
+                    boxShadow: channelStatus === "subscribed" ? "0 0 8px #6382e6" : "none"
+                  }} />
+                  LIVE
+                </div>
               </div>
               <button 
                 className="btn btn-ghost btn-sm" 

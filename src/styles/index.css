@@ -309,7 +309,8 @@
   }
 
   .status-online { background: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.6); }
-  .status-away { background: #f59e0b; opacity: 0.7; }
+  .status-idle { background: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.6); }
+  .status-away { background: #94a3b8; opacity: 0.7; }
 
   /* ── Login ── */
   .login-page-container {

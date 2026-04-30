@@ -103,7 +103,10 @@ export const GuildProvider = ({ children, initialData }) => {
     } catch { return ["Card Album", "Light & Dark"]; }
   });
   const [onlineUsers, setOnlineUsers] = useState([]); // Array of { memberId, ign, status, page }
-  const [officerActivities, setOfficerActivities] = useState({}); // { memberId: { activityData, lastSeen } }
+  const [officerActivities, setOfficerActivities] = useState({});
+  const [channelStatus, setChannelStatus] = useState('connecting'); // WebSocket status
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = React.useRef(null); // { memberId: { activityData, lastSeen } }
   const channelRef = useRef(null);
   const [metadataNotice, setMetadataNotice] = useState(null); // { kind, message, timestamp }
   const [metadataActivity] = useState([]); // recent shared metadata updates
@@ -1107,6 +1110,7 @@ export const GuildProvider = ({ children, initialData }) => {
         });
       })
       .subscribe((status) => {
+        setChannelStatus(status.toLowerCase());
         if (status === 'SUBSCRIBED') {
           // Ping our own presence to the channel immediately, then every 10 seconds
           const pingPresence = () => {
@@ -1115,7 +1119,12 @@ export const GuildProvider = ({ children, initialData }) => {
             const member = (prevData.current?.members || []).find(m => m.memberId === myMemberId);
             const name = member?.ign || currentUser.user_metadata?.ign || currentUser.email?.split('@')[0] || "Officer";
             
-            const payload = { memberId: myMemberId, ign: name, page: path, status: document.hidden ? 'away' : 'online' };
+            // Priority: Offline > Away (hidden tab) > Idle (no activity) > Online
+            let currentStatus = 'online';
+            if (document.hidden) currentStatus = 'away';
+            else if (isIdle) currentStatus = 'idle';
+
+            const payload = { memberId: myMemberId, ign: name, page: path, status: currentStatus };
             channel.send({ type: 'broadcast', event: 'officer_ping', payload }).catch(() => {});
             
             // Self-update
@@ -1149,15 +1158,33 @@ export const GuildProvider = ({ children, initialData }) => {
       });
     }, 5000);
 
+    // --- Idle Tracking (5 minutes) ---
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 5 * 60 * 1000); // 5 minutes
+    };
+
+    window.addEventListener('mousemove', resetIdleTimer);
+    window.addEventListener('mousedown', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+    resetIdleTimer();
+
     channelRef.current = channel;
 
     return () => {
       if (channel.pingInterval) clearInterval(channel.pingInterval);
       clearInterval(cullInterval);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      window.removeEventListener('mousemove', resetIdleTimer);
+      window.removeEventListener('mousedown', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [currentUser, authLoading, loading, myMemberId, fetchGlobalData, isStaff]);
+  }, [currentUser, authLoading, loading, myMemberId, fetchGlobalData, isStaff, isIdle, fetchRequests, showToast]);
 
 
 
@@ -2553,7 +2580,8 @@ export const GuildProvider = ({ children, initialData }) => {
     hasMoreEvents, loadingHistory, fetchFullHistory,
     auctionBids, setAuctionBids,
     isOfflineMode, setIsOfflineMode,
-    officerActivities, broadcastActivity, broadcastStateSync
+    officerActivities, broadcastActivity, broadcastStateSync,
+    channelStatus
   }), [
     loading, authLoading, currentUser, userRole, myMemberId, isAdmin, isOfficer, isMember, isArchitect, isStatusActive,
     onlineUsers, page, toast, members, events, auctionSessions, attendance, performance, absences,
@@ -2565,7 +2593,8 @@ export const GuildProvider = ({ children, initialData }) => {
     hasMoreEvents, loadingHistory, fetchFullHistory,
     deleteEvent, deleteAuctionSession, deleteMember,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
-    officerActivities, broadcastActivity, broadcastStateSync
+    officerActivities, broadcastActivity, broadcastStateSync,
+    channelStatus
   ]);
 
   return (
