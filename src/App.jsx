@@ -193,9 +193,23 @@ export default function App() {
       
       {/* Sidebar - Desktop */}
       <aside className="sidebar hide-mobile">
-        <div className="sidebar-header">
-          <div className="guild-logo">🛡️</div>
-          <div className="sidebar-title">OBLIVION</div>
+        <div className="sidebar-logo" style={{ textAlign: "center", overflow: "visible" }}>
+          <div className="logo-halo-container" style={{ margin: "16px auto 12px", transform: "scale(0.7)", transformOrigin: "center top", height: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div className="logo-halo" />
+            <div className="logo-ring" />
+            <div className="logo-frame-shimmer">
+              <div className="logo-inner-frame">
+                <div className="logo-flare" />
+                <img 
+                  src="oblivion-logo.png" 
+                  alt="Oblivion Logo" 
+                  style={{ width: 160, height: 160, objectFit: "cover", display: "block", position: "relative", zIndex: 1, borderRadius: 8, filter: "drop-shadow(0 0 15px var(--accent-glow))" }} 
+                />
+              </div>
+            </div>
+          </div>
+          <div className="sidebar-title" style={{ marginTop: 10, letterSpacing: 4, fontWeight: 900, fontSize: 18 }}>OBLIVION</div>
+          <div className="logo-sub" style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.5, letterSpacing: 2, marginTop: 4 }}>GUILD PORTAL</div>
         </div>
 
         <nav className="sidebar-nav">
@@ -203,6 +217,8 @@ export default function App() {
             if (item.id === 'users' && !isAdmin) return null;
             if (item.id === 'auditlog' && !isOfficer) return null;
             if (item.id === 'requests' && !isOfficer) return null;
+            if (item.id === 'import' && !isOfficer) return null;
+            if (item.id === 'auction' && !isOfficer) return null;
             
             const label = item.label;
             const count = item.id === 'requests' ? (requests.length + joinRequests.length) : undefined;
@@ -232,37 +248,51 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer-content">
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: isArchitect ? "rgba(255,77,77,0.15)" : isAdmin ? "rgba(240,192,64,0.15)" : "rgba(99,130,230,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+          <div className="sidebar-footer-content" style={{ padding: "16px", background: "rgba(0,0,0,0.2)", borderRadius: 16, border: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              <div style={{ 
+                width: 42, height: 42, borderRadius: 12, 
+                background: isArchitect ? "linear-gradient(135deg, #ff4d4d, #b91c1c)" : isAdmin ? "linear-gradient(135deg, var(--gold), #b45309)" : "linear-gradient(135deg, var(--accent), #1e3a8a)", 
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+                boxShadow: isArchitect ? "0 0 15px rgba(255,77,77,0.4)" : isAdmin ? "0 0 15px rgba(240,192,64,0.4)" : "none",
+                border: "1px solid rgba(255,255,255,0.1)"
+              }}>
                 {isArchitect ? "👁️" : isAdmin ? "⭐" : "🛡️"}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {currentUser.user_metadata?.display_name || currentUser.email}
                 </div>
-                <div style={{ fontSize: 9, fontWeight: 900, color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : "var(--accent)", letterSpacing: 1, textTransform: 'uppercase' }}>
+                <div style={{ 
+                  fontSize: 10, fontWeight: 900, 
+                  color: isArchitect ? "#ff4d4d" : isAdmin ? "var(--gold)" : "var(--accent)", 
+                  letterSpacing: 1.5, textTransform: 'uppercase',
+                  textShadow: isArchitect ? "0 0 8px rgba(255,77,77,0.3)" : "none"
+                }}>
                   {isArchitect ? "Architect" : isAdmin ? "Admin" : isOfficer ? "Officer" : "Member"}
                 </div>
               </div>
             </div>
             
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 4 }}>
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} onClick={() => setPage("members")}>
-                  Profile
-                </button>
+            <div style={{ display: "flex", gap: 4 }}>
+              {!isMember ? (
                 <button 
-                  className="btn btn-ghost btn-sm btn-icon" 
+                  className="btn btn-ghost btn-sm" 
+                  style={{ flex: 1, fontSize: 10, justifyContent: "center" }}
                   onClick={() => {
                     triggerSyncRetry();
                     showToast("Re-fetching global data...", "info");
                   }}
                   title="Force Refresh Data"
                 >
-                  <Icon name="rotate-cw" size={12} />
+                  <Icon name="rotate-cw" size={12} /> Force Refresh
                 </button>
-              </div>
+              ) : (
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} onClick={() => setProfileMember(myMemberId)}>
+                  My Stats & Profile
+                </button>
+              )}
+            </div>
 
               <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginBottom: 16, background: "linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))", color: "var(--gold)", border: "1px solid var(--border)" }} onClick={() => setShowTreasury(true)}>
                 <Icon name="star" size={14} /> Buy Me A Beer
@@ -286,6 +316,15 @@ export default function App() {
             <button className="btn btn-ghost btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 10, marginTop: 8, opacity: 0.6 }} onClick={handleSignOut}>
               Exit System
             </button>
+
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <div className="version-badge">
+                <span className="version-dot" />
+                v2.6.0 Stable
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", opacity: 0.8, display: "flex", alignItems: "center", gap: 4 }}>
+                Crafted by <span style={{ fontFamily: "Cinzel,serif", color: "#ff4d4d", letterSpacing: 2, fontWeight: 900, textShadow: "0 0 10px rgba(255,77,77,0.4)" }}>Ꮤ 𐌄 𐌉 𐌔 𐌔</span>
+              </div>
           </div>
         </div>
       </aside>
@@ -320,11 +359,11 @@ export default function App() {
                 )}
                 {effectivePage === "events" && <PageWrapper id="events"><EventsPage /></PageWrapper>}
                 {effectivePage === "absences" && <PageWrapper id="absences"><AbsencesPage /></PageWrapper>}
-                {effectivePage === "import" && <PageWrapper id="import"><ImportPage /></PageWrapper>}
-                {effectivePage === "auction" && <PageWrapper id="auction"><AuctionBuilder /></PageWrapper>}
-                {effectivePage === "users" && <PageWrapper id="users"><UserManagementPage /></PageWrapper>}
-                {effectivePage === "auditlog" && <PageWrapper id="auditlog"><AuditLogPage /></PageWrapper>}
-                {effectivePage === "requests" && <PageWrapper id="requests"><RequestsPage /></PageWrapper>}
+                {effectivePage === "import" && (isOfficer ? <PageWrapper id="import"><ImportPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "auction" && (isOfficer ? <PageWrapper id="auction"><AuctionBuilder /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "users" && (isAdmin ? <PageWrapper id="users"><UserManagementPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "auditlog" && (isOfficer ? <PageWrapper id="auditlog"><AuditLogPage /></PageWrapper> : <Dashboard />)}
+                {effectivePage === "requests" && (isOfficer ? <PageWrapper id="requests"><RequestsPage /></PageWrapper> : <Dashboard />)}
               </React.Suspense>
             </PageErrorBoundary>
           )}
