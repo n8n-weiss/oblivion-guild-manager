@@ -300,7 +300,7 @@ export default function App() {
                 }} 
                 onClick={() => setShowTreasury(true)}
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(255,255,255,0.2)] to-transparent -translate-x-[150%] animate-[shimmer_2.5s_infinite]" />
+                <div className="premium-shimmer" />
                 <Icon name="star" size={14} /> Buy Me A Beer
               </button>
             </div>
