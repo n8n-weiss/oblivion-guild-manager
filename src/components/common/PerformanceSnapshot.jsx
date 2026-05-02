@@ -168,21 +168,38 @@ const PerformanceSnapshot = () => {
         inline: false
       });
 
-      await sendDiscordEmbed(
-        `🛡️  __**OBLIVION ${label.toUpperCase()} ${mode === 'full' ? 'FULL LEADERBOARD' : (type === 'weekly' ? 'DIGEST' : 'HONORS')}**__  🛡️`,
-        mode === 'full' 
-          ? `The complete official rankings for this period. Every point counts!\n\u200B`
-          : (type === 'weekly' 
-            ? `Detailed performance report for the past 7 days. Excellent work, Oblivion!\n\u200B`
-            : `Recognizing our top performers for this period!\n\u200B`),
-        type === 'monthly' ? 0x6382E6 : (type === 'weekly' ? 0x9333ea : 0xF0C040),
-        fields,
-        "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-        "reports",
-        `${type}_${mode}`,
-        { scope: label },
-        null
-      );
+      const MAX_FIELDS_PER_EMBED = 15;
+      for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_EMBED) {
+        const fieldBatch = fields.slice(i, i + MAX_FIELDS_PER_EMBED);
+        const isFirstBatch = i === 0;
+        const isLastBatch = i + MAX_FIELDS_PER_EMBED >= fields.length;
+
+        await sendDiscordEmbed(
+          isFirstBatch 
+            ? `🛡️  __**OBLIVION ${label.toUpperCase()} ${mode === 'full' ? 'FULL LEADERBOARD' : (type === 'weekly' ? 'DIGEST' : 'HONORS')}**__  🛡️`
+            : `🛡️  __**OBLIVION ${label.toUpperCase()} (Continuation)**__  🛡️`,
+          isFirstBatch 
+            ? (mode === 'full' 
+              ? `The complete official rankings for this period. Every point counts!\n\u200B`
+              : (type === 'weekly' 
+                ? `Detailed performance report for the past 7 days. Excellent work, Oblivion!\n\u200B`
+                : `Recognizing our top performers for this period!\n\u200B`))
+            : "",
+          type === 'monthly' ? 0x6382E6 : (type === 'weekly' ? 0x9333ea : 0xF0C040),
+          fieldBatch,
+          isFirstBatch ? "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" : null,
+          "reports",
+          `${type}_${mode}`,
+          { scope: label },
+          null,
+          isFirstBatch ? null : " " // Use a space to override ping and avoid duplicate pings on continuation messages
+        );
+        
+        if (!isLastBatch) {
+          await new Promise(res => setTimeout(res, 1000)); // 1 second delay to avoid rate limits
+        }
+      }
+
       showToast(`${label} ${mode === 'full' ? 'Full Leaderboard' : 'Top 10'} posted to Discord!`, "success");
     } catch (err) {
       console.error("Discord Error:", err);
