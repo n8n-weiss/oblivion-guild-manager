@@ -11,7 +11,7 @@ const PerformanceSnapshot = () => {
   const [posting, setPosting] = useState(null); // 'monthly' or 'ytd'
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
+  const activeMembers = useMemo(() => members.filter(m => (m.status || "active").toLowerCase() === "active"), [members]);
 
   const selectedMonthDate = useMemo(() => {
     const d = new Date();
@@ -82,7 +82,7 @@ const PerformanceSnapshot = () => {
         const topOverall = activeScorers.slice(0, 10);
         const topDPS = activeScorers.filter(m => m.role === "DPS").slice(0, 10);
         const topSupport = activeScorers.filter(m => m.role === "Support").slice(0, 10);
-        const topAttendance = [...data].filter(m => m.attendancePct > 0).sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
+        const topAttendance = activeScorers.sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
 
         const formatDetailedMember = (m, rank) => {
           let str = `**#${rank}** — ${m.ign} (**${m.totalScore.toLocaleString()} pts**)`;
