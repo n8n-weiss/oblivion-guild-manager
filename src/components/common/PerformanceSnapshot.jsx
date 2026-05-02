@@ -80,8 +80,12 @@ const PerformanceSnapshot = () => {
       if (mode === 'top10') {
         const activeScorers = data.filter(m => m.totalScore > 0);
         const topOverall = activeScorers.slice(0, 10);
-        const topDPS = activeScorers.filter(m => m.role === "DPS").slice(0, 10);
-        const topSupport = activeScorers.filter(m => m.role === "Support").slice(0, 10);
+        const topDPS = [...activeScorers].filter(m => m.role === "DPS")
+          .sort((a, b) => (b.totalKills || 0) - (a.totalKills || 0) || (b.totalScore || 0) - (a.totalScore || 0))
+          .slice(0, 10);
+        const topSupport = [...activeScorers].filter(m => m.role === "Support")
+          .sort((a, b) => (b.totalAssists || 0) - (a.totalAssists || 0) || (b.totalScore || 0) - (a.totalScore || 0))
+          .slice(0, 10);
         const topAttendance = [...activeScorers].sort((a, b) => 
           ((b.attendancePct || 0) - (a.attendancePct || 0)) || 
           ((b.totalScore || 0) - (a.totalScore || 0))

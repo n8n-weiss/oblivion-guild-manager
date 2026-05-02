@@ -476,11 +476,11 @@ function EventsPage() {
     }));
     const topDps = withEventScore
       .filter(m => (m.role || "").toLowerCase() === "dps")
-      .sort((a, b) => b.eventScore - a.eventScore)
+      .sort((a, b) => (b.perf?.kills || 0) - (a.perf?.kills || 0) || b.eventScore - a.eventScore)
       .slice(0, 10);
     const topSupport = withEventScore
       .filter(m => (m.role || "").toLowerCase().includes("support"))
-      .sort((a, b) => b.eventScore - a.eventScore)
+      .sort((a, b) => (b.perf?.assists || 0) - (a.perf?.assists || 0) || b.eventScore - a.eventScore)
       .slice(0, 10);
     const topAttendance = [...leaderboardSnapshot]
       .sort((a, b) => b.attendancePct - a.attendancePct || b.totalScore - a.totalScore)
