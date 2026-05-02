@@ -138,6 +138,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
     auctionSessions, migrateMemberData,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData,
+    submitAbsence: submitAbsenceToDb, removeAbsence: removeAbsenceFromDb,
     broadcastStateSync
   } = useGuild();
 
@@ -472,8 +473,17 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
     return { nextEvent: nearestUpcoming || latestPast, isUpcoming: !!nearestUpcoming };
   }, [events]);
 
-  const quickAbsence = () => {
+  const quickAbsence = async () => {
     if (!nextEvent) return;
+    
+    // Check if already filed for this specific event
+    const existing = memberAbsences.find(a => a.eventDate === nextEvent.eventDate && a.eventType === nextEvent.eventType);
+    if (existing) {
+      const success = await removeAbsenceFromDb(existing.id);
+      if (success) showToast(`Absence removed for ${nextEvent.eventDate}`, "info");
+      return;
+    }
+
     const id = `ABS${Date.now()}`;
     const newAbsence = {
       id,
@@ -481,14 +491,12 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
       eventType: nextEvent.eventType,
       eventDate: nextEvent.eventDate,
       reason: "Quick-filed from portal (Busy)",
-      onlineStatus: "No"
+      onlineStatus: "No",
+      status: "pending"
     };
-    setAbsences(prev => [...prev, newAbsence]);
-    if (broadcastStateSync) {
-      broadcastStateSync('absences', newAbsence);
-    }
-    showToast(`Absence filed for ${nextEvent.eventDate}`, "success");
-    // writeAuditLog removed (member-initiated)
+
+    const success = await submitAbsenceToDb(newAbsence);
+    if (success) showToast(`Absence filed for ${nextEvent.eventDate}`, "success");
   };
 
   // 8. Performance Summary
@@ -582,18 +590,17 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
   }, [memberEvents]);
 
 
-  const submitAbsence = () => {
+  const submitAbsence = async () => {
     if (!absenceForm.reason.trim()) { showToast("Please provide a reason", "error"); return; }
     const id = `ABS${Date.now()}`;
     const newAbsence = { ...absenceForm, memberId: member.memberId, id };
-    setAbsences(prev => [...prev, newAbsence]);
-    if (broadcastStateSync) {
-      broadcastStateSync('absences', newAbsence);
+    
+    const success = await submitAbsenceToDb(newAbsence);
+    if (success) {
+      showToast("Absence filed successfully!", "success");
+      setShowAbsenceForm(false);
+      setAbsenceForm(f => ({ ...f, reason: "" }));
     }
-    showToast("Absence filed successfully!", "success");
-    // writeAuditLog removed (member-initiated)
-    setShowAbsenceForm(false);
-    setAbsenceForm(f => ({ ...f, reason: "" }));
   };
 
   const saveSocialData = () => {

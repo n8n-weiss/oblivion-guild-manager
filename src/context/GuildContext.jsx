@@ -2505,6 +2505,61 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsLoadingHistory(false);
     }
+  const submitAbsence = useCallback(async (absenceData) => {
+    try {
+      const headers = getAuthHeaders();
+      const payload = [{
+        id: absenceData.id,
+        member_id: absenceData.memberId,
+        event_type: absenceData.eventType || absenceData.event_type,
+        event_date: absenceData.eventDate || absenceData.event_date,
+        start_date: absenceData.eventDate || absenceData.event_date,
+        end_date: absenceData.eventDate || absenceData.event_date,
+        reason: absenceData.reason,
+        online_status: absenceData.onlineStatus || absenceData.online_status || 'No',
+        status: 'pending'
+      }];
+
+      const res = await fetch(`${supabaseUrl}/rest/v1/absences`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error(`Absence Save Failed: ${res.status}`);
+      
+      setAbsences(prev => [...prev, absenceData]);
+      if (broadcastStateSync) broadcastStateSync('absences', absenceData);
+      
+      return true;
+    } catch (err) {
+      console.error("submitAbsence failed:", err);
+      showToast("Failed to save absence to server", "error");
+      return false;
+    }
+  }, [getAuthHeaders, broadcastStateSync, showToast]);
+
+  const removeAbsence = useCallback(async (absenceId) => {
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch(`${supabaseUrl}/rest/v1/absences?id=eq.${absenceId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) throw new Error(`Absence Delete Failed: ${res.status}`);
+      
+      setAbsences(prev => prev.filter(a => a.id !== absenceId));
+      if (broadcastStateSync) broadcastStateSync('absences', { id: absenceId }, 'DELETE');
+      
+      return true;
+    } catch (err) {
+      console.error("removeAbsence failed:", err);
+      showToast("Failed to remove absence from server", "error");
+      return false;
+    }
+  }, [getAuthHeaders, broadcastStateSync, showToast]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storageKey is a stable string derived from guild config; not reactive
   }, [showToast]);
 
@@ -2584,7 +2639,7 @@ export const GuildProvider = ({ children, initialData }) => {
     auctionSessions, setAuctionSessions, deleteAuctionSession,
     attendance, setAttendance,
     performance, setPerformance,
-    absences, setAbsences,
+    absences, setAbsences, submitAbsence, removeAbsence,
     parties, setParties,
     partyNames, setPartyNames,
     raidParties, setRaidParties,
@@ -2621,7 +2676,7 @@ export const GuildProvider = ({ children, initialData }) => {
     hasMoreEvents, loadingHistory, fetchFullHistory,
     deleteEvent, deleteAuctionSession, deleteMember,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
-    officerActivities, broadcastActivity, broadcastStateSync,
+    officerActivities, broadcastActivity, broadcastStateSync, submitAbsence, removeAbsence,
     channelStatus
   ]);
 
