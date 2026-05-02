@@ -177,7 +177,7 @@ const PerformanceSnapshot = () => {
         await sendDiscordEmbed(
           isFirstBatch 
             ? `🛡️  __**OBLIVION ${label.toUpperCase()} ${mode === 'full' ? 'FULL LEADERBOARD' : (type === 'weekly' ? 'DIGEST' : 'HONORS')}**__  🛡️`
-            : `🛡️  __**OBLIVION ${label.toUpperCase()} (Continuation)**__  🛡️`,
+            : `🛡️  __**OBLIVION ${label.toUpperCase()} (Part ${Math.floor(i / MAX_FIELDS_PER_EMBED) + 1})**__  🛡️`,
           isFirstBatch 
             ? (mode === 'full' 
               ? `The complete official rankings for this period. Every point counts!\n\u200B`
