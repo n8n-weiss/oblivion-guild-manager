@@ -70,63 +70,89 @@ const PerformanceSnapshot = () => {
     };
   }, [monthlyLb, ytdLb, weeklyLb]);
 
-  const postToDiscord = async (type, data, label) => {
+  const postToDiscord = async (type, data, label, mode = 'top10') => {
     if (!isOfficer || posting) return;
-    setPosting(type);
+    setPosting(`${type}_${mode}`);
     try {
-      const topOverall = data.slice(0, 10);
-      const topDPS = [...data].filter(m => m.role === "DPS").slice(0, 10);
-      const topSupport = [...data].filter(m => m.role === "Support").slice(0, 10);
-      const topAttendance = [...data].sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
-
+      let fields = [];
       const highlights = combatHighlights[type];
-      
-      const fields = [
-        { 
-          name: "🏆 TOP 10 OVERALL WARRIORS", 
-          value: topOverall.length > 0 ? topOverall.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts** | ⚔️ ${m.totalKills} / 🤝 ${m.totalAssists}`).join("\n\n") : "No data recorded.",
-          inline: false 
-        },
-        { 
-          name: "⚔️ TOP 10 DPS ELITES", 
-          value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
-          inline: true 
-        },
-        { 
-          name: "🛡️ TOP 10 SUPPORT SPECIALISTS", 
-          value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
-          inline: true 
-        },
-        { 
-          name: "📋 TOP 10 ATTENDANCE LEADERS", 
-          value: topAttendance.length > 0 ? topAttendance.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.attendancePct}% attendance**`).join("\n\n") : "No data recorded.",
-          inline: false 
-        }
-      ];
 
-      if (type === 'weekly' && highlights?.killer) {
-        fields.unshift({
-          name: "🔥 WEEKLY COMBAT HIGHLIGHTS",
-          value: `⚔️ **Top Killer:** ${highlights.killer?.ign} (${highlights.killer?.totalKills} kills)\n🤝 **Top Assistant:** ${highlights.assistant?.ign} (${highlights.assistant?.totalAssists} assists)\n✨ **Objective MVP:** ${highlights.objective?.ign} (${(highlights.objective?.totalTablets || 0) + (highlights.objective?.totalBoss || 0)} pts)`,
-          inline: false
-        });
+      if (mode === 'top10') {
+        const topOverall = data.slice(0, 10);
+        const topDPS = [...data].filter(m => m.role === "DPS").slice(0, 10);
+        const topSupport = [...data].filter(m => m.role === "Support").slice(0, 10);
+        const topAttendance = [...data].sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
+
+        fields = [
+          { 
+            name: "🏆 TOP 10 OVERALL WARRIORS", 
+            value: topOverall.length > 0 ? topOverall.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts** | ⚔️ ${m.totalKills} / 🤝 ${m.totalAssists}`).join("\n\n") : "No data recorded.",
+            inline: false 
+          },
+          { 
+            name: "⚔️ TOP 10 DPS ELITES", 
+            value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
+            inline: true 
+          },
+          { 
+            name: "🛡️ TOP 10 SUPPORT SPECIALISTS", 
+            value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
+            inline: true 
+          },
+          { 
+            name: "📋 TOP 10 ATTENDANCE LEADERS", 
+            value: topAttendance.length > 0 ? topAttendance.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.attendancePct}% attendance**`).join("\n\n") : "No data recorded.",
+            inline: false 
+          }
+        ];
+
+        if (type === 'weekly' && highlights?.killer) {
+          fields.unshift({
+            name: "🔥 WEEKLY COMBAT HIGHLIGHTS",
+            value: `⚔️ **Top Killer:** ${highlights.killer?.ign} (${highlights.killer?.totalKills} kills)\n🤝 **Top Assistant:** ${highlights.assistant?.ign} (${highlights.assistant?.totalAssists} assists)\n✨ **Objective MVP:** ${highlights.objective?.ign} (${(highlights.objective?.totalTablets || 0) + (highlights.objective?.totalBoss || 0)} pts)`,
+            inline: false
+          });
+        }
+      } else if (mode === 'full') {
+        // Chunk full roster to prevent exceeding Discord 1024-char limit per field
+        const getMedal = (rank) => {
+          if (rank === 1) return "🥇";
+          if (rank === 2) return "🥈";
+          if (rank === 3) return "🥉";
+          return "▫️";
+        };
+
+        const chunkSize = 20; 
+        for (let i = 0; i < data.length; i += chunkSize) {
+          const chunk = data.slice(i, i + chunkSize);
+          fields.push({
+            name: `📜 OVERALL RANKS ${i + 1} TO ${i + chunk.length}`,
+            value: chunk.map((m, idx) => {
+              const rank = i + idx + 1;
+              return `**#${rank}** ${getMedal(rank)} **${m.ign}** — ${m.totalScore.toLocaleString()} pts`;
+            }).join("\n"),
+            inline: false
+          });
+        }
       }
 
       await sendDiscordEmbed(
-        `🛡️  __**OBLIVION ${label.toUpperCase()} ${type === 'weekly' ? 'DIGEST' : 'HONORS'}**__  🛡️`,
-        type === 'weekly' 
-          ? `Detailed performance report for the past 7 days. Excellent work, Oblivion!\n\u200B`
-          : `Recognizing our top performers for this period!\n\u200B`,
+        `🛡️  __**OBLIVION ${label.toUpperCase()} ${mode === 'full' ? 'FULL LEADERBOARD' : (type === 'weekly' ? 'DIGEST' : 'HONORS')}**__  🛡️`,
+        mode === 'full' 
+          ? `The complete official rankings for this period. Every point counts!\n\u200B`
+          : (type === 'weekly' 
+            ? `Detailed performance report for the past 7 days. Excellent work, Oblivion!\n\u200B`
+            : `Recognizing our top performers for this period!\n\u200B`),
         type === 'monthly' ? 0x6382E6 : (type === 'weekly' ? 0x9333ea : 0xF0C040),
         fields,
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
         "reports",
-        `${type}_honors`,
+        `${type}_${mode}`,
         { scope: label },
         null,
         discordConfig?.oblivionRoleId ? `<@&${discordConfig.oblivionRoleId}>` : "@everyone"
       );
-      showToast(`${label} report posted to Discord!`, "success");
+      showToast(`${label} ${mode === 'full' ? 'Full Leaderboard' : 'Top 10'} posted to Discord!`, "success");
     } catch (err) {
       console.error("Discord Error:", err);
       showToast("Failed to post honors", "error");
@@ -368,15 +394,25 @@ const PerformanceSnapshot = () => {
       </div>
       
       {isOfficer && (
-        <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+        <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', display: 'flex', gap: 8 }}>
           <button 
             className="btn btn-primary btn-sm"
-            style={{ width: '100%', justifyContent: 'center', gap: '8px', background: 'rgba(99, 130, 230, 0.15)', border: '1px solid rgba(99, 130, 230, 0.3)', color: 'var(--accent)' }}
-            disabled={posting === (title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd')) || data.length === 0}
-            onClick={() => postToDiscord(title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd'), data, title)}
+            style={{ flex: 1, justifyContent: 'center', gap: '8px', background: 'rgba(99, 130, 230, 0.15)', border: '1px solid rgba(99, 130, 230, 0.3)', color: 'var(--accent)' }}
+            disabled={posting || data.length === 0}
+            onClick={() => postToDiscord(title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd'), data, title, 'top10')}
           >
             <Icon name="brand-discord" size={14} />
-            {posting === (title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd')) ? 'Posting...' : `Post ${title} Honors`}
+            {posting === `${title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd')}_top10` ? 'Posting...' : `Post Top 10`}
+          </button>
+          
+          <button 
+            className="btn btn-secondary btn-sm"
+            style={{ flex: 1, justifyContent: 'center', gap: '8px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+            disabled={posting || data.length === 0}
+            onClick={() => postToDiscord(title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd'), data, title, 'full')}
+          >
+            <Icon name="brand-discord" size={14} />
+            {posting === `${title.includes('MONTHLY') ? 'monthly' : (title.includes('WEEKLY') ? 'weekly' : 'ytd')}_full` ? 'Posting...' : `Post Full Roster`}
           </button>
         </div>
       )}
