@@ -158,6 +158,12 @@ const PerformanceSnapshot = () => {
         }
       }
 
+      fields.unshift({
+        name: "📖 SYMBOLS LEGEND",
+        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets | 🎯 Total Score",
+        inline: false
+      });
+
       await sendDiscordEmbed(
         `🛡️  __**OBLIVION ${label.toUpperCase()} ${mode === 'full' ? 'FULL LEADERBOARD' : (type === 'weekly' ? 'DIGEST' : 'HONORS')}**__  🛡️`,
         mode === 'full' 
