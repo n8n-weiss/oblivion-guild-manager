@@ -107,14 +107,14 @@ export const GuildProvider = ({ children, initialData }) => {
   const channelRef = useRef(null);
 
   const broadcastStateSync = useCallback((table, data, action = 'UPDATE') => {
-    if (channelRef.current) {
+    if (channelRef.current && currentUser) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'state_sync',
         payload: { table, data, action }
       }).catch(() => {});
     }
-  }, []);
+  }, [currentUser]);
 
   const broadcastActivity = useCallback((activityPayload) => {
     if (channelRef.current && myMemberId) {
@@ -1158,7 +1158,9 @@ export const GuildProvider = ({ children, initialData }) => {
             else if (isIdle) currentStatus = 'idle';
 
             const payload = { memberId: myMemberId, ign: name, page: path, status: currentStatus };
-            channel.send({ type: 'broadcast', event: 'officer_ping', payload }).catch(() => {});
+            if (currentUser) {
+              channel.send({ type: 'broadcast', event: 'officer_ping', payload }).catch(() => {});
+            }
             
             // Self-update
             setOnlineUsers(prev => {
