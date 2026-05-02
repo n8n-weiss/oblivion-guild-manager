@@ -324,6 +324,24 @@ function EventsPage() {
     setAttEdits(prev => ({ ...prev, [key]: newStatus }));
   };
 
+  const discardAllEdits = () => {
+    setPerfEdits({});
+    setAttEdits({});
+    showToast("All changes discarded", "info");
+  };
+
+  const saveAllChanges = () => {
+    const hasPerf = Object.keys(perfEdits).filter(k => k.endsWith(`_${selectedEvent?.eventId}`)).length > 0;
+    const hasAtt = Object.keys(attEdits).filter(k => k.endsWith(`_${selectedEvent?.eventId}`)).length > 0;
+    
+    if (hasPerf) saveAllPerformance();
+    if (hasAtt) saveAllAttendance();
+    
+    if (!hasPerf && !hasAtt) {
+      showToast("No changes to save", "info");
+    }
+  };
+
   const markAllPresent = (eventId) => {
     const activeIds = activeMembers.map(m => (m.memberId || "").trim());
     const newEdits = {};
@@ -892,8 +910,8 @@ function EventsPage() {
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
-                            <button className={`att-toggle ${m.att?.status || "present"}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)}>
-                              {(m.att?.status || "present") === "present" ? "Present" : "Absent"}
+                            <button className={`att-toggle ${attStatus}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)}>
+                              {attStatus === "present" ? "Present" : "Absent"}
                             </button>
                           </td>
                           {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
@@ -912,7 +930,7 @@ function EventsPage() {
                               {/* Score pill */}
                               <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
                               <td>
-                                {isDirty && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
+                                {(isDirty || isAttDirty) && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
                               </td>
                             </>
                           )}
@@ -952,7 +970,7 @@ function EventsPage() {
                                 {/* Computed Score pill */}
                                 <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{sScore}</span></td>
                                 <td>
-                                  {isDirty && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
+                                  {(isDirty || isAttDirty) && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", margin: "0 auto", boxShadow: "0 0 8px var(--gold)" }} title="Unsaved changes" />}
                                 </td>
                               </>
                             );
@@ -1012,16 +1030,21 @@ function EventsPage() {
       )}
 
       {/* Floating Action Bar for Bulk Saves */}
-      {Object.keys(perfEdits).length > 0 && (
+      {(Object.keys(perfEdits).length > 0 || Object.keys(attEdits).length > 0) && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-slide-up">
           <div className="premium-pill glass-panel shadow-2xl" style={{ padding: '12px 24px', gap: 20, border: '1px solid var(--accent)', display: 'flex', alignItems: 'center' }}>
             <div className="flex flex-col">
               <span className="text-xs font-bold text-accent uppercase tracking-widest" style={{ color: 'var(--accent)', fontWeight: 800 }}>Unsaved Changes</span>
-              <span className="text-[10px] text-muted" style={{ opacity: 0.7 }}>{Object.keys(perfEdits).length} performance records modified</span>
+              <span className="text-[10px] text-muted" style={{ opacity: 0.7 }}>
+                {Object.keys(perfEdits).length > 0 && `${Object.keys(perfEdits).length} performance `}
+                {Object.keys(perfEdits).length > 0 && Object.keys(attEdits).length > 0 && "& "}
+                {Object.keys(attEdits).length > 0 && `${Object.keys(attEdits).length} attendance `}
+                records modified
+              </span>
             </div>
             <div className="flex gap-3" style={{ display: 'flex', gap: 12 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPerfEdits({})}>Discard</button>
-              <button className="btn btn-primary btn-sm px-6" onClick={saveAllPerformance} style={{ padding: '6px 20px', borderRadius: 8 }}>
+              <button className="btn btn-ghost btn-sm" onClick={discardAllEdits}>Discard</button>
+              <button className="btn btn-primary btn-sm px-6" onClick={saveAllChanges} style={{ padding: '6px 20px', borderRadius: 8 }}>
                 <Icon name="save" size={12} /> Save All Changes
               </button>
             </div>

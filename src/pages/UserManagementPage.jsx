@@ -7,21 +7,59 @@ import ConfirmDangerModal from '../components/common/ConfirmDangerModal';
 // ── Architect-Only: Supabase System Monitor ──────────────────────────────────
 function SystemMonitor({ supabase }) {
   const [stats, setStats] = React.useState(null);
+  const [usage, setUsage] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [lastFetched, setLastFetched] = React.useState(null);
 
   const fetchStats = async () => {
     setLoading(true);
+    setUsage(null); // Clear previous usage to show loading state
     try {
-      const { data, error } = await supabase.rpc('get_db_stats');
-      if (error) throw error;
-      setStats(data);
+      console.log("System Monitor: Fetching DB stats...");
+      const { data: dbData, error: dbError } = await supabase.rpc('get_db_stats');
+      if (dbError) throw dbError;
+      setStats(dbData);
+
+      console.log("System Monitor: Fetching Usage metrics...");
+      const CACHE_KEY = 'supabase_usage_cache';
+      // Forcing refresh when clicking the button
+      await fetchUsage(CACHE_KEY);
+
       setLastFetched(new Date());
     } catch (err) {
       console.error("System Monitor fetch failed:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUsage = async (cacheKey) => {
+    try {
+      console.log("Fetching usage metrics from Edge Function...");
+      const { data, error } = await supabase.functions.invoke('get-usage-metrics');
+      if (error) {
+        console.error("Usage metrics fetch failed:", error);
+        
+        // Try to parse the error body if it's a JSON response from our function
+        let errorMessage = error.message;
+        try {
+          // FunctionsHttpError usually has a context property or similar
+          // But if we returned a JSON error from our function, we need to handle it
+          console.log("Error details:", error);
+        } catch (e) { 
+        console.warn("Usage cache failed:", e); 
+      }
+
+        setUsage({ _error: errorMessage || "Failed to fetch usage metrics" });
+        return;
+      }
+      console.log("Usage metrics received:", data);
+      setUsage(data);
+      sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+    } catch (err) {
+      console.error("Usage fetch exception:", err);
+      setUsage({ _error: err.message });
     }
   };
 
@@ -56,23 +94,99 @@ function SystemMonitor({ supabase }) {
 
       {open && (
         <div style={{ marginTop: 16 }}>
-          {/* Storage Bar */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-              <span style={{ color: "var(--text-muted)" }}>Supabase Storage (Free Tier: 500MB)</span>
-              <span style={{ fontWeight: 700, color: barColor }}>
-                {stats ? `${stats.total_size_pretty} / 500 MB` : "—"}
-              </span>
+          {/* Storage & Egress Bars */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 20, marginBottom: 16 }}>
+            {/* DB Storage */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 700 }}>DATABASE SIZE</span>
+                <span style={{ fontWeight: 700, color: barColor }}>
+                  {stats ? `${stats.total_size_pretty} / 500 MB` : "—"}
+                </span>
+              </div>
+              <div style={{ height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${usedPct}%`, borderRadius: 99,
+                  background: barColor,
+                  transition: "width 0.6s ease",
+                  boxShadow: `0 0 8px ${barColor}80`
+                }} />
+              </div>
             </div>
-            <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden" }}>
-              <div style={{
-                height: "100%", width: `${usedPct}%`, borderRadius: 99,
-                background: barColor,
-                transition: "width 0.6s ease",
-                boxShadow: `0 0 8px ${barColor}80`
-              }} />
+
+            {/* App Activity Overview */}
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 700 }}>APP ACTIVITY (PENDING)</span>
+                <span style={{ fontWeight: 700, color: "var(--accent)" }}>
+                  {loading ? "Loading..." : `${(usage?.stats?.pendingJoins || 0) + (usage?.stats?.pendingAbsences || 0)} active items`}
+                </span>
+              </div>
+              <div style={{ height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", 
+                  width: loading ? "30%" : "100%", 
+                  borderRadius: 99,
+                  background: "var(--accent)",
+                  transition: "width 0.6s ease",
+                  boxShadow: "0 0 8px var(--accent)80",
+                  animation: loading ? "pulse 1.5s infinite ease-in-out" : "none"
+                }} />
+              </div>
             </div>
           </div>
+
+          {/* Audit Logs & Stats Breakdown */}
+          {loading ? (
+            <div style={{ padding: 20, textAlign: "center", opacity: 0.5, fontSize: 12 }}>
+              Fetching latest audit logs and system stats...
+            </div>
+          ) : (usage?.audit || usage?.stats) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 16, marginBottom: 16 }}>
+              {/* Recent Audit Logs */}
+              {usage?.audit?.length > 0 ? (
+                <div style={{ padding: 12, background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+                    Recent Audit Actions
+                  </div>
+                  {usage.audit.map((item, idx) => (
+                    <div key={idx} style={{ fontSize: 11, marginBottom: 6, borderLeft: "2px solid var(--accent)", paddingLeft: 8 }}>
+                      <div style={{ fontWeight: 700 }}>{item.user_name || "System"}</div>
+                      <div style={{ opacity: 0.8 }}>{item.action}</div>
+                      <div style={{ fontSize: 9, opacity: 0.5 }}>{new Date(item.timestamp).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: 12, background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid var(--border)", opacity: 0.6, fontSize: 11 }}>
+                  No recent audit logs found.
+                </div>
+              )}
+
+              {/* Quick System Stats */}
+              {usage?.stats && (
+                <div style={{ padding: 12, background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+                    Pending Items
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: usage.stats.pendingJoins > 0 ? "var(--accent)" : "var(--text-muted)" }}>
+                        {usage.stats.pendingJoins}
+                      </div>
+                      <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>Join Requests</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: usage.stats.pendingAbsences > 0 ? "var(--accent)" : "var(--text-muted)" }}>
+                        {usage.stats.pendingAbsences}
+                      </div>
+                      <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>Absence Forms</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Table Breakdown */}
           {stats?.tables && (
