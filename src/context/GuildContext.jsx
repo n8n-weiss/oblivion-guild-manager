@@ -1644,13 +1644,11 @@ export const GuildProvider = ({ children, initialData }) => {
      try {
        const embed = {
          title: finalTitle,
-         description: finalDesc,
          color,
          fields,
          timestamp: new Date().toISOString(),
          footer: { text: "Oblivion Guild Portal" }
-       };
-      if (thumbnail) embed.thumbnail = { url: thumbnail };
+       };\n        if (finalDesc) embed.description = finalDesc;\n       if (thumbnail) embed.thumbnail = { url: thumbnail };
       
       let content = "";
       const catMentions = catConfig?.mentions || {};

@@ -168,7 +168,7 @@ const PerformanceSnapshot = () => {
         inline: false
       });
 
-      const MAX_FIELDS_PER_EMBED = 15;
+      const MAX_FIELDS_PER_EMBED = 8;
       for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_EMBED) {
         const fieldBatch = fields.slice(i, i + MAX_FIELDS_PER_EMBED);
         const isFirstBatch = i === 0;
