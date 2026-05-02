@@ -2505,6 +2505,8 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsLoadingHistory(false);
     }
+  }, [showToast]);
+
   const submitAbsence = useCallback(async (absenceData) => {
     try {
       const headers = getAuthHeaders();
@@ -2560,8 +2562,7 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   }, [getAuthHeaders, broadcastStateSync, showToast]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- storageKey is a stable string derived from guild config; not reactive
-  }, [showToast]);
+
 
   // ─── Notification System ───────────────────────────────────────────────────
   // Broadcast a notification to all online officers/members (zero DB egress)
