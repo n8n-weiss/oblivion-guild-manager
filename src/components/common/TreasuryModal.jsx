@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import Icon from '../ui/icons';
 
 const GATEWAYS = [
@@ -13,60 +14,87 @@ export default function TreasuryModal({ onClose }) {
   const basePath = window.location.hostname === "localhost" ? "" : "/oblivion-guild-manager";
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
-      <div
-        className="modal animate-fade-in"
+    <motion.div 
+      className="modal-overlay" 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose} 
+      style={{ zIndex: 9999 }}
+    >
+      <motion.div
+        className="glass-panel relative overflow-hidden"
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
         onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: '540px', background: 'var(--bg-card)', position: 'relative', overflow: 'hidden' }}
+        style={{ 
+          width: '100%', 
+          maxWidth: '540px', 
+          borderRadius: '24px',
+          padding: 0,
+          border: '1px solid rgba(240,192,64,0.3)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.8), inset 0 0 40px rgba(240,192,64,0.05)'
+        }}
       >
+        {/* Animated Gold Border Shimmer */}
+        <div className="absolute inset-0 pointer-events-none" style={{ padding: '1px' }}>
+          <div className="w-full h-full rounded-[23px] border border-transparent" style={{ 
+            background: 'linear-gradient(90deg, transparent, rgba(240,192,64,0.4), transparent)',
+            backgroundSize: '200% 100%',
+            animation: 'gold-shimmer 3s linear infinite',
+            opacity: 0.5
+          }} />
+        </div>
+
         {/* Ambient Glows tied to selected gateway color */}
         <div style={{ position: 'absolute', top: '-100px', right: '-100px', width: '300px', height: '300px', background: `radial-gradient(circle, ${selectedGateway.color}33 0%, transparent 70%)`, pointerEvents: 'none', transition: 'background 0.3s' }} />
         <div style={{ position: 'absolute', bottom: '-100px', left: '-100px', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(240,192,64,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         {/* Header */}
-        <div className="modal-header" style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="modal-header" style={{ padding: '32px 32px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{
-              width: '40px', height: '40px', borderRadius: '10px',
-              background: 'linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05))',
-              border: '1px solid rgba(240,192,64,0.3)',
+              width: '48px', height: '48px', borderRadius: '14px',
+              background: 'linear-gradient(135deg, rgba(240,192,64,0.2), rgba(240,192,64,0.05))',
+              border: '1px solid rgba(240,192,64,0.4)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--gold)', fontSize: '20px',
-              boxShadow: '0 4px 12px rgba(240,192,64,0.2)'
+              color: 'var(--gold)', fontSize: '24px',
+              boxShadow: '0 8px 20px rgba(240,192,64,0.2)'
             }}>
               <Icon name="trophy" />
             </div>
             <div>
-              <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', textShadow: '0 0 10px rgba(255,255,255,0.2)', margin: 0 }}>BUY ME A BEER!</h2>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>Support OBLIVION Portal and server maintenance</div>
+              <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: '24px', fontWeight: 900, color: '#fff', textShadow: '0 0 15px rgba(240,192,64,0.3)', margin: 0, letterSpacing: '1px' }}>BUY ME A BEER!</h2>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px', marginTop: '2px', fontWeight: 500 }}>Support OBLIVION Portal and server maintenance</div>
             </div>
           </div>
-          <button className="btn-icon" onClick={onClose} style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '20px' }}>
+          <button className="btn-icon" onClick={onClose} style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="close" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="modal-body" style={{ padding: '28px 32px' }}>
+        <div className="modal-body" style={{ padding: '32px' }}>
 
           <div style={{
-            background: 'rgba(13,16,23,0.5)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            padding: '24px',
+            background: 'rgba(0,0,0,0.3)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: '20px',
+            padding: '28px',
             display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
-            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
-            marginBottom: '20px'
+            boxShadow: 'inset 0 0 30px rgba(0,0,0,0.4)',
+            marginBottom: '24px'
           }}>
 
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600, marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 800, marginBottom: '20px', opacity: 0.8 }}>
               Select Payment Method
             </div>
 
             {/* Gateway Selector Tabs */}
             <div style={{
-              display: 'flex', gap: '8px', marginBottom: '28px', flexWrap: 'wrap', justifyContent: 'center',
-              background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)'
+              display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.4)', padding: '6px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)'
             }}>
               {GATEWAYS.map(gw => (
                 <button
@@ -74,15 +102,16 @@ export default function TreasuryModal({ onClose }) {
                   onClick={() => setSelectedGateway(gw)}
                   style={{
                     background: selectedGateway.id === gw.id ? gw.gradient : 'transparent',
-                    color: selectedGateway.id === gw.id ? '#fff' : 'var(--text-muted)',
+                    color: selectedGateway.id === gw.id ? '#fff' : 'var(--text-secondary)',
                     border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    borderRadius: '10px',
                     fontSize: '13px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    boxShadow: selectedGateway.id === gw.id ? `0 4px 12px ${gw.color}40` : 'none',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: selectedGateway.id === gw.id ? `0 8px 20px ${gw.color}50` : 'none',
+                    transform: selectedGateway.id === gw.id ? 'scale(1.05)' : 'scale(1)'
                   }}
                 >
                   {gw.label}
@@ -92,62 +121,61 @@ export default function TreasuryModal({ onClose }) {
 
             {/* Dynamic QR Code Area */}
             <div style={{
-              width: '220px', height: '220px',
+              width: '240px', height: '240px',
               background: '#fff',
-              borderRadius: '12px',
-              padding: '12px',
-              marginBottom: '20px',
+              borderRadius: '20px',
+              padding: '16px',
+              marginBottom: '24px',
               position: 'relative',
-              boxShadow: `0 12px 32px ${selectedGateway.color}30`,
+              boxShadow: `0 20px 50px ${selectedGateway.color}40`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexDirection: 'column',
-              transition: 'box-shadow 0.3s'
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: 'rotate(-1deg)'
             }}>
               <img
                 src={`${basePath}${selectedGateway.qrFile}`}
                 alt={`${selectedGateway.label} QR Code`}
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 onError={(e) => {
-                  {/* Fallback pattern if image is missing */ }
                   e.target.onerror = null;
                   e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=MissingImage_Put_${selectedGateway.qrFile}_In_Public_Folder`;
                   e.target.style.opacity = 0.15;
                 }}
               />
-              {/* Optional Empty State Text if image fails */}
-              <div style={{ position: 'absolute', color: '#222', fontSize: '14px', fontWeight: 800, textAlign: 'center', padding: '0 10px', textTransform: 'uppercase', pointerEvents: 'none', mixBlendMode: 'overlay', opacity: 0 }}>
-                PLACE <span style={{ color: selectedGateway.color }}>{selectedGateway.label}</span> QR<br />IMAGE HERE
-              </div>
             </div>
 
-            <div style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: 600, marginBottom: '4px' }}>
+            <div style={{ fontSize: '16px', color: '#fff', fontWeight: 700, marginBottom: '6px' }}>
               Scan with your {selectedGateway.label} App
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Scan the QR code above to transfer directly.
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
+              Use your mobile banking app to scan the QR code above for a direct transfer.
             </div>
           </div>
 
           {/* Perks / Info */}
           <div style={{
-            background: 'rgba(240,192,64,0.05)',
-            border: '1px solid rgba(240,192,64,0.15)',
-            borderRadius: '12px',
-            padding: '16px'
+            background: 'linear-gradient(135deg, rgba(240,192,64,0.1), rgba(240,192,64,0.02))',
+            border: '1px solid rgba(240,192,64,0.2)',
+            borderRadius: '18px',
+            padding: '20px',
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ color: 'var(--gold)', marginTop: '2px' }}><Icon name="star" /></div>
+             <div className="absolute top-0 right-0 p-2 opacity-10" style={{ fontSize: '40px' }}><Icon name="star" /></div>
+            <div style={{ display: 'flex', gap: '14px', position: 'relative', zIndex: 1 }}>
+              <div style={{ color: 'var(--gold)', marginTop: '2px', fontSize: '18px' }}><Icon name="star" /></div>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)', marginBottom: '4px' }}>Supporter Perks</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-                  Contributors receive the <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Oblivion Patron</span> badge to your OBLIVION Portal Profile. Please DM your transfer screenshot to @Ꮤ 𐌄 𐌉 𐌔 𐌔 on Discord to claim your badge!
+                <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--gold)', marginBottom: '6px', letterSpacing: '0.5px' }}>SUPPORTER PERKS</div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>
+                  Contributors receive the <span style={{ color: 'var(--gold)', fontWeight: 800, textShadow: '0 0 8px rgba(240,192,64,0.4)' }}>OBLIVION PATRON</span> badge on your profile. Please DM your transfer screenshot to <span style={{ color: '#fff', fontWeight: 700 }}>@Ꮤ 𐌄 𐌉 𐌔 𐌔</span> on Discord to claim your badge!
                 </div>
               </div>
             </div>
           </div>
 
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
