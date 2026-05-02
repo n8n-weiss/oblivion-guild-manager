@@ -9,15 +9,22 @@ const PerformanceSnapshot = () => {
     isOfficer, sendDiscordEmbed, discordConfig, showToast 
   } = useGuild();
   const [posting, setPosting] = useState(null); // 'monthly' or 'ytd'
+  const [monthOffset, setMonthOffset] = useState(0);
 
   const activeMembers = useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
 
-  const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const selectedMonthDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const selectedMonthString = selectedMonthDate.toISOString().slice(0, 7); // "YYYY-MM"
   const currentYear = new Date().getFullYear().toString(); // "YYYY"
 
   const monthlyLb = useMemo(() => 
-    computeLeaderboard(activeMembers, events, attendance, performance, eoRatings, currentMonth),
-    [activeMembers, events, attendance, performance, eoRatings, currentMonth]
+    computeLeaderboard(activeMembers, events, attendance, performance, eoRatings, selectedMonthString),
+    [activeMembers, events, attendance, performance, eoRatings, selectedMonthString]
   );
 
   const ytdLb = useMemo(() => 
@@ -170,7 +177,7 @@ const PerformanceSnapshot = () => {
     </div>
   );
 
-  const renderRankList = (data, title, icon, color) => (
+  const renderRankList = (data, title, icon, color, controls = null) => (
     <div className="card" style={{ 
       flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column', maxHeight: 500,
       border: `1px solid ${color}33`, background: `linear-gradient(180deg, ${color}08 0%, var(--bg-card2) 100%)`,
@@ -179,6 +186,7 @@ const PerformanceSnapshot = () => {
       <div className="flex items-center justify-between mb-4">
         <div className="card-title" style={{ marginBottom: 0, fontSize: 16, color, display: 'flex', alignItems: 'center', gap: '8px' }}>
           {icon} {title}
+          {controls && <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>{controls}</div>}
         </div>
         <div className="badge badge-casual" style={{ fontSize: 10, background: `${color}20`, color }}>{data.length} Members</div>
       </div>
@@ -378,14 +386,26 @@ const PerformanceSnapshot = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {renderHighlightCard(combatHighlights.monthly.killer, "Top Executioner (MTD)", "⚔️", "var(--red)", `${combatHighlights.monthly.killer?.totalKills || 0} Kills`)}
-        {renderHighlightCard(combatHighlights.monthly.assistant, "Tactical MVP (MTD)", "🤝", "var(--accent)", `${combatHighlights.monthly.assistant?.totalAssists || 0} Assists`)}
-        {renderHighlightCard(combatHighlights.monthly.objective, "Objective Hero (MTD)", "✨", "var(--purple)", `${combatHighlights.monthly.objective?.totalTablets || 0} Tablets / ${combatHighlights.monthly.objective?.totalMonsters || 0} Mon`)}
+        {renderHighlightCard(combatHighlights.monthly.killer, `Top Executioner (${selectedMonthDate.toLocaleString('default', { month: 'short' })})`, "⚔️", "var(--red)", `${combatHighlights.monthly.killer?.totalKills || 0} Kills`)}
+        {renderHighlightCard(combatHighlights.monthly.assistant, `Tactical MVP (${selectedMonthDate.toLocaleString('default', { month: 'short' })})`, "🤝", "var(--accent)", `${combatHighlights.monthly.assistant?.totalAssists || 0} Assists`)}
+        {renderHighlightCard(combatHighlights.monthly.objective, `Objective Hero (${selectedMonthDate.toLocaleString('default', { month: 'short' })})`, "✨", "var(--purple)", `${combatHighlights.monthly.objective?.totalTablets || 0} Tablets / ${combatHighlights.monthly.objective?.totalMonsters || 0} Mon`)}
         {renderHighlightCard(combatHighlights.ytd.killer, "Annual Slayer (YTD)", "💀", "var(--gold)", `${combatHighlights.ytd.killer?.totalKills || 0} Total Kills`)}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
-        {renderRankList(monthlyLb, `Monthly Performance (${new Date().toLocaleString('default', { month: 'long' })})`, "📅", "var(--accent)")}
+        {renderRankList(
+          monthlyLb, 
+          `Monthly Performance (${selectedMonthDate.toLocaleString('default', { month: 'long' })})`, 
+          "📅", 
+          "var(--accent)",
+          (
+            <>
+              <button className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', height: 24, fontSize: 12 }} onClick={() => setMonthOffset(p => p - 1)} title="Previous Month">◀</button>
+              {monthOffset < 0 && <button className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', height: 24, fontSize: 12 }} onClick={() => setMonthOffset(0)} title="Current Month">↺</button>}
+              {monthOffset < 0 && <button className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', height: 24, fontSize: 12 }} onClick={() => setMonthOffset(p => p + 1)} title="Next Month">▶</button>}
+            </>
+          )
+        )}
         {renderRankList(weeklyLb, `Weekly Digest (Last 7 Days)`, "📢", "var(--purple)")}
         {renderRankList(ytdLb, `Year-to-Date Summary (${currentYear})`, "🏆", "var(--gold)")}
       </div>
