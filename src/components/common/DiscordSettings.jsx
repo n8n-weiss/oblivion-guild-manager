@@ -11,7 +11,8 @@ const DEFAULT_NOTIFICATIONS = {
   event_digest: { enabled: true, webhookUrl: "", mentions: {} },
   battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true } },
   absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
-  auction_results: { enabled: true, webhookUrl: "", mentions: {} }
+  auction_results: { enabled: true, webhookUrl: "", mentions: {} },
+  reports: { enabled: true, webhookUrl: "", mentions: { oblivion: true } }
 };
 
 const DEFAULT_TEMPLATES = {
@@ -242,7 +243,8 @@ const DiscordSettings = () => {
     { id: "vanguard", label: "Vanguard", icon: "edit" },
     { id: "events", label: "Events", icon: "calendar" },
     { id: "absences", label: "Absences", icon: "absence" },
-    { id: "auction_results", label: "Auction Results", icon: "trophy" }
+    { id: "auction_results", label: "Auction Results", icon: "trophy" },
+    { id: "reports", label: "Performance Reports", icon: "chart" }
   ];
 
   const renderTemplateEditor = (key, title, placeholders) => {
@@ -453,6 +455,20 @@ const DiscordSettings = () => {
                 </div>
               </div>
               {renderTemplateEditor("auction_results", "Loot Session Finalized alert", ["name"])}
+            </div>
+          )}
+
+          {activeSection === "reports" && (
+            <div className="animate-fade-in">
+              {renderCategoryHead("reports", "PERFORMANCE REPORTS (MTD, WEEKLY, YTD)")}
+              <div style={{ padding: "12px", background: "rgba(99,130,230,0.08)", borderRadius: 10, border: "1px solid rgba(99,130,230,0.2)", marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: "var(--accent)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>📖 Reports Config</div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+                  This webhook and mention settings will be used when you click <strong>"Post Top 10"</strong> or <strong>"Post Full Roster"</strong> on the Dashboard.
+                  <br/><br/>
+                  <em>Note: The title and description of the post are generated automatically by the system and cannot be customized here.</em>
+                </p>
+              </div>
             </div>
           )}
         </div>

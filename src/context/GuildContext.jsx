@@ -76,7 +76,8 @@ export const GuildProvider = ({ children, initialData }) => {
       event_digest: { enabled: true, webhookUrl: "", mentions: {} },
       battlelog_reminder: { enabled: true, webhookUrl: "", mentions: { officer: true } },
       absences: { enabled: true, webhookUrl: "", mentions: { officer: true, member: true } },
-      auction_results: { enabled: true, webhookUrl: "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb", mentions: {} }
+      auction_results: { enabled: true, webhookUrl: "https://discord.com/api/webhooks/1491181339867877406/Af1ODEaSgC0g-NSyjbb5O4F5jPr4FYVEv7nldY4AYN_uF81W2nNb-TEhwJeJkkWcxpWb", mentions: {} },
+      reports: { enabled: true, webhookUrl: "", mentions: { oblivion: true } }
     },
     templates: {
       new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!" },

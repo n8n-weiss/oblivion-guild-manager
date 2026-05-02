@@ -149,8 +149,7 @@ const PerformanceSnapshot = () => {
         "reports",
         `${type}_${mode}`,
         { scope: label },
-        null,
-        discordConfig?.oblivionRoleId ? `<@&${discordConfig.oblivionRoleId}>` : "@everyone"
+        null
       );
       showToast(`${label} ${mode === 'full' ? 'Full Leaderboard' : 'Top 10'} posted to Discord!`, "success");
     } catch (err) {
