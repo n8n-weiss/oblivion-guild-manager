@@ -510,13 +510,13 @@ function EventsPage() {
     else setPostingDigest(true);
     try {
       const rowText = (list, scoreKey = "eventScore", suffix = "pts") =>
-        list.length ? list.map((m, i) => `${i + 1}. ${m.ign} — ${m[scoreKey]} ${suffix}`).join("\n") : "No data yet";
+        list.length ? list.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m[scoreKey]} ${suffix}**`).join("\n") : "No data yet";
 
       const dpsRowText = (list) =>
-        list.length ? list.map((m, i) => `${i + 1}. **${m.ign}** — **${m.perf?.kills || 0} Kills** (${m.eventScore} pts)`).join("\n") : "No data yet";
+        list.length ? list.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.perf?.kills || 0} Kills** — **${m.eventScore} pts**`).join("\n") : "No data yet";
 
       const supportRowText = (list) =>
-        list.length ? list.map((m, i) => `${i + 1}. **${m.ign}** — **${m.perf?.assists || 0} Assists** (${m.eventScore} pts)`).join("\n") : "No data yet";
+        list.length ? list.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.perf?.assists || 0} Assists** — **${m.eventScore} pts**`).join("\n") : "No data yet";
 
       const presentCount = withEventScore.length;
       const totalScore = withEventScore.reduce((acc, m) => acc + (m.eventScore || 0), 0);
