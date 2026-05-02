@@ -316,8 +316,6 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
   const presentGLCount = useMemo(() => glEvents.filter(e => (e.att?.status || "present") === "present").length, [glEvents]);
   const avgGL = presentGLCount > 0 ? Math.round((totalGLScore / presentGLCount) * 10) / 10 : 0;
   const eoRatingsList = useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
-  const avgEoRating = eoRatingsList.length > 0
-    ? Math.round((eoRatingsList.reduce((s, r) => s + r.rating, 0) / eoRatingsList.length) * 10) / 10 : 0;
 
   // --- NEW CALCULATIONS ---
   // 1. Guild Average GL
@@ -353,9 +351,9 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
       list.push({ id: "blade", icon: "⚔️", label: "Blade of Oblivion", desc: "A true powerhouse. Achieved a legendary score of 30+ in a single war.", color: "var(--red)" });
     }
 
-    // Star of the Empire: 5-star EO rating
-    if (eoRatingsList.some(r => r.rating === 5)) {
-      list.push({ id: "star", icon: "🌟", label: "Star of the Empire", desc: "Strategic excellence. Earned a perfect 5-star rating for EO mastery.", color: "var(--gold)" });
+    // EO Stalwart: 100% EO attendance
+    if (eoEvents.length >= 2 && eoEvents.every(e => (e.att?.status || "present") === "present")) {
+      list.push({ id: "star", icon: "🏰", label: "EO Stalwart", desc: "Reliable defender. Maintained a perfect 100% attendance record in EO operations.", color: "var(--gold)" });
     }
 
     // Vanguard: Top scorer in the most recent GL event
@@ -1031,12 +1029,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
                   <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 22, color: "var(--gold)" }}>{memberEvents.length}</div>
                   <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{glEvents.length} GL / {eoEvents.length} EO</div>
                 </div>
-                <div style={{ background: "rgba(255,105,180,0.08)", border: "1px solid rgba(255,105,180,0.2)", borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
-                  <div style={{ fontSize: 22, marginBottom: 4 }}>🌟</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: 1, marginBottom: 4 }}>AVG EO RATING</div>
-                  <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 22, color: "#ff69b4" }}>{avgEoRating}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>out of 10</div>
-                </div>
+
               </div>
             )}
           </div>
