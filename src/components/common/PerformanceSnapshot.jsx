@@ -117,12 +117,12 @@ const PerformanceSnapshot = () => {
         fields.push(
           { 
             name: "⚔️ TOP 10 DPS ELITES", 
-            value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
+            value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalKills || 0} Kills** — **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
             inline: true 
           },
           { 
             name: "🛡️ TOP 10 SUPPORT SPECIALISTS", 
-            value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
+            value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalAssists || 0} Assists** — **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
             inline: true 
           },
           { 
@@ -157,6 +157,7 @@ const PerformanceSnapshot = () => {
             value: chunk.map((m, idx) => {
               const rank = i + idx + 1;
               let str = `**#${rank}** ${getMedal(rank)} **${m.ign}** — **${m.totalScore.toLocaleString()} pts**`;
+              str += `\n╰ ⚔️ **${m.totalKills || 0} Kills** | 🤝 **${m.totalAssists || 0} Assists**`;
               str += `\n╰ \`V\` ⚔️${m.valeKills || 0} 🤝${m.valeAssists || 0} 🚩${m.totalCTF || 0} ⭐${m.totalPP || 0} 🎯${m.totalValeScore || 0}`;
               if (m.totalStellarScore > 0) {
                 const stlrObj = m.totalBoss > 0 ? `👹${m.totalBoss}` : `✨${m.totalTablets || 0}`;

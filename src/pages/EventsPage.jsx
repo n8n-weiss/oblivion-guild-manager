@@ -512,6 +512,12 @@ function EventsPage() {
       const rowText = (list, scoreKey = "eventScore", suffix = "pts") =>
         list.length ? list.map((m, i) => `${i + 1}. ${m.ign} — ${m[scoreKey]} ${suffix}`).join("\n") : "No data yet";
 
+      const dpsRowText = (list) =>
+        list.length ? list.map((m, i) => `${i + 1}. **${m.ign}** — **${m.perf?.kills || 0} Kills** (${m.eventScore} pts)`).join("\n") : "No data yet";
+
+      const supportRowText = (list) =>
+        list.length ? list.map((m, i) => `${i + 1}. **${m.ign}** — **${m.perf?.assists || 0} Assists** (${m.eventScore} pts)`).join("\n") : "No data yet";
+
       const presentCount = withEventScore.length;
       const totalScore = withEventScore.reduce((acc, m) => acc + (m.eventScore || 0), 0);
       const avgScore = presentCount > 0 ? (totalScore / presentCount).toFixed(1) : 0;
@@ -527,8 +533,8 @@ function EventsPage() {
         [
           { name: "📊 GUILD SUMMARY", value: `👥 **Participation:** ${participationPct}% (${presentCount}/${totalActiveMembers})\n📈 **Average Score:** ${avgScore} pts`, inline: false },
           { name: "🏆 TOP 10 OVERALL", value: rowText(withEventScore.sort((a, b) => b.eventScore - a.eventScore).slice(0, 10)), inline: false },
-          { name: "⚔️ TOP 10 DPS", value: rowText(digest.topDps), inline: true },
-          { name: "🛡️ TOP 10 SUPPORT", value: rowText(digest.topSupport), inline: true },
+          { name: "⚔️ TOP 10 DPS", value: dpsRowText(digest.topDps), inline: true },
+          { name: "🛡️ TOP 10 SUPPORT", value: supportRowText(digest.topSupport), inline: true },
           { name: "📋 TOP 10 ATTENDANCE (SNAPSHOT)", value: rowText(digest.topAttendance, "attendancePct", "%"), inline: false }
         ],
         "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
