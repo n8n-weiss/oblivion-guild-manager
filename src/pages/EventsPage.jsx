@@ -869,8 +869,8 @@ function EventsPage() {
                         <th style={{ color: "#ef4444", fontSize: 11 }}>Kills</th>
                         <th style={{ color: "#f59e0b", fontSize: 11 }}>Assists</th>
                         <th style={{ color: "#a855f7", fontSize: 11 }}>Perf</th>
-                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
-                        <th></th>
+                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Event Total Score</th>
+                        <th style={{ width: 40 }}></th>
                       </>}
                       {selectedEvent.eventType === "Guild League" && selectedEvent.glMode === 'stellar' && <>
                         <th style={{ color: "#6382E6", fontSize: 11 }}>Team</th>
@@ -879,9 +879,9 @@ function EventsPage() {
                         <th style={{ color: "#a855f7", fontSize: 11 }}>Boss</th>
                         <th style={{ color: "#ef4444", fontSize: 11 }}>Kills</th>
                         <th style={{ color: "#f59e0b", fontSize: 11 }}>Assists</th>
-                        <th style={{ color: "#22c55e", fontSize: 11 }}>Total Score</th>
-                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Score</th>
-                        <th></th>
+                        <th style={{ color: "#22c55e", fontSize: 11 }}>Total Score (Ingame)</th>
+                        <th style={{ color: "var(--accent)", fontSize: 11 }}>Event Total Score</th>
+                        <th style={{ width: 40 }}></th>
                       </>}
                       {selectedEvent.eventType === "Emperium Overrun" && <>
                         <th></th>

@@ -78,10 +78,11 @@ const PerformanceSnapshot = () => {
       const highlights = combatHighlights[type];
 
       if (mode === 'top10') {
-        const topOverall = data.slice(0, 10);
-        const topDPS = [...data].filter(m => m.role === "DPS").slice(0, 10);
-        const topSupport = [...data].filter(m => m.role === "Support").slice(0, 10);
-        const topAttendance = [...data].sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
+        const activeScorers = data.filter(m => m.totalScore > 0);
+        const topOverall = activeScorers.slice(0, 10);
+        const topDPS = activeScorers.filter(m => m.role === "DPS").slice(0, 10);
+        const topSupport = activeScorers.filter(m => m.role === "Support").slice(0, 10);
+        const topAttendance = [...data].filter(m => m.attendancePct > 0).sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
 
         const formatDetailedMember = (m, rank) => {
           let str = `**#${rank}** — ${m.ign} (**${m.totalScore.toLocaleString()} pts**)`;
@@ -140,9 +141,10 @@ const PerformanceSnapshot = () => {
           return "▫️";
         };
 
+        const activeScorers = data.filter(m => m.totalScore > 0);
         const chunkSize = 6; // Safety margin for 1024-char limit with detailed breakdown
-        for (let i = 0; i < data.length; i += chunkSize) {
-          const chunk = data.slice(i, i + chunkSize);
+        for (let i = 0; i < activeScorers.length; i += chunkSize) {
+          const chunk = activeScorers.slice(i, i + chunkSize);
           fields.push({
             name: `📜 OVERALL RANKS ${i + 1} TO ${i + chunk.length}`,
             value: chunk.map((m, idx) => {
@@ -162,7 +164,7 @@ const PerformanceSnapshot = () => {
 
       fields.unshift({
         name: "📖 SYMBOLS LEGEND",
-        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets (Main) | 👹 Boss (Sub) | 🎯 Score",
+        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Event Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets (Main) | 👹 Boss (Sub) | 🎯 Event Total Score",
         inline: false
       });
 
