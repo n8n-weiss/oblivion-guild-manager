@@ -129,7 +129,7 @@ const ProfilePerformanceChartCard = React.memo(function ProfilePerformanceChartC
   );
 });
 
-function MemberProfilePage({ member, onBack, isOwnProfile }) {
+function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
   const { 
     members, events: liveEvents, attendance: liveAttendance, performance: livePerformance, absences, eoRatings: liveEoRatings, 
     notifications, markNotifRead,
@@ -150,13 +150,19 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
   const attendance = useMemo(() => [...liveAttendance, ...historicalAttendance], [liveAttendance, historicalAttendance]);
   const performance = useMemo(() => [...livePerformance, ...historicalPerformance], [livePerformance, historicalPerformance]);
   const eoRatings = useMemo(() => [...liveEoRatings, ...historicalEoRatings], [liveEoRatings, historicalEoRatings]);
+  const member = useMemo(() => {
+    return members.find(m => (m.memberId || "").trim().toLowerCase() === (memberId || "").trim().toLowerCase());
+  }, [members, memberId]);
+
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  
   const [requestForm, setRequestForm] = useState({
-    ign: member.ign,
-    class: member.class,
-    role: member.role
+    ign: "",
+    class: "",
+    role: ""
   });
+
   const [absenceForm, setAbsenceForm] = useState({
     eventType: "Guild League",
     eventDate: new Date().toISOString().split("T")[0],
@@ -164,12 +170,30 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     onlineStatus: "No"
   });
   const [isEditingBio, setIsEditingBio] = useState(false);
-  const [tempBio, setTempBio] = useState(member.bio || "");
+  const [tempBio, setTempBio] = useState("");
   const [tempSocial, setTempSocial] = useState({
-    discord: member.discord || "",
-    motto: member.motto || "",
-    joinDate: member.joinDate || ""
+    discord: "",
+    motto: "",
+    joinDate: ""
   });
+
+  // Sync state when member data is loaded/available
+  useEffect(() => {
+    if (member) {
+      setRequestForm({
+        ign: member.ign || "",
+        class: member.class || "",
+        role: member.role || ""
+      });
+      setTempBio(member.bio || "");
+      setTempSocial({
+        discord: member.discord || "",
+        motto: member.motto || "",
+        joinDate: member.joinDate || ""
+      });
+    }
+  }, [member]);
+
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -216,9 +240,19 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     mouseY.set(0);
   };
 
-  const isAccessDenied = isMember && member.memberId !== myMemberId;
+  const isAccessDenied = isMember && memberId !== myMemberId;
 
-  const memberIdx = members.findIndex(m => (m.memberId || "").trim() === (member.memberId || "").trim());
+  if (!member) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+        <div className="spinner" style={{ margin: "0 auto 20px" }} />
+        <p className="text-muted">Loading profile data...</p>
+        <button className="btn btn-ghost mt-4" onClick={onClose}>Go Back</button>
+      </div>
+    );
+  }
+
+  const memberIdx = members.findIndex(m => (m.memberId || "").trim().toLowerCase() === (member.memberId || "").trim().toLowerCase());
   const mId = (member.memberId || "").trim().toLowerCase();
   const activeMembers = useMemo(
     () => members.filter(m => (m.status || "active") === "active"),
@@ -602,47 +636,50 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
     <div>
       {/* Sticky mini-bar header */}
       <div className="profile-header-sticky">
-        <div className="flex items-center gap-3">
-          {onBack && !isOwnProfile && (
-            <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="x" size={13} /> Back</button>
+        <div className="flex items-center gap-4">
+          {onClose && !isOwnProfile && (
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><Icon name="arrow-left" size={16} /></button>
           )}
-          <MemberAvatar ign={member.ign} index={memberIdx} size={32} memberClass={member.class} glScore={totalGLScore} />
-          <div>
-            <div style={{ fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>{member.ign}</div>
-            <div style={{ fontSize: 10, color: rankInfo.color, fontWeight: 700, letterSpacing: 1 }}>{rankInfo.rank} · LV.{level}</div>
+          <div className="flex items-center gap-3">
+            <MemberAvatar ign={member.ign} index={memberIdx} size={36} memberClass={member.class} glScore={totalGLScore} />
+            <div>
+              <div style={{ fontFamily: "Cinzel,serif", fontWeight: 800, fontSize: 15, lineHeight: 1, color: "var(--text-primary)" }}>{member.ign}</div>
+              <div style={{ fontSize: 10, color: rankInfo.color, fontWeight: 800, letterSpacing: 1.5, marginTop: 2 }}>{rankInfo.rank} · LV.{level}</div>
+            </div>
           </div>
-          <div className="flex gap-1 flex-wrap items-center" style={{ marginLeft: 8 }}>
+          
+          <div className="h-4 w-[1px] bg-border mx-2" />
+          
+          <div className="flex gap-2 items-center">
             {member.guildRank && member.guildRank !== "Member" && (() => {
                let badgeColor = "var(--text-muted)";
                let badgeIcon = "🛡️";
-               let glow = "";
-               if (member.guildRank === "System Architect (Creator)" || member.guildRank === "System Architect" || member.guildRank === "Creator") { 
-                 badgeColor = "#ff4d4d"; badgeIcon = "👁️‍🗨️"; glow = "0 0 12px rgba(255,77,77,0.8)"; 
-               }
-               else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; glow = "0 0 10px rgba(240,192,64,0.6)"; }
-               else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; glow = "0 0 8px rgba(230,230,230,0.5)"; }
-               else if (member.guildRank === "Commander") { badgeColor = "#ff4d4d"; badgeIcon = "⚔️"; glow = "0 0 8px rgba(255,77,77,0.5)"; }
-               else if (member.guildRank === "Charisma Baby") { badgeColor = "var(--color-priest)"; badgeIcon = "💖"; glow = "0 0 8px rgba(255,105,180,0.5)"; }
-               else if (member.guildRank === "Officer") { badgeColor = "#4db8ff"; badgeIcon = "🛡️"; }
+               if (member.guildRank.includes("Architect")) { badgeColor = "#ff4d4d"; badgeIcon = "👁️‍🗨️"; }
+               else if (member.guildRank === "Guild Master") { badgeColor = "var(--gold)"; badgeIcon = "👑"; }
+               else if (member.guildRank === "Vice Guild Master") { badgeColor = "#e6e6e6"; badgeIcon = "⚜️"; }
+               else if (member.guildRank === "Officer") { badgeColor = "#6382e6"; badgeIcon = "🛡️"; }
                
-               return <span className="badge" style={{ background: `${badgeColor}22`, color: badgeColor, border: `1px solid ${badgeColor}`, boxShadow: glow, fontSize: 8, fontWeight: 800 }}>{badgeIcon} {member.guildRank.toUpperCase()}</span>
+               return <span className="badge" style={{ background: `${badgeColor}15`, color: badgeColor, border: `1px solid ${badgeColor}44`, fontSize: 9, fontWeight: 800, padding: "2px 8px" }}>{badgeIcon} {member.guildRank.toUpperCase()}</span>
             })()}
-            {member.isDonator && <span title="Oblivion Patron" style={{ fontSize: 12, filter: 'drop-shadow(0 0 4px var(--gold))', marginLeft: 2 }}>🌟</span>}
-            <span className="badge badge-premium" style={{ background: theme.color, fontSize: 9 }}>{theme.icon} {member.class}</span>
-            <span className={`badge ${member.role === "DPS" ? "badge-dps" : "badge-support"}`} style={{ fontSize: 9 }}>{member.role}</span>
-            <span className={`badge ${attStatus.badge}`} title={`Attendance Score: ${attPct}% (${presentCount}/${memberEvents.length})\n\nReliable: 80%+\nAverage: 60-79%\nAt Risk: Below 60%`}>
-              {attPct >= 80 ? "✅" : attPct >= 60 ? "⚠" : "🚨"} {attStatus.label}
-            </span>
+            <span className="badge badge-premium" style={{ background: theme.color, fontSize: 9, fontWeight: 800 }}>{theme.icon} {member.class}</span>
+            <span className={`badge ${attStatus.badge}`} style={{ fontSize: 9, fontWeight: 800 }}>{attPct}% {attStatus.label}</span>
           </div>
         </div>
         
         <div style={{ flex: 1 }} />
         
-        <div className="flex gap-2">
-          {isOwnProfile && !showAbsenceForm && (
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAbsenceForm(true)}>
-              <Icon name="absence" size={12} /> File Absence
-            </button>
+        <div className="flex gap-2" style={{ paddingRight: 200 }}>
+          {isOwnProfile && (
+            <>
+              <button className="btn btn-ghost btn-sm" style={{ border: "1px solid var(--border)" }} onClick={() => setShowRequestModal(true)}>
+                <Icon name="edit" size={12} /> Request Update
+              </button>
+              {!showAbsenceForm && (
+                <button className="btn btn-primary btn-sm" onClick={() => setShowAbsenceForm(true)}>
+                  <Icon name="absence" size={12} /> File Absence
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -684,7 +721,8 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
       {nextEvent && (
         <div className="card mb-4" style={{
           background: "linear-gradient(90deg, rgba(240,192,64,0.1), transparent)",
-          borderLeft: `4px solid var(--gold)`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px"
+          borderLeft: `4px solid var(--gold)`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px",
+          paddingRight: isOwnProfile ? 220 : 20
         }}>
           <div>
             <div className="rank-label" style={{ color: isUpcoming ? "var(--gold)" : "var(--text-muted)", marginBottom: 3 }}>
@@ -811,11 +849,6 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                   <button className="btn btn-ghost btn-sm" onClick={() => isEditingBio ? saveSocialData() : setIsEditingBio(true)}>
                     {isEditingBio ? "💾 Save" : "✏️ Edit Bio"}
                   </button>
-                  {!myPendingRequest && (
-                    <button className="btn btn-sm" style={{ background: "rgba(99,130,230,0.1)", color: "var(--accent)", border: "1px solid var(--accent)" }} onClick={() => setShowRequestModal(true)}>
-                      ⚔️ Request Update
-                    </button>
-                  )}
                 </div>
               )}
             </div>
@@ -1059,31 +1092,31 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
                         {progress >= 9 ? "🔥 Almost there! One more win to complete your card." : `You need ${10 - progress} more wins to complete your next card.`}
                       </div>
 
-                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                       <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
                           <button 
                             className="btn btn-ghost btn-sm"
-                            style={{ flex: 1, fontSize: 10, border: "1px solid var(--border)" }}
-                          onClick={() => {
-                             const val = prompt("Enter your current total Card Album wins:", cardWins);
-                             if (val !== null) {
-                                const num = parseInt(val);
-                                if (!isNaN(num)) updateWishlistMetadata(member.memberId, "Card Album", { currentCount: num });
-                             }
-                          }}
-                        >
-                          Input your current Album Card count
-                        </button>
-                        <button 
-                           className={`btn btn-sm ${albumWish ? "btn-danger" : "btn-primary"}`}
-                           style={{ flex: 1.2, fontSize: 10 }}
-                           onClick={() => {
-                             if (albumWish) removeWishlistRequest(member.memberId, "Card Album");
-                             else submitWishlistRequest(member.memberId, "Card Album");
-                           }}
-                        >
-                           {albumWish ? "Remove Wishlist" : "⭐ Add to Wishlist"}
-                        </button>
-                      </div>
+                            style={{ flex: 1, fontSize: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)" }}
+                            onClick={() => {
+                               const val = prompt("Enter your current total Card Album wins:", cardWins);
+                               if (val !== null) {
+                                  const num = parseInt(val);
+                                  if (!isNaN(num)) updateWishlistMetadata(member.memberId, "Card Album", { currentCount: num });
+                               }
+                            }}
+                          >
+                            Update Progress Count
+                          </button>
+                          <button 
+                             className={`btn btn-sm ${albumWish ? "btn-danger" : "btn-primary"}`}
+                             style={{ flex: 1, fontSize: 10, fontWeight: 800 }}
+                             onClick={() => {
+                               if (albumWish) removeWishlistRequest(member.memberId, "Card Album");
+                               else submitWishlistRequest(member.memberId, "Card Album");
+                             }}
+                          >
+                             {albumWish ? "Remove Wish" : "Add to Wishlist"}
+                          </button>
+                       </div>
                     </>
                   );
                 })()}
@@ -1108,7 +1141,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
 
                 <div className="flex flex-col gap-2 mt-auto">
                    <button 
-                      className={`btn btn-sm ${auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark") ? "btn-danger" : "btn-casual"}`}
+                      className={`btn btn-sm ${auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark") ? "btn-danger" : "btn-primary"}`}
                       style={{ fontSize: 11, width: "100%" }}
                       onClick={() => {
                         const active = auctionWishlist.find(b => b.id === member.memberId)?.bids?.some(bi => bi.type === "Light & Dark");
@@ -1183,7 +1216,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
               {[
                 { id: "reliability", icon: "🛡️", label: "Shield of Reliability", criteria: "100% attendance in last 4 events", color: "#4db8ff" },
                 { id: "blade", icon: "⚔️", label: "Blade of Oblivion", criteria: "Score 30+ in a single War", color: "var(--red)" },
-                { id: "star", icon: "🌟", label: "Star of the Empire", criteria: "Earn a 5-star EO rating", color: "var(--gold)" },
+                { id: "star", icon: "🏰", label: "EO Stalwart", criteria: "Maintain 100% attendance in EO operations", color: "var(--gold)" },
                 { id: "vanguard", icon: "🔥", label: "Frontline Vanguard", criteria: "Top scorer in the last War", color: "#ff4d4d" },
               ].map(medal => {
                 const isEarned = dynamicBadges.some(b => b.id === medal.id);
@@ -1370,12 +1403,15 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
         return (
           <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Row 1: Vanguard Profile Card + Attendance Ring */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
               <div className="card" style={{ 
                 background: `linear-gradient(180deg, ${theme.color}08 0%, var(--bg-card2) 100%)`, 
                 border: `1px solid ${theme.color}33`, 
-                padding: 24 
+                padding: 24,
+                position: "relative",
+                overflow: "hidden"
               }}>
+                <div style={{ position: "absolute", top: -10, right: -10, fontSize: 60, opacity: 0.05, transform: "rotate(15deg)" }}>{theme.icon}</div>
                 <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: theme.color, marginBottom: 16, fontWeight: 800 }}>⚔️ Vanguard Profile</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
                   <MemberAvatar ign={member.ign} index={memberIdx} size={56} memberClass={member.class} glScore={totalGLScore} hexagon />
@@ -1426,7 +1462,7 @@ function MemberProfilePage({ member, onBack, isOwnProfile }) {
             </div>
 
             {/* Row 2: Quick Stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
               {[
                 { label: "Total GL Score", value: totalGLScore, icon: "⚔️", color: "var(--gold)" },
                 { label: "Avg GL / War", value: avgGL || "—", icon: "📊", color: "var(--accent)" },

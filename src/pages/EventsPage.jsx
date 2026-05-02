@@ -10,10 +10,11 @@ function EventsPage() {
   const {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
     performance, setPerformance, absences, eoRatings, setEoRatings,
-    showToast, isAdmin, currentUser, sendDiscordEmbed,
+    showToast, isAdmin, isOfficer, isArchitect, currentUser, sendDiscordEmbed,
     hasMoreEvents, loadingHistory, fetchFullHistory, broadcastStateSync,
     officerActivities, broadcastActivity, myMemberId
   } = useGuild();
+  const isStaff = isOfficer || isAdmin || isArchitect;
   const activeMembers = React.useMemo(() => members.filter(m => (m.status || "active") === "active"), [members]);
   const officerPool = React.useMemo(() => {
     const officerRanks = new Set([
@@ -639,7 +640,7 @@ function EventsPage() {
           <div className="events-sidebar">
           <div className="flex items-center justify-between mb-3">
             <span className="font-cinzel text-xs text-muted" style={{ letterSpacing: 2, textTransform: "uppercase" }}>Events ({events.length})</span>
-            <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>
+            {isStaff && <button className="btn btn-primary btn-sm" onClick={handleNewClick}><Icon name="plus" size={12} /> New</button>}
           </div>
           <div className="flex flex-col gap-2" style={{ maxHeight: "600px", overflowY: "auto", overflowX: "hidden", paddingRight: 4, paddingBottom: 10 }}>
             {events.length === 0 && <div className="text-muted text-sm" style={{ textAlign: "center", padding: "24px 0" }}>No events yet</div>}
@@ -809,12 +810,16 @@ function EventsPage() {
                       </span>
                     </div>
                   )}
-                  <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
-                    <Icon name="edit" size={12} /> Edit
-                  </button>
-                  <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
-                    <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize"}
-                  </button>
+                  {isStaff && (
+                    <>
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(selectedEvent)}>
+                        <Icon name="edit" size={12} /> Edit
+                      </button>
+                      <button className="btn btn-primary btn-sm" onClick={() => postEventDigest("finalize")} disabled={postingDigest || finalizingDigest}>
+                        <Icon name="check" size={12} /> {finalizingDigest ? "Finalizing..." : "Finalize"}
+                      </button>
+                    </>
+                  )}
                   {Object.keys(perfEdits).some(k => k.endsWith(`_${selectedEvent.eventId}`)) && (
                     <button 
                       className="btn btn-primary btn-sm" 
@@ -858,13 +863,15 @@ function EventsPage() {
                       <th>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           Attendance
-                          <button 
-                            className="btn btn-ghost btn-sm" 
-                            style={{ padding: '2px 6px', fontSize: 9, color: 'var(--green)', border: '1px solid rgba(34,197,94,0.3)' }}
-                            onClick={() => markAllPresent(selectedEvent.eventId)}
-                          >
-                            <Icon name="check" size={10} /> Mark All Present
-                          </button>
+                          {isStaff && (
+                            <button 
+                              className="btn btn-ghost btn-sm" 
+                              style={{ padding: '2px 6px', fontSize: 9, color: 'var(--green)', border: '1px solid rgba(34,197,94,0.3)' }}
+                              onClick={() => markAllPresent(selectedEvent.eventId)}
+                            >
+                              <Icon name="check" size={10} /> Mark All Present
+                            </button>
+                          )}
                         </div>
                       </th>
                       {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && <>
@@ -916,23 +923,23 @@ function EventsPage() {
                           </td>
                           <td className="text-secondary" style={{ fontSize: 12 }}>{m.class}</td>
                           <td>
-                            <button className={`att-toggle ${attStatus}`} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)}>
+                            <button className={`att-toggle ${attStatus}`} disabled={!isStaff} onClick={() => toggleAtt(m.memberId, selectedEvent.eventId)}>
                               {attStatus === "present" ? "Present" : "Absent"}
                             </button>
                           </td>
                           {selectedEvent.eventType === "Guild League" && selectedEvent.glMode !== 'stellar' && (
                             <>
                               {/* ── CTF inputs (blue) ── */}
-                              <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
-                              <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf2} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
-                              <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf3} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf1} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf1: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf2} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf2: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={inputStyle("#6382E6")} value={ctf3} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, ctf3: +e.target.value } }))} /></td>
                               {/* CTF Total pill */}
                               <td><span style={{ display: "inline-block", minWidth: 36, textAlign: "center", fontWeight: 800, fontSize: 13, color: "#6382E6", background: "rgba(99,130,230,0.12)", borderRadius: 6, padding: "3px 8px" }}>{ctfTotal}</span></td>
                               {/* ── Combat inputs ── */}
-                              <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={kills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
-                              <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={assists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={kills} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={assists} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
                               {/* ── Perf input (purple) ── */}
-                              <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
+                              <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={pp} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, performancePoints: +e.target.value } }))} /></td>
                               {/* Score pill */}
                               <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{score}</span></td>
                               <td>
@@ -955,24 +962,25 @@ function EventsPage() {
                                 {/* Team toggle */}
                                 <td>
                                   <button
+                                    disabled={!isStaff}
                                     onClick={() => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, glTeam: isMain ? 'sub' : 'main' } }))}
-                                    style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: `1px solid ${isMain ? 'rgba(99,130,230,0.5)' : 'rgba(34,197,94,0.5)'}`, background: isMain ? 'rgba(99,130,230,0.12)' : 'rgba(34,197,94,0.12)', color: isMain ? '#6382E6' : '#22c55e', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700 }}
+                                    style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: `1px solid ${isMain ? 'rgba(99,130,230,0.5)' : 'rgba(34,197,94,0.5)'}`, background: isMain ? 'rgba(99,130,230,0.12)' : 'rgba(34,197,94,0.12)', color: isMain ? '#6382E6' : '#22c55e', cursor: isStaff ? 'pointer' : 'default', whiteSpace: 'nowrap', fontWeight: 700, opacity: isStaff ? 1 : 0.8 }}
                                   >
                                     {isMain ? '🔵 Main' : '🟢 Sub'}
                                   </button>
                                 </td>
                                 {/* Tablets (Main only) */}
-                                <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: isMain ? 1 : 0.3 }} value={isMain ? tablets : ''} placeholder={isMain ? "" : "-"} disabled={!isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, tabletsCapt: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${0}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 0)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: isMain ? 1 : 0.3 }} value={isMain ? tablets : ''} placeholder={isMain ? "" : "-"} disabled={!isMain} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, tabletsCapt: +e.target.value } }))} /></td>
                                 {/* Monsters (both) */}
-                                <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={monsters} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, monsters: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${1}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 1)} type="number" min={0} className="form-input" style={inputStyle("#a855f7")} value={monsters} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, monsters: +e.target.value } }))} /></td>
                                 {/* Boss (Sub only) */}
-                                <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: !isMain ? 1 : 0.3 }} value={!isMain ? boss : ''} placeholder={!isMain ? "" : "-"} disabled={isMain} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, boss: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${2}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 2)} type="number" min={0} className="form-input" style={{ ...inputStyle("#a855f7"), opacity: !isMain ? 1 : 0.3 }} value={!isMain ? boss : ''} placeholder={!isMain ? "" : "-"} disabled={isMain} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, boss: +e.target.value } }))} /></td>
                                 {/* Kills */}
-                                <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={sKills} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${3}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 3)} type="number" min={0} className="form-input" style={inputStyle("#ef4444")} value={sKills} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, kills: +e.target.value } }))} /></td>
                                 {/* Assists */}
-                                <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={sAssists} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${4}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 4)} type="number" min={0} className="form-input" style={inputStyle("#f59e0b")} value={sAssists} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, assists: +e.target.value } }))} /></td>
                                 {/* Total Score */}
-                                <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
+                                <td><input id={`perf-${m.rowIndex}-${5}`} onFocus={e => e.target.select()} onKeyDown={e => handleKeyDown(e, m.rowIndex, 5)} type="number" min={0} className="form-input" style={inputStyle("#22c55e")} value={sTotal} readOnly={!isStaff} onChange={e => setPerfEdits(prev => ({ ...prev, [key]: { ...prev[key] || {}, totalScore: +e.target.value } }))} /></td>
                                 {/* Computed Score pill */}
                                 <td><span style={{ display: "inline-block", minWidth: 40, textAlign: "center", fontWeight: 800, fontSize: 13, color: "var(--accent)", background: "rgba(99,130,230,0.1)", borderRadius: 6, padding: "3px 8px" }}>{sScore}</span></td>
                                 <td>
@@ -1036,7 +1044,7 @@ function EventsPage() {
       )}
 
       {/* Floating Action Bar for Bulk Saves */}
-      {(Object.keys(perfEdits).length > 0 || Object.keys(attEdits).length > 0) && (
+      {isStaff && (Object.keys(perfEdits).length > 0 || Object.keys(attEdits).length > 0) && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-slide-up">
           <div className="premium-pill glass-panel shadow-2xl" style={{ padding: '12px 24px', gap: 20, border: '1px solid var(--accent)', display: 'flex', alignItems: 'center' }}>
             <div className="flex flex-col">

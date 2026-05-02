@@ -4,7 +4,8 @@ import Icon from '../components/ui/icons';
 import { writeAuditLog } from "../utils/audit";
 
 function AbsencesPage() {
-  const { members, absences, setAbsences, showToast, currentUser, broadcastStateSync } = useGuild();
+  const { members, absences, setAbsences, showToast, isOfficer, isAdmin, isArchitect, currentUser, broadcastStateSync } = useGuild();
+  const isStaff = isOfficer || isAdmin || isArchitect;
   const [form, setForm] = useState({
     memberId: members?.[0]?.memberId || "",
     eventType: "Guild League",
@@ -40,6 +41,16 @@ function AbsencesPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "absence_delete", `Removed absence for ${member?.ign} — ${absence?.eventType} ${absence?.eventDate}`);
     
   };
+
+  if (!isStaff) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+        <Icon name="lock" size={48} style={{ color: "var(--red)", marginBottom: 20, opacity: 0.5 }} />
+        <h2 className="font-cinzel">Access Denied</h2>
+        <p className="text-muted">This page is restricted to Officers and Admins.</p>
+      </div>
+    );
+  }
 
   return (
     <div>

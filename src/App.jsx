@@ -199,6 +199,9 @@ export default function App() {
             if (item.id === 'requests' && !hasStaffAccess) return null;
             if (item.id === 'import' && !hasStaffAccess) return null;
             if (item.id === 'auction' && !hasStaffAccess) return null;
+            if (item.id === 'members' && !hasStaffAccess) return null;
+            if (item.id === 'events' && !hasStaffAccess) return null;
+            if (item.id === 'absences' && !hasStaffAccess) return null;
             
             const label = item.label;
             const pendingCount = (requests.filter(r => r.status === 'pending').length) + (joinRequests.filter(r => r.status === 'pending').length);
@@ -207,8 +210,16 @@ export default function App() {
             return (
               <motion.div
                 key={item.id}
-                className={`nav-item ${effectivePage === item.id ? "active" : ""}`}
-                onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}
+                className={`nav-item ${effectivePage === (item.id === 'profile' ? 'member-profile' : item.id) ? "active" : ""}`}
+                onClick={() => {
+                  if (item.id === 'profile') {
+                    setProfileMember(myMemberId);
+                  } else {
+                    setPage(item.id);
+                    setProfileMember(null);
+                  }
+                  window.scrollTo(0, 0);
+                }}
                 onMouseEnter={() => prefetchPage(item.id)}
                 whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.98 }}
@@ -280,9 +291,9 @@ export default function App() {
                   <Icon name="rotate-cw" size={12} /> Force Refresh
                 </button>
               ) : (
-                <button className="btn btn-ghost btn-sm" style={{ width: "100%", fontSize: 10, justifyContent: "center" }} onClick={() => setProfileMember(myMemberId)}>
-                  My Stats & Profile
-                </button>
+                <div style={{ textAlign: "center", fontSize: 9, opacity: 0.4, padding: "4px 0", letterSpacing: 1 }}>
+                  ACCOUNT ACTIVE
+                </div>
               )}
 
               <button 
@@ -366,6 +377,7 @@ export default function App() {
                     <MemberProfilePage 
                       memberId={profileMember || myMemberId} 
                       onClose={() => setProfileMember(null)} 
+                      isOwnProfile={(profileMember || myMemberId) === myMemberId}
                     />
                   </PageWrapper>
                 )}
@@ -411,13 +423,26 @@ export default function App() {
 
         {/* Mobile Navigation Bar */}
         <nav className="mobile-nav show-mobile">
-          {NAV_ITEMS.slice(0, 4).map(item => {
+          {NAV_ITEMS.filter(item => {
+            const hasStaffAccess = isOfficer || isAdmin || isArchitect;
+            if (item.id === 'users' && !isAdmin && !isArchitect) return false;
+            if (['auditlog', 'requests', 'import', 'auction', 'members', 'events', 'absences'].includes(item.id) && !hasStaffAccess) return false;
+            return true;
+          }).slice(0, 4).map(item => {
             const label = item.label.split(' ')[0];
             return (
               <button 
                 key={item.id} 
-                className={`mobile-nav-item ${effectivePage === item.id ? "active" : ""}`}
-                onClick={() => { setPage(item.id); setProfileMember(null); window.scrollTo(0, 0); }}
+                className={`mobile-nav-item ${effectivePage === (item.id === 'profile' ? 'member-profile' : item.id) ? "active" : ""}`}
+                onClick={() => {
+                  if (item.id === 'profile') {
+                    setProfileMember(myMemberId);
+                  } else {
+                    setPage(item.id);
+                    setProfileMember(null);
+                  }
+                  window.scrollTo(0, 0);
+                }}
               >
                 <Icon name={item.id === "members" && isMember ? "user" : item.icon} size={20} />
                 <span>{label}</span>

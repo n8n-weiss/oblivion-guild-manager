@@ -617,7 +617,7 @@ function MembersPage({ onViewProfile }) {
       )}
 
       {/* Floating Action Bar for Bulk Saves */}
-      {Object.keys(memberEdits).length > 0 && (
+      {isOfficer && Object.keys(memberEdits).length > 0 && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-slide-up">
           <div className="premium-pill glass-panel shadow-2xl" style={{ padding: '12px 24px', gap: 20, border: '1px solid var(--accent)', display: 'flex', alignItems: 'center' }}>
             <div className="flex flex-col">

@@ -62,6 +62,7 @@ export const INITIAL_PERFORMANCE = [
 
 export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { id: "profile", label: "My Profile", icon: "users" },
   { id: "members", label: "Members", icon: "members" },
   { id: "events", label: "Events", icon: "events" },
   { id: "absences", label: "Absences", icon: "absence" },

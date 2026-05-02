@@ -63,18 +63,18 @@ function Dashboard() {
       <PerformanceSnapshot />
 
       {/* MAIN WIDGETS GRID */}
-      <div className="grid-2 mb-4">
+      <div className={isOfficer ? "grid-2 mb-4" : "mb-4"}>
         {isOfficer ? (
           <OfficerHub />
         ) : (
           <MemberStatus rankNum={myRankNum} totalScore={myLbEntry?.totalScore || 0} />
         )}
-        <AbsenceWatchlist />
+        {isOfficer && <AbsenceWatchlist />}
       </div>
 
-      <div className="grid-2 mb-4">
+      <div className={isOfficer ? "grid-2 mb-4" : "mb-4"}>
         <GuildHighlights />
-        <LootRadar />
+        {isOfficer && <LootRadar />}
       </div>
 
       {/* ATTENDANCE TREND */}
