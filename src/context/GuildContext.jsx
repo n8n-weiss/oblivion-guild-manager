@@ -332,7 +332,7 @@ export const GuildProvider = ({ children, initialData }) => {
         
         // Flatten nested attendance if present
         if (e.attendance_data && typeof e.attendance_data === 'object' && Object.keys(e.attendance_data).length > 0) {
-          console.log(`GuildContext: Flattening ${Object.keys(e.attendance_data).length} att for ${eventId}`);
+
           Object.entries(e.attendance_data).forEach(([mId, status]) => {
             if (!allAtt.find(a => a.eventId === eventId && a.memberId === mId)) {
               allAtt.push({ eventId, memberId: mId, status });
@@ -592,7 +592,12 @@ export const GuildProvider = ({ children, initialData }) => {
           if (e.eo_ratings_data) Object.entries(e.eo_ratings_data).forEach(([mId, r]) => histEo.push({ eventId, memberId: mId, rating: r }));
         });
 
-        setEvents(prev => [...prev, ...newEvents]);
+        setEvents(prev => {
+          const combined = [...prev, ...newEvents];
+          const map = new Map();
+          combined.forEach(e => map.set(e.eventId || e.event_id, e));
+          return Array.from(map.values()).sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate));
+        });
         setAttendance(prev => {
           const combined = [...prev, ...histAtt];
           const map = new Map();

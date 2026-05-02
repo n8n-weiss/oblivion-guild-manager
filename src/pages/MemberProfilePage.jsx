@@ -110,7 +110,7 @@ const ProfilePerformanceChartCard = React.memo(function ProfilePerformanceChartC
     <div className="card">
       <div className="card-title">📈 Performance Chart</div>
       <div style={{ height: 240, width: "100%", marginTop: 10 }}>
-        <ResponsiveContainer width="99%" height={240} minWidth={1} minHeight={1}>
+        <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={1}>
           <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 9 }} dy={8} />
@@ -145,11 +145,34 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
     fetchHistoricalData();
   }, [fetchHistoricalData]);
 
-  // Merge live data with historical archives
-  const events = useMemo(() => [...liveEvents, ...historicalEvents], [liveEvents, historicalEvents]);
-  const attendance = useMemo(() => [...liveAttendance, ...historicalAttendance], [liveAttendance, historicalAttendance]);
-  const performance = useMemo(() => [...livePerformance, ...historicalPerformance], [livePerformance, historicalPerformance]);
-  const eoRatings = useMemo(() => [...liveEoRatings, ...historicalEoRatings], [liveEoRatings, historicalEoRatings]);
+  // Merge live data with historical archives with deduplication to prevent key conflicts
+  const events = useMemo(() => {
+    const combined = [...liveEvents, ...historicalEvents];
+    const map = new Map();
+    combined.forEach(e => map.set(e.eventId || e.event_id, e));
+    return Array.from(map.values()).sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate));
+  }, [liveEvents, historicalEvents]);
+
+  const attendance = useMemo(() => {
+    const combined = [...liveAttendance, ...historicalAttendance];
+    const map = new Map();
+    combined.forEach(a => map.set(`${a.memberId}_${a.eventId}`, a));
+    return Array.from(map.values());
+  }, [liveAttendance, historicalAttendance]);
+
+  const performance = useMemo(() => {
+    const combined = [...livePerformance, ...historicalPerformance];
+    const map = new Map();
+    combined.forEach(p => map.set(`${p.memberId}_${p.eventId}`, p));
+    return Array.from(map.values());
+  }, [livePerformance, historicalPerformance]);
+
+  const eoRatings = useMemo(() => {
+    const combined = [...liveEoRatings, ...historicalEoRatings];
+    const map = new Map();
+    combined.forEach(r => map.set(`${r.memberId}_${r.eventId}`, r));
+    return Array.from(map.values());
+  }, [liveEoRatings, historicalEoRatings]);
   const member = useMemo(() => {
     return members.find(m => (m.memberId || "").trim().toLowerCase() === (memberId || "").trim().toLowerCase());
   }, [members, memberId]);

@@ -63,7 +63,7 @@ const AttendanceTrend = () => {
       <div className="card-title" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>📈 Guild Attendance Trend</div>
       <div className="text-xs text-muted mt-1 mb-4">Tracking operation participation across the last 10 events.</div>
       <div className="chart-container">
-        <ResponsiveContainer width="100%" height={250}>
+        <ResponsiveContainer width="100%" height={250} minWidth={1} minHeight={1}>
           <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">
