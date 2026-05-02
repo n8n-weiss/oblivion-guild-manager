@@ -184,7 +184,7 @@ const PerformanceSnapshot = () => {
               : (type === 'weekly' 
                 ? `Detailed performance report for the past 7 days. Excellent work, Oblivion!\n\u200B`
                 : `Recognizing our top performers for this period!\n\u200B`))
-            : "",
+            : null,
           type === 'monthly' ? 0x6382E6 : (type === 'weekly' ? 0x9333ea : 0xF0C040),
           fieldBatch,
           isFirstBatch ? "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png" : null,
