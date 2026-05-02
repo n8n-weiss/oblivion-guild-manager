@@ -83,28 +83,45 @@ const PerformanceSnapshot = () => {
         const topSupport = [...data].filter(m => m.role === "Support").slice(0, 10);
         const topAttendance = [...data].sort((a, b) => (b.attendancePct || 0) - (a.attendancePct || 0)).slice(0, 10);
 
-        fields = [
-          { 
-            name: "🏆 TOP 10 OVERALL WARRIORS", 
-            value: topOverall.length > 0 ? topOverall.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts** | ⚔️ ${m.totalKills} / 🤝 ${m.totalAssists}`).join("\n\n") : "No data recorded.",
-            inline: false 
-          },
+        const formatDetailedMember = (m, rank) => {
+          let str = `**#${rank}** — ${m.ign} (**${m.totalScore.toLocaleString()} pts**)`;
+          str += `\n╰ \`Vale\` ⚔️${m.valeKills || 0} | 🤝${m.valeAssists || 0} | ⭐${m.totalPP || 0} | 🎯${m.totalValeScore || 0}`;
+          if (m.totalStellarScore > 0) {
+            str += `\n╰ \`Stlr\` ⚔️${m.stellarKills || 0} | 🤝${m.stellarAssists || 0} | ✨${m.totalTablets || 0} | 🎯${m.totalStellarScore || 0}`;
+          }
+          return str;
+        };
+
+        const overallChunks = [];
+        for (let i = 0; i < topOverall.length; i += 5) {
+          overallChunks.push(topOverall.slice(i, i + 5));
+        }
+
+        overallChunks.forEach((chunk, idx) => {
+          fields.push({
+            name: idx === 0 ? "🏆 TOP 1-5 OVERALL WARRIORS" : `🏆 TOP ${idx * 5 + 1}-${idx * 5 + chunk.length} OVERALL`,
+            value: chunk.length > 0 ? chunk.map((m, i) => formatDetailedMember(m, idx * 5 + i + 1)).join("\n\n") : "No data recorded.",
+            inline: false
+          });
+        });
+
+        fields.push(
           { 
             name: "⚔️ TOP 10 DPS ELITES", 
-            value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
+            value: topDPS.length > 0 ? topDPS.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
             inline: true 
           },
           { 
             name: "🛡️ TOP 10 SUPPORT SPECIALISTS", 
-            value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n\n") : "No data recorded.",
+            value: topSupport.length > 0 ? topSupport.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.totalScore.toLocaleString()} pts**`).join("\n") : "No data recorded.",
             inline: true 
           },
           { 
             name: "📋 TOP 10 ATTENDANCE LEADERS", 
-            value: topAttendance.length > 0 ? topAttendance.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.attendancePct}% attendance**`).join("\n\n") : "No data recorded.",
+            value: topAttendance.length > 0 ? topAttendance.map((m, i) => `**#${i + 1}** — ${m.ign}\n╰ **${m.attendancePct}% attendance**`).join("\n") : "No data recorded.",
             inline: false 
           }
-        ];
+        );
 
         if (type === 'weekly' && highlights?.killer) {
           fields.unshift({
@@ -122,15 +139,20 @@ const PerformanceSnapshot = () => {
           return "▫️";
         };
 
-        const chunkSize = 20; 
+        const chunkSize = 6; // Safety margin for 1024-char limit with detailed breakdown
         for (let i = 0; i < data.length; i += chunkSize) {
           const chunk = data.slice(i, i + chunkSize);
           fields.push({
             name: `📜 OVERALL RANKS ${i + 1} TO ${i + chunk.length}`,
             value: chunk.map((m, idx) => {
               const rank = i + idx + 1;
-              return `**#${rank}** ${getMedal(rank)} **${m.ign}** — ${m.totalScore.toLocaleString()} pts`;
-            }).join("\n"),
+              let str = `**#${rank}** ${getMedal(rank)} **${m.ign}** — **${m.totalScore.toLocaleString()} pts**`;
+              str += `\n╰ \`V\` ⚔️${m.valeKills || 0} 🤝${m.valeAssists || 0} ⭐${m.totalPP || 0} 🎯${m.totalValeScore || 0}`;
+              if (m.totalStellarScore > 0) {
+                str += `\n╰ \`S\` ⚔️${m.stellarKills || 0} 🤝${m.stellarAssists || 0} 🎯${m.totalStellarScore || 0}`;
+              }
+              return str;
+            }).join("\n\n"),
             inline: false
           });
         }
