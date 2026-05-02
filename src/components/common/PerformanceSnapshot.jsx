@@ -87,7 +87,8 @@ const PerformanceSnapshot = () => {
           let str = `**#${rank}** — ${m.ign} (**${m.totalScore.toLocaleString()} pts**)`;
           str += `\n╰ \`Vale\` ⚔️${m.valeKills || 0} | 🤝${m.valeAssists || 0} | ⭐${m.totalPP || 0} | 🎯${m.totalValeScore || 0}`;
           if (m.totalStellarScore > 0) {
-            str += `\n╰ \`Stlr\` ⚔️${m.stellarKills || 0} | 🤝${m.stellarAssists || 0} | ✨${m.totalTablets || 0} | 🎯${m.totalStellarScore || 0}`;
+            const stlrObj = m.totalBoss > 0 ? `👹${m.totalBoss}` : `✨${m.totalTablets || 0}`;
+            str += `\n╰ \`Stlr\` ⚔️${m.stellarKills || 0} | 🤝${m.stellarAssists || 0} | ${stlrObj} | 🎯${m.totalStellarScore || 0}`;
           }
           return str;
         };
@@ -149,7 +150,8 @@ const PerformanceSnapshot = () => {
               let str = `**#${rank}** ${getMedal(rank)} **${m.ign}** — **${m.totalScore.toLocaleString()} pts**`;
               str += `\n╰ \`V\` ⚔️${m.valeKills || 0} 🤝${m.valeAssists || 0} ⭐${m.totalPP || 0} 🎯${m.totalValeScore || 0}`;
               if (m.totalStellarScore > 0) {
-                str += `\n╰ \`S\` ⚔️${m.stellarKills || 0} 🤝${m.stellarAssists || 0} 🎯${m.totalStellarScore || 0}`;
+                const stlrObj = m.totalBoss > 0 ? `👹${m.totalBoss}` : `✨${m.totalTablets || 0}`;
+                str += `\n╰ \`S\` ⚔️${m.stellarKills || 0} 🤝${m.stellarAssists || 0} ${stlrObj} 🎯${m.totalStellarScore || 0}`;
               }
               return str;
             }).join("\n\n"),
@@ -160,7 +162,7 @@ const PerformanceSnapshot = () => {
 
       fields.unshift({
         name: "📖 SYMBOLS LEGEND",
-        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets | 🎯 Total Score",
+        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets (Main) | 👹 Boss (Sub) | 🎯 Score",
         inline: false
       });
 
