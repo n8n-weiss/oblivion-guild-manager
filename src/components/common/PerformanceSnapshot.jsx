@@ -80,10 +80,10 @@ const PerformanceSnapshot = () => {
       if (mode === 'top10') {
         const activeScorers = data.filter(m => m.totalScore > 0);
         const topOverall = activeScorers.slice(0, 10);
-        const topDPS = [...activeScorers].filter(m => m.role === "DPS")
+        const topDPS = [...activeScorers].filter(m => (m.role || "").toUpperCase() === "DPS")
           .sort((a, b) => (b.totalKills || 0) - (a.totalKills || 0) || (b.totalScore || 0) - (a.totalScore || 0))
           .slice(0, 10);
-        const topSupport = [...activeScorers].filter(m => m.role === "Support")
+        const topSupport = [...activeScorers].filter(m => (m.role || "").toUpperCase() === "SUPPORT")
           .sort((a, b) => (b.totalAssists || 0) - (a.totalAssists || 0) || (b.totalScore || 0) - (a.totalScore || 0))
           .slice(0, 10);
         const topAttendance = [...activeScorers].sort((a, b) => 
@@ -93,10 +93,10 @@ const PerformanceSnapshot = () => {
 
         const formatDetailedMember = (m, rank) => {
           let str = `**#${rank}** — ${m.ign} (**${m.totalScore.toLocaleString()} pts**)`;
-          str += `\n╰ \`Vale\` ⚔️${m.valeKills || 0} | 🤝${m.valeAssists || 0} | ⭐${m.totalPP || 0} | 🎯${m.totalValeScore || 0}`;
+          str += `\n╰ \`Vale\` ⚔️${m.valeKills || 0} | 🤝${m.valeAssists || 0} | 🚩${m.totalCTF || 0} | ⭐${m.totalPP || 0} | 🎯${m.totalValeScore || 0}`;
           if (m.totalStellarScore > 0) {
             const stlrObj = m.totalBoss > 0 ? `👹${m.totalBoss}` : `✨${m.totalTablets || 0}`;
-            str += `\n╰ \`Stlr\` ⚔️${m.stellarKills || 0} | 🤝${m.stellarAssists || 0} | ${stlrObj} | 🎯${m.totalStellarScore || 0}`;
+            str += `\n╰ \`Stlr\` ⚔️${m.stellarKills || 0} | 🤝${m.stellarAssists || 0} | ${stlrObj} | 📊${m.totalIngameScore || 0} | 🎯${m.totalStellarScore || 0}`;
           }
           return str;
         };
@@ -157,10 +157,10 @@ const PerformanceSnapshot = () => {
             value: chunk.map((m, idx) => {
               const rank = i + idx + 1;
               let str = `**#${rank}** ${getMedal(rank)} **${m.ign}** — **${m.totalScore.toLocaleString()} pts**`;
-              str += `\n╰ \`V\` ⚔️${m.valeKills || 0} 🤝${m.valeAssists || 0} ⭐${m.totalPP || 0} 🎯${m.totalValeScore || 0}`;
+              str += `\n╰ \`V\` ⚔️${m.valeKills || 0} 🤝${m.valeAssists || 0} 🚩${m.totalCTF || 0} ⭐${m.totalPP || 0} 🎯${m.totalValeScore || 0}`;
               if (m.totalStellarScore > 0) {
                 const stlrObj = m.totalBoss > 0 ? `👹${m.totalBoss}` : `✨${m.totalTablets || 0}`;
-                str += `\n╰ \`S\` ⚔️${m.stellarKills || 0} 🤝${m.stellarAssists || 0} ${stlrObj} 🎯${m.totalStellarScore || 0}`;
+                str += `\n╰ \`S\` ⚔️${m.stellarKills || 0} 🤝${m.stellarAssists || 0} ${stlrObj} 📊${m.totalIngameScore || 0} 🎯${m.totalStellarScore || 0}`;
               }
               return str;
             }).join("\n\n"),
@@ -171,7 +171,7 @@ const PerformanceSnapshot = () => {
 
       fields.unshift({
         name: "📖 SYMBOLS LEGEND",
-        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | ⭐ Performance Pts | 🎯 Event Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets (Main) | 👹 Boss (Sub) | 🎯 Event Total Score",
+        value: "`Vale Clash` ⚔️ Kills | 🤝 Assists | 🚩 CTF | ⭐ PP | 🎯 Event Total Score\n`Stellar Clash` ⚔️ Kills | 🤝 Assists | ✨ Tablets | 👹 Boss | 📊 In-game | 🎯 Event Total Score",
         inline: false
       });
 
