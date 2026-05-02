@@ -286,19 +286,21 @@ export default function App() {
               )}
 
               <button 
-                className="btn btn-primary" 
+                className="btn btn-primary premium-pill glass-panel relative overflow-hidden" 
                 style={{ 
                   width: "100%", 
                   justifyContent: "center", 
                   background: "linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05))", 
                   color: "var(--gold)", 
-                  border: "1px solid rgba(240,192,64,0.2)",
+                  border: "1px solid rgba(240,192,64,0.4)",
                   fontSize: 11,
                   fontWeight: 800,
-                  height: 36
+                  height: 36,
+                  boxShadow: "0 4px 15px rgba(240,192,64,0.15)"
                 }} 
                 onClick={() => setShowTreasury(true)}
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(255,255,255,0.2)] to-transparent -translate-x-[150%] animate-[shimmer_2.5s_infinite]" />
                 <Icon name="star" size={14} /> Buy Me A Beer
               </button>
             </div>
@@ -438,9 +440,7 @@ export default function App() {
           />
         )}
         {showTreasury && (
-          <Modal isOpen={true} onClose={() => setShowTreasury(false)} title="Oblivion Treasury">
-            <TreasuryModal />
-          </Modal>
+          <TreasuryModal onClose={() => setShowTreasury(false)} />
         )}
       </AnimatePresence>
 
