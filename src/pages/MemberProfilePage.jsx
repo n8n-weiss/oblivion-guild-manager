@@ -134,7 +134,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
     members, events: liveEvents, attendance: liveAttendance, performance: livePerformance, absences, eoRatings: liveEoRatings, 
     notifications, markNotifRead,
     requests, submitRequest,
-    isMember, myMemberId, isArchitect, setAbsences, setMembers, showToast, currentUser,
+    isMember, myMemberId, isArchitect, setMembers, showToast, currentUser,
     auctionSessions, migrateMemberData,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, fetchHistoricalData,
@@ -216,7 +216,8 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
         joinDate: member.joinDate || ""
       });
     }
-  }, [member]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member?.memberId]); // Only re-run when the member ID changes (i.e. a different member is loaded)
 
   const [activeTab, setActiveTab] = useState("overview");
   const [collapsed, setCollapsed] = useState({});
@@ -266,18 +267,8 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
 
   const isAccessDenied = isMember && memberId !== myMemberId;
 
-  if (!member) {
-    return (
-      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
-        <div className="spinner" style={{ margin: "0 auto 20px" }} />
-        <p className="text-muted">Loading profile data...</p>
-        <button className="btn btn-ghost mt-4" onClick={onClose}>Go Back</button>
-      </div>
-    );
-  }
-
-  const memberIdx = members.findIndex(m => (m.memberId || "").trim().toLowerCase() === (member.memberId || "").trim().toLowerCase());
-  const mId = (member.memberId || "").trim().toLowerCase();
+  const memberIdx = members.findIndex(m => (m.memberId || "").trim().toLowerCase() === (member?.memberId || "").trim().toLowerCase());
+  const mId = (member?.memberId || "").trim().toLowerCase();
   const activeMembers = useMemo(
     () => members.filter(m => (m.status || "active") === "active"),
     [members]
@@ -293,7 +284,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
   }, [attendance]);
   const performanceIndex = useMemo(() => {
     const map = new Map();
-    performance.forEach(p => map.set(`${(p.memberId || "").trim().toLowerCase()}__${p.eventId}`, p));
+    (performance || []).forEach(p => map.set(`${(p.memberId || "").trim().toLowerCase()}__${p.eventId}`, p));
     return map;
   }, [performance]);
   const eoRatingsIndex = useMemo(() => {
@@ -314,32 +305,31 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
       })
       .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
       .filter(e => {
-        if (!member.joinDate) return true;
+        if (!member?.joinDate) return true;
         if (new Date(e.eventDate) >= new Date(member.joinDate)) return true;
         return e.att || e.perf || e.eoRating;
       });
-  }, [events, mId, attendanceIndex, performanceIndex, eoRatingsIndex, member.joinDate]);
+  }, [events, mId, attendanceIndex, performanceIndex, eoRatingsIndex, member]);
 
   const glEvents = useMemo(() => memberEvents.filter(e => e.eventType === "Guild League"), [memberEvents]);
   const eoEvents = useMemo(() => memberEvents.filter(e => e.eventType === "Emperium Overrun"), [memberEvents]);
-  const memberAbsences = useMemo(() => absences.filter(a => a.memberId === member.memberId), [absences, member.memberId]);
+  const memberAbsences = useMemo(() => absences.filter(a => a.memberId === member?.memberId), [absences, member?.memberId]);
   const myNotifs = useMemo(
-    () => notifications.filter(n => n.targetId === "all" || n.targetId === member.memberId),
-    [notifications, member.memberId]
+    () => notifications.filter(n => n.targetId === "all" || n.targetId === member?.memberId),
+    [notifications, member?.memberId]
   );
   const unreadCount = useMemo(
     () => myNotifs.filter(n => !n.isRead && n.targetId !== "all").length,
     [myNotifs]
   );
   
-  const myPendingRequest = requests.find(r => r.memberId === member.memberId && r.status === "pending");
+  const myPendingRequest = requests.find(r => r.memberId === member?.memberId && r.status === "pending");
   
   const totalGLScore = useMemo(() => glEvents.reduce((sum, e) => sum + e.score, 0), [glEvents]);
   const presentCount = useMemo(() => memberEvents.filter(e => (e.att?.status || "present") === "present").length, [memberEvents]);
   const attPct = memberEvents.length > 0 ? Math.round((presentCount / memberEvents.length) * 100) : 0;
   const presentGLCount = useMemo(() => glEvents.filter(e => (e.att?.status || "present") === "present").length, [glEvents]);
   const avgGL = presentGLCount > 0 ? Math.round((totalGLScore / presentGLCount) * 10) / 10 : 0;
-  const eoRatingsList = useMemo(() => eoRatings.filter(r => r.memberId === member.memberId), [eoRatings, member.memberId]);
 
   // --- NEW CALCULATIONS ---
   // 1. Guild Average GL
@@ -391,7 +381,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
         return { memberId: m.memberId, score: (att?.status || "present") === "present" ? (perf?.ctfPoints || 0) + (perf?.performancePoints || 0) : 0 };
       });
       const topScore = Math.max(...scores.map(s => s.score));
-      if (topScore > 0 && scores.find(s => s.memberId === member.memberId)?.score === topScore) {
+      if (topScore > 0 && scores.find(s => s.memberId === member?.memberId)?.score === topScore) {
         list.push({ id: "vanguard", icon: "🔥", label: "Frontline Vanguard", desc: "Leading the charge. Top scorer in the guild's most recent operation.", color: "#ff4d4d" });
       }
     }
@@ -415,7 +405,7 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
     themes["Creator"] = { color: "var(--color-blacksmith)", icon: "🧪" };
     return themes;
   })();
-  const theme = classThemes[member.class] || { color: "var(--color-others)", icon: "👤" };
+  const theme = classThemes[member?.class] || { color: "var(--color-others)", icon: "👤" };
 
   const attStatus = attPct >= 80 ? { label: "Reliable", badge: "badge-active" }
     : attPct >= 60 ? { label: "Average", badge: "badge-casual" }
@@ -656,6 +646,16 @@ function MemberProfilePage({ memberId, onClose, isOwnProfile }) {
         <h2 className="page-title">Access Denied</h2>
         <p className="text-muted">You are only permitted to view your own performance profile.</p>
         <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Return to My Profile</button>
+      </div>
+    );
+  }
+
+  if (!member) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+        <div className="spinner" style={{ margin: "0 auto 20px" }} />
+        <p className="text-muted">Loading profile data...</p>
+        <button className="btn btn-ghost mt-4" onClick={onClose}>Go Back</button>
       </div>
     );
   }

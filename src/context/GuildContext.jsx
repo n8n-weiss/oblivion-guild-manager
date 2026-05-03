@@ -313,6 +313,7 @@ export const GuildProvider = ({ children, initialData }) => {
         ...r,
         ...r.metadata, 
         memberId: r.member_id,
+        status: r.status,
         discord: r.discord || r.metadata?.discord || "",
         guildRank: r.guild_rank,
         isDonator: r.is_donator
@@ -563,7 +564,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setLoading(false);
       prevData.current.isFetching = false;
     }
-  }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL]);
+  }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL, syncStatus]);
 
   const fetchFullHistory = useCallback(async () => {
     if (loadingHistory || !hasMoreEvents) return;
@@ -916,7 +917,7 @@ export const GuildProvider = ({ children, initialData }) => {
     console.log("GuildContext: Initializing Real-time Subscriptions...");
 
     const channel = supabase
-      .channel('guild_changes', { config: { broadcast: { self: true } } })
+      .channel('guild_changes', { config: { broadcast: { self: false } } })
       // 0. Custom Presence Broadcasts
       .on('broadcast', { event: 'officer_ping' }, payload => {
         const data = payload.payload;
@@ -2505,7 +2506,7 @@ export const GuildProvider = ({ children, initialData }) => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [showToast]);
+  }, [showToast, storageKey]);
 
   const submitAbsence = useCallback(async (absenceData) => {
     try {

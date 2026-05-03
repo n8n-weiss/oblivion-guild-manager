@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGuild } from '../context/GuildContext';
 import Icon from '../components/ui/icons';
 import Modal from '../components/ui/Modal';
@@ -9,7 +9,7 @@ import { writeAuditLog } from "../utils/audit";
 function EventsPage() {
   const {
     members, events, setEvents, deleteEvent: deleteEventFromDb, attendance, setAttendance,
-    performance, setPerformance, absences, eoRatings, setEoRatings,
+    performance, setPerformance, absences, eoRatings,
     showToast, isAdmin, isOfficer, isArchitect, currentUser, sendDiscordEmbed,
     hasMoreEvents, loadingHistory, fetchFullHistory, broadcastStateSync,
     officerActivities, broadcastActivity, myMemberId
@@ -157,7 +157,8 @@ function EventsPage() {
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [perfEdits, attEdits]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfEdits, attEdits]); // saveAllPerformance/Attendance intentionally omitted to avoid re-render loops
   const getNextAuditor = React.useCallback(() => {
     if (!duoOfficerPool.length) return null;
     let idx = 0;
@@ -377,41 +378,6 @@ function EventsPage() {
     writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "attendance_bulk", `Batch saved attendance for ${selectedEvent.eventType} on ${selectedEvent.eventDate}`);
   };
 
-  const savePerformance = (memberId, eventId) => {
-    const key = `${memberId}_${eventId}`;
-    const mId = (memberId || "").trim().toLowerCase();
-    const edits = perfEdits[key] || {};
-    const member = members.find(m => (m.memberId || "").trim().toLowerCase() === mId);
-    const ev = events.find(e => e.eventId === eventId);
-    
-    const currentAtt = attendance.find(a => (a.memberId || "").trim().toLowerCase() === mId && a.eventId === eventId);
-    if (!currentAtt) {
-      setAttendance(prev => [...prev, { memberId: memberId.trim(), eventId, status: "present" }]);
-    }
-
-    setPerformance(prev => {
-      const exists = prev.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
-      let next;
-      if (exists) {
-        next = prev.map(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId ? { ...p, ...edits } : p);
-      } else {
-        const isStellar = ev?.glMode === 'stellar';
-        const defaultFields = isStellar
-          ? { glTeam: 'main', tabletsCapt: 0, monsters: 0, boss: 0, kills: 0, assists: 0, totalScore: 0 }
-          : { ctf1: 0, ctf2: 0, ctf3: 0, ctfPoints: 0, performancePoints: 0, kills: 0, assists: 0 };
-        next = [...prev, { memberId: memberId.trim(), eventId, ...defaultFields, ...edits }];
-      }
-
-      const updatedItem = next.find(p => (p.memberId || "").trim().toLowerCase() === mId && p.eventId === eventId);
-      if (updatedItem && broadcastStateSync) {
-        broadcastStateSync('performance', updatedItem);
-      }
-      return next;
-    });
-    showToast("Performance saved", "success");
-    const ctfTot = (edits.ctf1 ?? 0) + (edits.ctf2 ?? 0) + (edits.ctf3 ?? 0);
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, "score_save", `Saved scores for ${member?.ign} — CTF: ${edits.ctf1 ?? 0}+${edits.ctf2 ?? 0}+${edits.ctf3 ?? 0}=${ctfTot}, Perf: ${edits.performancePoints ?? 0}, Kills: ${edits.kills ?? 0}, Ast: ${edits.assists ?? 0} (${ev?.eventDate})`);
-  };
 
   const saveAllPerformance = () => {
     const keys = Object.keys(perfEdits).filter(k => k.endsWith(`_${selectedEvent.eventId}`));

@@ -6,7 +6,7 @@ import Icon from '../ui/icons';
 const PerformanceSnapshot = () => {
   const { 
     members, events, attendance, performance, eoRatings, 
-    isOfficer, sendDiscordEmbed, discordConfig, showToast 
+    isOfficer, sendDiscordEmbed, discordConfig: _discordConfig, showToast 
   } = useGuild();
   const [posting, setPosting] = useState(null); // 'monthly' or 'ytd'
   const [monthOffset, setMonthOffset] = useState(0);

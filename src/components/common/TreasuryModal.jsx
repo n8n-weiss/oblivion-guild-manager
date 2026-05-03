@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+const MotionDiv = motion.div;
 import Icon from '../ui/icons';
 
 const GATEWAYS = [
@@ -14,7 +15,7 @@ export default function TreasuryModal({ onClose }) {
   const basePath = window.location.hostname === "localhost" ? "" : "/oblivion-guild-manager";
 
   return (
-    <motion.div 
+    <MotionDiv 
       className="modal-overlay" 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -22,7 +23,7 @@ export default function TreasuryModal({ onClose }) {
       onClick={onClose} 
       style={{ zIndex: 9999 }}
     >
-      <motion.div
+      <MotionDiv
         className="glass-panel relative overflow-hidden"
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -175,7 +176,7 @@ export default function TreasuryModal({ onClose }) {
           </div>
 
         </div>
-      </motion.div>
-    </motion.div>
+      </MotionDiv>
+    </MotionDiv>
   );
 }
