@@ -324,6 +324,10 @@ function EventsPage() {
     const currentStatus = attEdits[key] || attendance.find(a => a.eventId === eventId && (a.memberId || "").trim().toLowerCase() === memberId.trim().toLowerCase())?.status || "present";
     const newStatus = currentStatus === "present" ? "absent" : "present";
     setAttEdits(prev => ({ ...prev, [key]: newStatus }));
+    // Broadcast immediately so other officers see the pending toggle in real-time
+    if (broadcastStateSync) {
+      broadcastStateSync('attendance', { memberId: memberId.trim(), eventId, status: newStatus });
+    }
   };
 
   const discardAllEdits = () => {

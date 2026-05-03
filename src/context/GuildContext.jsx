@@ -2456,6 +2456,25 @@ export const GuildProvider = ({ children, initialData }) => {
   }, [getAuthHeaders, broadcastStateSync]);
 
   const fetchHistoricalData = React.useCallback(async (startDate = null, endDate = null) => {
+    // Skip fetch if cached data is still fresh (15 min TTL)
+    const HIST_CACHE_KEY = 'guild_historical_data_v1';
+    const HIST_CACHE_TTL = 15 * 60 * 1000;
+    if (!startDate && !endDate) {
+      try {
+        const cached = sessionStorage.getItem(HIST_CACHE_KEY);
+        if (cached) {
+          const { data, fetchedAt } = JSON.parse(cached);
+          if (Date.now() - fetchedAt < HIST_CACHE_TTL) {
+            setHistoricalEvents(data.events || []);
+            setHistoricalAttendance(data.attendance || []);
+            setHistoricalPerformance(data.performance || []);
+            setHistoricalEoRatings(data.eoRatings || []);
+            return; // Cache hit — skip network request
+          }
+        }
+      } catch { /* ignore cache errors */ }
+    }
+
     try {
       setIsLoadingHistory(true);
 
@@ -2499,6 +2518,16 @@ export const GuildProvider = ({ children, initialData }) => {
         setHistoricalAttendance(nestedAtt);
         setHistoricalPerformance(nestedPerf);
         setHistoricalEoRatings(nestedEo);
+
+        // Cache result for 15 minutes (only for full fetches, not date-ranged ones)
+        if (!startDate && !endDate) {
+          try {
+            sessionStorage.setItem(HIST_CACHE_KEY, JSON.stringify({
+              data: { events: mappedEvents, attendance: nestedAtt, performance: nestedPerf, eoRatings: nestedEo },
+              fetchedAt: Date.now()
+            }));
+          } catch { /* sessionStorage may be full */ }
+        }
       }
     } catch (err) {
       console.error("Fetch historical data failed:", err);
