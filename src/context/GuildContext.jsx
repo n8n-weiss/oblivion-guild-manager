@@ -67,7 +67,7 @@ export const GuildProvider = ({ children, initialData }) => {
     masterRoleId: "", 
     officerRoleId: "",
     oblivionRoleId: "",
-    eventTimeText: "7:55 PM – 8:20 PM (GMT+7) Server Time\n8:55 PM – 9:20 PM (GMT+8) Manila Time",
+    eventTimeText: "7:55 PM â€“ 8:20 PM (GMT+7) Server Time\n8:55 PM â€“ 9:20 PM (GMT+8) Manila Time",
     notifications: {
       join_requests: { enabled: true, webhookUrl: "", mentions: { master: true, officer: true, oblivion: false, member: false } },
       welcome: { enabled: true, webhookUrl: "", mentions: { member: true } },
@@ -80,17 +80,17 @@ export const GuildProvider = ({ children, initialData }) => {
       reports: { enabled: true, webhookUrl: "", mentions: { oblivion: true } }
     },
     templates: {
-      new_join: { title: "📝 New Join Request", description: "A new application from **{ign}**!" },
-      welcome: { title: "🎉 New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
-      vanguard: { title: "🛡️ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
-      event_created: { title: "📅 New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
-      event_digest: { title: "📊 Post-Event Digest ({type})", description: "Top 10 DPS, Top 10 Support/Utility, and Top 10 Attendance snapshot for **{date}**." },
-      battlelog_reminder: { title: "📘 Battlelog Reminder ({type})", description: "Assigned auditor **{auditor}** — please submit battlelog for **{date}**." },
-      absence_filed: { title: "🚨 New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
-      absence_removed: { title: "✅ Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." },
+      new_join: { title: "ðŸ“ New Join Request", description: "A new application from **{ign}**!" },
+      welcome: { title: "ðŸŽ‰ New Member Joined!", description: "Welcome **{ign}** to our Guild Portal!" },
+      vanguard: { title: "ðŸ›¡ï¸ Vanguard Request", description: "Member **{ign}** has submitted a profile update request." },
+      event_created: { title: "ðŸ“… New Event Scheduled: {type}", description: "A new **{type}** event has been scheduled for **{date}**. Please check your attendance." },
+      event_digest: { title: "ðŸ“Š Post-Event Digest ({type})", description: "Top 10 DPS, Top 10 Support/Utility, and Top 10 Attendance snapshot for **{date}**." },
+      battlelog_reminder: { title: "ðŸ“˜ Battlelog Reminder ({type})", description: "Assigned auditor **{auditor}** â€” please submit battlelog for **{date}**." },
+      absence_filed: { title: "ðŸš¨ New Absence Filed", description: "Si **{ign}** ay nag-file ng absence para sa upcoming event." },
+      absence_removed: { title: "âœ… Absence Removed", description: "Ang absence record ni **{ign}** ay kinuha na/binura." },
       auction_results: { 
-        title: "🏛️ Auction Table Results", 
-        description: "Loot session results for **{name}** have been finalized! 🏛️💎\n\n📖 **Legend:**\n• **P1** = Full Page 1 (Bulk Win)\n• **P1R1** = Page 1, Row 1 (Individual Slot)" 
+        title: "ðŸ›ï¸ Auction Table Results", 
+        description: "Loot session results for **{name}** have been finalized! ðŸ›ï¸ðŸ’Ž\n\nðŸ“– **Legend:**\nâ€¢ **P1** = Full Page 1 (Bulk Win)\nâ€¢ **P1R1** = Page 1, Row 1 (Individual Slot)" 
       }
     }
   });
@@ -704,7 +704,7 @@ export const GuildProvider = ({ children, initialData }) => {
                 }
               }
             } else {
-              // roleRes is defined here — safe to read
+              // roleRes is defined here â€” safe to read
               const errBody = await roleRes.text();
               console.error("Role fetch failed status:", roleRes.status, "Body:", errBody);
             }
@@ -1136,7 +1136,7 @@ export const GuildProvider = ({ children, initialData }) => {
           setRequests(prev => prev.filter(r => r.id !== oldRow.id));
         }
       })
-      // 10. Notifications — via WebSocket Broadcast (zero DB egress for real-time)
+      // 10. Notifications â€” via WebSocket Broadcast (zero DB egress for real-time)
       .on('broadcast', { event: 'notification_push' }, payload => {
         const notif = payload.payload;
         if (!notif || !notif.id) return;
@@ -1239,7 +1239,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
 
 
-  // fetchRequests is now LAZY — only called when user visits the Requests page.
+  // fetchRequests is now LAZY â€” only called when user visits the Requests page.
   useEffect(() => {
     if (!canSeeRequestData) {
       setRequests([]);
@@ -1259,7 +1259,7 @@ export const GuildProvider = ({ children, initialData }) => {
   }, []);
 
 
-  // Auto-save to Supabase — smart dirty tracking
+  // Auto-save to Supabase â€” smart dirty tracking
   useEffect(() => {
     // Only Staff/Architects should attempt to auto-save global data.
     // Regular members can only view, so we skip the sync logic for them.
@@ -1514,8 +1514,6 @@ export const GuildProvider = ({ children, initialData }) => {
           if (!res.ok) throw new Error(`Events Save Failed: ${res.status}`);
           prevData.current.events = [...mappedEvents];
         } else {
-          // Even if no events were dirty, update prevData with current mapped state 
-          // to ensure future checks compare against the latest derived values.
           prevData.current.events = [...mappedEvents];
         }
 
@@ -1527,26 +1525,21 @@ export const GuildProvider = ({ children, initialData }) => {
           a.id && JSON.stringify(a) !== prevAbsenceMap.get(a.id)
         );
         if (dirtyAbsences.length > 0) {
-          const payload = dirtyAbsences.map(a => {
-            return {
-              id: a.id,
-              member_id: a.memberId,
-              event_type: a.eventType,
-              event_date: a.eventDate,
-              start_date: a.eventDate, // backward compatibility
-              end_date: a.eventDate,   // required by schema
-              reason: a.reason,
-              online_status: a.onlineStatus,
-              status: a.status || 'pending'
-            };
-          });
+          const payload = dirtyAbsences.map(a => ({
+            id: a.id,
+            member_id: a.memberId,
+            event_type: a.eventType,
+            event_date: a.eventDate,
+            start_date: a.eventDate,
+            end_date: a.eventDate,
+            reason: a.reason,
+            online_status: a.onlineStatus,
+            status: a.status || 'pending'
+          }));
 
           const res = await fetch(`${supabaseUrl}/rest/v1/absences`, {
             method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
+            headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify(payload)
           });
           if (!res.ok) throw new Error(`Absences Save Failed: ${res.status}`);
@@ -1558,46 +1551,12 @@ export const GuildProvider = ({ children, initialData }) => {
         // Update local cache after successful save to ensure freshness on refresh
         sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
           data: { 
-            rosterData: members.map(m => ({ 
-              member_id: m.memberId, 
-              ign: m.ign, 
-              class: m.class, 
-              guild_rank: m.guildRank, 
-              status: m.status, 
-              level: m.level, 
-              cp: m.cp, 
-              metadata: m 
-            })), 
-            eventsData: mappedEvents.map(e => ({
-              event_id: e.eventId,
-              event_date: e.eventDate,
-              type: e.eventType || e.type,
-              title: e.title,
-              auditor: e.auditor,
-              gl_mode: e.glMode,
-              battlelog_audit: e.battlelogAudit,
-              digest_meta: e.digestMeta,
-              attendance_data: e.attendanceData,
-              performance_data: e.performanceData,
-              eo_ratings_data: e.eoRatingsData
-            })),
-            absenceData: absences.map(a => ({
-              id: a.id,
-              member_id: a.memberId,
-              start_date: a.startDate,
-              end_date: a.endDate,
-              reason: a.reason,
-              status: a.status
-            })),
-            metaData: [
-              { key: 'auction', data: { auctionTemplates, resourceCategories } },
-              { key: 'discord', data: { discord: discordConfig } }
-            ],
-            bidsData: auctionWishlist.map(b => ({
-              member_id: b.member_id,
-              bids: b.bids,
-              updated_at: b.updated_at
-            })),
+            rosterData: members.map(m => ({ member_id: m.memberId, ign: m.ign, class: m.class, guild_rank: m.guildRank, status: m.status, level: m.level, cp: m.cp, metadata: m })), 
+            eventsData: mappedEvents.map(e => ({ event_id: e.eventId, event_date: e.eventDate, type: e.eventType || e.type, title: e.title, auditor: e.auditor, gl_mode: e.glMode, battlelog_audit: e.battlelogAudit, digest_meta: e.digestMeta, attendance_data: e.attendanceData, performance_data: e.performanceData, eo_ratings_data: e.eoRatingsData })),
+            absenceData: absences.map(a => ({ id: a.id, member_id: a.memberId, start_date: a.eventDate, end_date: a.eventDate, event_date: a.eventDate, event_type: a.eventType, reason: a.reason, status: a.status, online_status: a.onlineStatus })),
+            metaData: [{ key: 'auction', data: { auctionTemplates, resourceCategories } }, { key: 'discord', data: { discord: discordConfig } }],
+            bidsData: auctionWishlist.map(b => ({ member_id: b.member_id, bids: b.bids, updated_at: b.updated_at })),
+            auctionSessionsData: auctionSessions,
             attendanceData: attendance,
             performanceData: performance,
             eoRatingsData: eoRatings
@@ -1612,68 +1571,82 @@ export const GuildProvider = ({ children, initialData }) => {
 
     const timer = setTimeout(saveToSupabase, 8000);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- authLoading/currentUser/getAuthHeaders/loading/syncStatus excluded intentionally: adding them would re-trigger the 8s save debounce on every auth state change
   }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
 
 
+  // --- Optimistic Local Persistence ---
+  useEffect(() => {
+    if (loading || authLoading || !currentUser) return;
+    const updateLocalCache = () => {
+      try {
+        const cached = sessionStorage.getItem(GLOBAL_CACHE_KEY);
+        const parsed = cached ? JSON.parse(cached) : { data: {} };
+        const newData = {
+          ...parsed.data,
+          rosterData: members.map(m => ({ member_id: m.memberId, ign: m.ign, class: m.class, guild_rank: m.guildRank, status: m.status, level: m.level, cp: m.cp, metadata: m })),
+          eventsData: events.map(e => ({ event_id: e.eventId, event_date: e.eventDate, type: e.eventType || e.type, title: e.title, auditor: e.auditor, gl_mode: e.glMode, battlelog_audit: e.battlelogAudit, digest_meta: e.digestMeta, attendance_data: {}, performance_data: {}, eo_ratings_data: {} })),
+          absenceData: absences.map(a => ({ id: a.id, member_id: a.memberId, start_date: a.eventDate, end_date: a.eventDate, event_date: a.eventDate, event_type: a.eventType, reason: a.reason, status: a.status, online_status: a.onlineStatus })),
+          auctionSessionsData: auctionSessions,
+          metaData: [{ key: 'auction', data: { auctionTemplates, resourceCategories } }, { key: 'discord', data: { discord: discordConfig } }],
+          attendanceData: attendance, performanceData: performance, eoRatingsData: eoRatings
+        };
+        sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({ data: newData, fetchedAt: Date.now() }));
+      } catch { /* ignore */ }
+    };
+    const timer = setTimeout(updateLocalCache, 1000);
+    return () => clearTimeout(timer);
+  }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings, loading, authLoading, currentUser, GLOBAL_CACHE_KEY]);
 
-   const sendDiscordEmbed = useCallback(async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
-     const catConfig = category ? discordConfig.notifications?.[category] : null;
-
-     if (catConfig && !catConfig.enabled) {
-       if (isAdmin) showToast(`Discord: Notification category '${category}' is disabled.`, "info");
-       return;
-     }
-
-     const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
-       ? catConfig.webhookUrl 
-       : discordConfig.webhookUrl;
-
+  const sendDiscordEmbed = useCallback(async (title, description, color = 0x6382e6, fields = [], thumbnail = null, category = null, templateKey = null, placeholders = {}, memberMentionId = null, overridePing = null) => {
+    const catConfig = category ? discordConfig.notifications?.[category] : null;
+    if (catConfig && !catConfig.enabled) {
+      if (isAdmin) showToast(`Discord: Notification category '${category}' is disabled.`, "info");
+      return;
+    }
+    const targetUrl = (catConfig?.webhookUrl && catConfig.webhookUrl.trim() !== "") 
+      ? catConfig.webhookUrl 
+      : discordConfig.webhookUrl;
     if (!targetUrl || !targetUrl.startsWith('http')) {
       if (isAdmin) showToast(`Discord: Invalid or missing Webhook URL.`, "error");
       return;
     }
-
-     let finalTitle = title;
-     let finalDesc = description;
-
-     if (templateKey && discordConfig.templates?.[templateKey]) {
-       const template = discordConfig.templates[templateKey];
-       finalTitle = template.title || title;
-       finalDesc = template.description || description;
-       
-       Object.entries(placeholders).forEach(([key, val]) => {
-         const regex = new RegExp(`{${key}}`, 'g');
-         finalTitle = finalTitle.replace(regex, val);
-         finalDesc = finalDesc.replace(regex, val);
-       });
-     }
-
-     try {
-       const embed = {
-         title: finalTitle,
-         color,
-         fields,
-         timestamp: new Date().toISOString(),
-         footer: { text: "Oblivion Guild Portal" }
-       };
-        if (finalDesc) embed.description = finalDesc;
-       if (thumbnail) embed.thumbnail = { url: thumbnail };
+    let finalTitle = title;
+    let finalDesc = description;
+    if (templateKey && discordConfig.templates?.[templateKey]) {
+      const template = discordConfig.templates[templateKey];
+      finalTitle = template.title || title;
+      finalDesc = template.description || description;
+      Object.entries(placeholders).forEach(([key, val]) => {
+        const regex = new RegExp(`{${key}}`, 'g');
+        finalTitle = finalTitle.replace(regex, val);
+        finalDesc = finalDesc.replace(regex, val);
+      });
+    }
+    
+    try {
+      const embed = {
+        title: finalTitle,
+        color,
+        fields,
+        timestamp: new Date().toISOString(),
+        footer: { text: "Oblivion Guild Portal" }
+      };
+      if (finalDesc) embed.description = finalDesc;
+      if (thumbnail) embed.thumbnail = { url: thumbnail };
       
       let content = "";
       const catMentions = catConfig?.mentions || {};
-      
       const mentionParts = [];
       if (overridePing) {
-         mentionParts.push(overridePing);
+        mentionParts.push(overridePing);
       } else {
-         if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
-         if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
-         if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
-         if (catMentions.member && memberMentionId) {
-           const cleanId = memberMentionId.replace(/[^0-9]/g, "");
-           if (cleanId && cleanId.length >= 15) mentionParts.push(`<@${cleanId}>`);
-         }
+        if (catMentions.master && discordConfig.masterRoleId) mentionParts.push(`<@&${discordConfig.masterRoleId}>`);
+        if (catMentions.officer && discordConfig.officerRoleId) mentionParts.push(`<@&${discordConfig.officerRoleId}>`);
+        if (catMentions.oblivion && discordConfig.oblivionRoleId) mentionParts.push(`<@&${discordConfig.oblivionRoleId}>`);
+        if (catMentions.member && memberMentionId) {
+          const cleanId = memberMentionId.replace(/[^0-9]/g, "");
+          if (cleanId && cleanId.length >= 15) mentionParts.push(`<@${cleanId}>`);
+        }
       }
       content = mentionParts.join(" ");
 
@@ -1884,17 +1857,17 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Reactivation request submitted. Please wait for officer approval.", "success");
       return true;
     } catch (err) {
-      console.error(err);
-      showToast("Failed to submit reactivation request", "error");
+      console.error('submitReactivationRequest failed:', err);
+      showToast('Failed to submit reactivation request', 'error');
       return false;
     }
-   
   }, [getAuthHeaders, members, joinRequests, showToast]);
+
+
 
   const approveJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
-
       const r = joinRequests.find(x => x.id === requestId);
       if (!r) return;
 
@@ -1912,7 +1885,7 @@ export const GuildProvider = ({ children, initialData }) => {
         status: "active",
         reactivatedAt: existingMember ? new Date().toISOString() : (existingMember?.reactivatedAt || null)
       };
-      // 1. Activate in Supabase Roster
+
       const rosterPayload = {
         member_id: newMember.memberId,
         ign: newMember.ign,
@@ -1926,18 +1899,13 @@ export const GuildProvider = ({ children, initialData }) => {
         metadata: newMember
       };
 
-      
       const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster`, {
         method: 'POST',
-        headers: { 
-          ...headers,
-          'Prefer': 'resolution=merge-duplicates'
-        },
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify([rosterPayload])
       });
       if (!rosterRes.ok) throw new Error(`Roster activation failed: ${rosterRes.status}`);
 
-      // Delete join request after approval to keep DB clean
       const reqRes = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, {
         method: 'DELETE',
         headers
@@ -1945,30 +1913,18 @@ export const GuildProvider = ({ children, initialData }) => {
       if (!reqRes.ok) throw new Error(`Join request cleanup failed: ${reqRes.status}`);
 
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
-      if (broadcastStateSync) {
-        broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
-      }
+      if (broadcastStateSync) broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
       sessionStorage.removeItem("requests_cache_v1");
 
       if (r.request_type !== "reactivation" && r.requestType !== "reactivation") {
-        sendDiscordEmbed(
-          "🎉 New Member Joined!",
-          `Welcome **${r.ign}** to our Guild Portal!`,
-          0x40C97A,
-          [
-            { name: "IGN", value: r.ign, inline: true },
-            { name: "Job Class", value: r.jobClass, inline: true },
-            { name: "Role", value: r.role, inline: true }
-          ],
-          "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png",
-          "welcome",
-          "welcome",
-          { ign: r.ign, class: r.jobClass, role: r.role },
-          r.discord
-        );
+        sendDiscordEmbed("ðŸŽ‰ New Member Joined!", `Welcome **${r.ign}** to our Guild Portal!`, 0x40C97A, [
+          { name: "IGN", value: r.ign, inline: true },
+          { name: "Job Class", value: r.jobClass, inline: true },
+          { name: "Role", value: r.role, inline: true }
+        ], "https://raw.githubusercontent.com/n8n-weiss/oblivion-guild-manager/main/public/oblivion-logo.png", "welcome", "welcome", { ign: r.ign, class: r.jobClass, role: r.role }, r.discord);
       }
       showToast(`Welcome ${r.ign}! Registered successfully.`, "success");
-      fetchGlobalData(true); // Force refresh to clear cache
+      fetchGlobalData(true);
       return true;
     } catch(err) {
       console.error(err);
@@ -1980,23 +1936,13 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteEvent = useCallback(async (eventId) => {
     try {
       const headers = getAuthHeaders();
-      
-      // 1. Delete from Supabase Events table
-      const res = await fetch(`${supabaseUrl}/rest/v1/events?event_id=eq.${eventId}`, {
-        method: 'DELETE',
-        headers
-      });
-      
+      const res = await fetch(`${supabaseUrl}/rest/v1/events?event_id=eq.${eventId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Event deletion failed: ${res.status}`);
-
-      // 2. Cleanup related data in separate tables (using event_id)
       await Promise.allSettled([
         fetch(`${supabaseUrl}/rest/v1/attendance?event_id=eq.${eventId}`, { method: 'DELETE', headers }),
         fetch(`${supabaseUrl}/rest/v1/performance?event_id=eq.${eventId}`, { method: 'DELETE', headers }),
         fetch(`${supabaseUrl}/rest/v1/eo_ratings?event_id=eq.${eventId}`, { method: 'DELETE', headers })
       ]);
-
-      // 3. Update local state
       setEvents(prev => {
         const updated = prev.filter(ev => ev.eventId !== eventId);
         prevData.current.events = [...updated];
@@ -2017,9 +1963,7 @@ export const GuildProvider = ({ children, initialData }) => {
         prevData.current.eoRatings = [...updated];
         return updated;
       });
-
       sessionStorage.removeItem(GLOBAL_CACHE_KEY);
-
       showToast("Event deleted permanently", "success");
       return true;
     } catch (err) {
@@ -2032,17 +1976,10 @@ export const GuildProvider = ({ children, initialData }) => {
   const rejectJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
-
-      const res = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
-
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
-      if (broadcastStateSync) {
-        broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
-      }
+      if (broadcastStateSync) broadcastStateSync('join_requests', { id: requestId }, 'DELETE');
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Registration rejected and removed', 'info');
       return true;
@@ -2056,13 +1993,8 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteJoinRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
-
-      const res = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/join_requests?id=eq.${requestId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Registration record deleted', 'success');
@@ -2077,20 +2009,14 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteAuctionSession = useCallback(async (sessionId) => {
     try {
       const headers = getAuthHeaders();
-      const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions?id=eq.${sessionId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions?id=eq.${sessionId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Auction session deletion failed: ${res.status}`);
-
       setAuctionSessions(prev => {
         const updated = prev.filter(s => s.id !== sessionId);
         prevData.current.auctionSessions = [...updated];
         return updated;
       });
-
       sessionStorage.removeItem(GLOBAL_CACHE_KEY);
-
       showToast("Auction session deleted permanently", "success");
       return true;
     } catch (err) {
@@ -2099,24 +2025,18 @@ export const GuildProvider = ({ children, initialData }) => {
       return false;
     }
   }, [getAuthHeaders, showToast]);
-  
+
   const deleteMember = useCallback(async (memberId) => {
     try {
       const headers = getAuthHeaders();
-      const res = await fetch(`${supabaseUrl}/rest/v1/roster?member_id=eq.${memberId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/roster?member_id=eq.${memberId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Member deletion failed: ${res.status}`);
-
       setMembers(prev => {
         const updated = prev.filter(m => m.memberId !== memberId);
         prevData.current.members = [...updated];
         return updated;
       });
-
       sessionStorage.removeItem(GLOBAL_CACHE_KEY);
-
       showToast("Member deleted permanently", "success");
       return true;
     } catch (err) {
@@ -2126,37 +2046,65 @@ export const GuildProvider = ({ children, initialData }) => {
     }
   }, [getAuthHeaders, showToast]);
 
+  const updateMemberStatus = useCallback(async (memberId, newStatus) => {
+    try {
+      const headers = getAuthHeaders();
+      const member = (prevData.current.members || []).find(m => m.memberId === memberId);
+      if (!member) return false;
+      const updatedMember = { ...member, status: newStatus };
+      const payload = {
+        member_id: memberId, ign: member.ign, class: member.class, role: member.role || 'DPS',
+        discord: member.discord || '', guild_rank: member.guildRank, status: newStatus,
+        level: Number(member.level || 0), cp: Number(member.cp || 0), metadata: updatedMember
+      };
+      const res = await fetch(`${supabaseUrl}/rest/v1/roster`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify([payload])
+      });
+      if (!res.ok) throw new Error(`Status update failed: ${res.status}`);
+      setMembers(prev => {
+        const next = prev.map(m => m.memberId === memberId ? updatedMember : m);
+        prevData.current.members = [...next];
+        return next;
+      });
+      if (broadcastStateSync) broadcastStateSync('roster', updatedMember);
+      const cached = sessionStorage.getItem(GLOBAL_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.data?.rosterData) {
+          parsed.data.rosterData = parsed.data.rosterData.map(r => r.member_id === memberId ? { ...r, status: newStatus, metadata: updatedMember } : r);
+          sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify(parsed));
+        }
+      }
+      return true;
+    } catch (err) {
+      console.error("Update member status error:", err);
+      showToast("Failed to update status in database", "error");
+      return false;
+    }
+  }, [getAuthHeaders, broadcastStateSync, showToast]);
+
   const submitRequest = useCallback(async (memberId, newData) => {
     try {
       const headers = getAuthHeaders();
-
       const m = members.find(x => x.memberId === memberId);
       if (!m) return;
-
-      // Duplicate Check: Already pending request for this member?
       const alreadyPending = requests.some(r => r.member_id === memberId && r.status === "pending");
       if (alreadyPending) {
         showToast("You already have a pending profile update request.", "error");
         return false;
       }
-
       const req = {
         id: crypto.randomUUID?.() || Date.now().toString(),
-        member_id: memberId,
-        requester_ign: m.ign,
+        member_id: memberId, requester_ign: m.ign,
         old_data: { ign: m.ign, class: m.class, role: m.role },
-        new_data: newData,
-        status: "pending",
-        timestamp: Date.now()
+        new_data: newData, status: "pending", timestamp: Date.now()
       };
-      
       const res = await fetch(`${supabaseUrl}/rest/v1/requests`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify([req])
+        method: 'POST', headers, body: JSON.stringify([req])
       });
       if (!res.ok) throw new Error(`Request submission failed: ${res.status}`);
-
       showToast("Request submitted for approval!", "success");
       return true;
     } catch(err) {
@@ -2164,57 +2112,31 @@ export const GuildProvider = ({ children, initialData }) => {
       showToast("Failed to submit request", "error");
       return false;
     }
-   
   }, [getAuthHeaders, members, requests, showToast]);
 
   const approveRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
-
       const r = requests.find(x => x.id === requestId);
       if (!r) return false;
-
-      // Update Roster in Supabase
       const existingMember = members.find(x => x.memberId === r.member_id);
       const updatedMember = { ...(existingMember || {}), ...r.new_data };
       const rosterPayload = {
-        member_id: r.member_id,
-        ign: updatedMember.ign || existingMember?.ign,
-        class: updatedMember.class || existingMember?.class,
-        role: updatedMember.role || existingMember?.role || 'DPS',
-        discord: updatedMember.discord || existingMember?.discord || '',
-        guild_rank: updatedMember.guildRank || existingMember?.guildRank,
-        status: updatedMember.status || 'active',
-        level: Number(updatedMember.level || 0),
-        cp: Number(updatedMember.cp || 0),
+        member_id: r.member_id, ign: updatedMember.ign || existingMember?.ign,
+        class: updatedMember.class || existingMember?.class, role: updatedMember.role || existingMember?.role || 'DPS',
+        discord: updatedMember.discord || existingMember?.discord || '', guild_rank: updatedMember.guildRank || existingMember?.guildRank,
+        status: updatedMember.status || 'active', level: Number(updatedMember.level || 0), cp: Number(updatedMember.cp || 0),
         metadata: updatedMember
       };
-
-
       const rosterRes = await fetch(`${supabaseUrl}/rest/v1/roster`, {
-        method: 'POST',
-        headers: { 
-          ...headers,
-          'Prefer': 'resolution=merge-duplicates'
-        },
-        body: JSON.stringify([rosterPayload])
+        method: 'POST', headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' }, body: JSON.stringify([rosterPayload])
       });
       if (!rosterRes.ok) throw new Error(`Roster update failed: ${rosterRes.status}`);
-
-      // Update member in local state
       setMembers(prev => prev.map(m => m.memberId === r.member_id ? { ...m, ...r.new_data } : m));
-
-      // Delete request after approval to keep DB clean (History is in Audit Logs)
-      const reqRes = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const reqRes = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, { method: 'DELETE', headers });
       if (!reqRes.ok) throw new Error(`Request cleanup failed: ${reqRes.status}`);
-
       setRequests(prev => prev.filter(x => x.id !== requestId));
-      if (broadcastStateSync) {
-        broadcastStateSync('requests', { id: requestId }, 'DELETE');
-      }
+      if (broadcastStateSync) broadcastStateSync('requests', { id: requestId }, 'DELETE');
       sessionStorage.removeItem("requests_cache_v1");
       showToast(`Request approved for ${r.requester_ign}`, 'success');
       return true;
@@ -2228,17 +2150,10 @@ export const GuildProvider = ({ children, initialData }) => {
   const rejectRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
-
-      const res = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error(`Rejection/Cleanup failed: ${res.status}`);
-
       setRequests(prev => prev.filter(r => r.id !== requestId));
-      if (broadcastStateSync) {
-        broadcastStateSync('requests', { id: requestId }, 'DELETE');
-      }
+      if (broadcastStateSync) broadcastStateSync('requests', { id: requestId }, 'DELETE');
       sessionStorage.removeItem("requests_cache_v1");
       showToast('Request rejected and removed', 'info');
       return true;
@@ -2252,6 +2167,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const deleteRequest = useCallback(async (requestId) => {
     try {
       const headers = getAuthHeaders();
+
 
       const res = await fetch(`${supabaseUrl}/rest/v1/requests?id=eq.${requestId}`, {
         method: 'DELETE',
@@ -2469,7 +2385,7 @@ export const GuildProvider = ({ children, initialData }) => {
             setHistoricalAttendance(data.attendance || []);
             setHistoricalPerformance(data.performance || []);
             setHistoricalEoRatings(data.eoRatings || []);
-            return; // Cache hit — skip network request
+            return; // Cache hit â€” skip network request
           }
         }
       } catch { /* ignore cache errors */ }
@@ -2594,7 +2510,7 @@ export const GuildProvider = ({ children, initialData }) => {
 
 
 
-  // ─── Notification System ───────────────────────────────────────────────────
+  // â”€â”€â”€ Notification System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Broadcast a notification to all online officers/members (zero DB egress)
 
 
@@ -2665,7 +2581,7 @@ export const GuildProvider = ({ children, initialData }) => {
     onlineUsers,
     page, setPage,
     toast, setToast, showToast,
-    members, setMembers, deleteMember,
+    members, setMembers, deleteMember, updateMemberStatus,
     events, setEvents, deleteEvent,
     auctionSessions, setAuctionSessions, deleteAuctionSession,
     attendance, setAttendance,
@@ -2705,7 +2621,7 @@ export const GuildProvider = ({ children, initialData }) => {
     memberLootStats, auctionWishlist, historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings,
     isLoadingHistory, isFetchingRequests, auctionBids, isOfflineMode, showToast, fetchHistoricalData, fetchGlobalData, fetchRequests,
     hasMoreEvents, loadingHistory, fetchFullHistory,
-    deleteEvent, deleteAuctionSession, deleteMember,
+    deleteEvent, deleteAuctionSession, deleteMember, updateMemberStatus,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
     officerActivities, broadcastActivity, broadcastStateSync, submitAbsence, removeAbsence,
     channelStatus

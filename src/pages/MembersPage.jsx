@@ -8,7 +8,7 @@ import StatePanel from '../components/common/StatePanel';
 import { writeAuditLog } from "../utils/audit";
 
 function MembersPage({ onViewProfile }) {
-  const { members, setMembers, deleteMember, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers, broadcastStateSync } = useGuild();
+  const { members, setMembers, deleteMember, updateMemberStatus, showToast, isAdmin, isOfficer, isArchitect, currentUser, onlineUsers: _onlineUsers, broadcastStateSync } = useGuild();
   const onlineUsers = Array.isArray(_onlineUsers) ? _onlineUsers : [];
   const MEMBER_DRAFT_KEY = "draft_member_modal_v1";
   const MEMBERS_PRESETS_KEY = "members_view_presets_v1";
@@ -106,23 +106,24 @@ function MembersPage({ onViewProfile }) {
 
   const toggleArchive = (id) => {
     const isRestoring = statusFilter === "left";
-    const beforeMembers = members;
-    const nextMembers = members.map(m => m.memberId === id ? { ...m, status: isRestoring ? "active" : "left" } : m);
-    setMembers(nextMembers);
-    const updatedMember = nextMembers.find(m => m.memberId === id);
-    if (updatedMember && broadcastStateSync) {
-      broadcastStateSync('roster', updatedMember);
-    }
-    showToast(isRestoring ? "Member restored" : "Member archived", "success");
-    showToast(`Action applied to ${members.find(x => x.memberId === id)?.ign || id}`, "info", {
-      label: "Undo",
-      onClick: () => {
-        setMembers(beforeMembers);
-        showToast("Undo successful", "success");
-      }
-    });
+    const newStatus = isRestoring ? "active" : "left";
+    
+    // Immediate DB Update (prevents background sync race conditions)
+    updateMemberStatus(id, newStatus);
+    
+    // Local state and tab switch
+    setStatusFilter(newStatus);
+    showToast(isRestoring ? "Member restored to Active tab" : "Member archived → moved to Left tab", "success");
+    
+    // Audit Log
     const m = members.find(x => x.memberId === id);
-    writeAuditLog(currentUser?.email, currentUser?.displayName || currentUser?.email, isRestoring ? "member_restore" : "member_archive", `${isRestoring ? "Restored" : "Archived"} member ${m?.ign} (${id})`);
+    writeAuditLog(
+      currentUser?.email,
+      currentUser?.displayName || currentUser?.email,
+      isRestoring ? "member_restore" : "member_archive",
+      `${isRestoring ? "Restored" : "Archived"} member ${m?.ign || id} (${id})`
+    );
+
   };
 
   const deleteMemberRecord = async (id) => {
