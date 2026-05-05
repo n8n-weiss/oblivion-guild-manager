@@ -307,7 +307,7 @@ export const GuildProvider = ({ children, initialData }) => {
   const GLOBAL_CACHE_KEY = "global_guild_data_v5";
   const GLOBAL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
-  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData) => {
+  const processFetchedData = useCallback((rosterData, eventsData, absenceData, metaData, bidsData, attendanceData, performanceData, eoRatingsData, auctionSessionsData, isCache = false) => {
     if (Array.isArray(rosterData)) {
       const mappedMembers = rosterData.map(r => ({ 
         ...r,
@@ -320,7 +320,7 @@ export const GuildProvider = ({ children, initialData }) => {
       }));
 
       setMembers(mappedMembers);
-      prevData.current.members = [...mappedMembers];
+      if (!isCache) prevData.current.members = [...mappedMembers];
     }
 
     if (Array.isArray(eventsData)) {
@@ -331,9 +331,7 @@ export const GuildProvider = ({ children, initialData }) => {
       const mappedEvents = eventsData.map(e => {
         const eventId = e.event_id || e.eventId;
         
-        // Flatten nested attendance if present
         if (e.attendance_data && typeof e.attendance_data === 'object' && Object.keys(e.attendance_data).length > 0) {
-
           Object.entries(e.attendance_data).forEach(([mId, status]) => {
             if (!allAtt.find(a => a.eventId === eventId && a.memberId === mId)) {
               allAtt.push({ eventId, memberId: mId, status });
@@ -341,7 +339,6 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         }
 
-        // Flatten nested performance if present
         if (e.performance_data && typeof e.performance_data === 'object' && Object.keys(e.performance_data).length > 0) {
           Object.entries(e.performance_data).forEach(([mId, p]) => {
             if (!allPerf.find(perf => perf.eventId === eventId && perf.memberId === mId)) {
@@ -359,7 +356,6 @@ export const GuildProvider = ({ children, initialData }) => {
           });
         }
 
-        // Flatten nested EO ratings if present
         if (e.eo_ratings_data && typeof e.eo_ratings_data === 'object' && Object.keys(e.eo_ratings_data).length > 0) {
           Object.entries(e.eo_ratings_data).forEach(([mId, rating]) => {
             if (!allEo.find(r => r.eventId === eventId && r.memberId === mId)) {
@@ -390,10 +386,12 @@ export const GuildProvider = ({ children, initialData }) => {
       setPerformance(allPerf);
       setEoRatings(allEo);
       
-      prevData.current.events = [...mappedEvents];
-      prevData.current.attendance = [...allAtt];
-      prevData.current.performance = [...allPerf];
-      prevData.current.eoRatings = [...allEo];
+      if (!isCache) {
+        prevData.current.events = [...mappedEvents];
+        prevData.current.attendance = [...allAtt];
+        prevData.current.performance = [...allPerf];
+        prevData.current.eoRatings = [...allEo];
+      }
     }
 
     if (Array.isArray(absenceData)) {
@@ -408,10 +406,10 @@ export const GuildProvider = ({ children, initialData }) => {
           createdAt: a.created_at || a.createdAt
         }));
         setAbsences(mappedAbsences);
-        prevData.current.absences = [...mappedAbsences];
+        if (!isCache) prevData.current.absences = [...mappedAbsences];
       } catch (err) {
         console.error("Absence mapping error:", err);
-        setAbsences(absenceData); // Fallback to raw data
+        setAbsences(absenceData);
       }
     }
 
@@ -420,7 +418,7 @@ export const GuildProvider = ({ children, initialData }) => {
       const discordGroup = metaData.find(m => m.key === 'discord')?.data || {};
       const battlelogGroup = metaData.find(m => m.key === 'battlelog')?.data || {};
 
-      const eoRatings = Array.isArray(metaData.find(m => m.key === 'eoRatings')?.data) ? metaData.find(m => m.key === 'eoRatings').data : [];
+      const eoRatingsFromMeta = Array.isArray(metaData.find(m => m.key === 'eoRatings')?.data) ? metaData.find(m => m.key === 'eoRatings').data : [];
       
       const auctionTemplates = Array.isArray(auctionGroup.auctionTemplates) ? auctionGroup.auctionTemplates : [];
       const resourceCategories = Array.isArray(auctionGroup.resourceCategories) ? auctionGroup.resourceCategories : ["Card Album", "Light & Dark"];
@@ -428,23 +426,24 @@ export const GuildProvider = ({ children, initialData }) => {
       const discordConfig = discordGroup.discord || {};
       const battlelogConfig = battlelogGroup || {};
 
-      setEoRatings(eoRatings);
+      setEoRatings(prev => eoRatingsFromMeta.length > 0 ? eoRatingsFromMeta : prev);
       setAuctionTemplates(auctionTemplates);
       setResourceCategories(resourceCategories);
       setDiscordConfig(discordConfig);
       setBattlelogConfig(battlelogConfig);
 
-      prevData.current.eoRatings = [...eoRatings];
-      // Removed stale outer auctionSessions reference that was causing continuous re-saves and data wiping
-      prevData.current.auctionTemplates = [...auctionTemplates];
-      prevData.current.resourceCategories = [...resourceCategories];
-      prevData.current.discordConfig = { ...discordConfig };
-      prevData.current.battlelogConfig = { ...battlelogConfig };
+      if (!isCache) {
+        prevData.current.eoRatings = [...eoRatingsFromMeta];
+        prevData.current.auctionTemplates = [...auctionTemplates];
+        prevData.current.resourceCategories = [...resourceCategories];
+        prevData.current.discordData = { ...discordConfig };
+        prevData.current.battlelogConfig = { ...battlelogConfig };
+      }
     }
 
     if (Array.isArray(auctionSessionsData)) {
       setAuctionSessions(auctionSessionsData);
-      prevData.current.auctionSessions = [...auctionSessionsData];
+      if (!isCache) prevData.current.auctionSessions = [...auctionSessionsData];
     }
 
     if (Array.isArray(bidsData)) {
@@ -471,11 +470,10 @@ export const GuildProvider = ({ children, initialData }) => {
         if (cached) {
           const { data, fetchedAt } = JSON.parse(cached);
           // Hydrate immediately so UI is not blank
-          processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData, data.auctionSessionsData);
+          processFetchedData(data.rosterData, data.eventsData, data.absenceData, data.metaData, data.bidsData, data.attendanceData, data.performanceData, data.eoRatingsData, data.auctionSessionsData, true);
           setSyncStatus("synced");
-          setLoading(false); // Stop the full-screen spinner as we have cached data to show
+          setLoading(false); 
           
-          // If cache is still very fresh, we can skip the background fetch
           if (Date.now() - fetchedAt < GLOBAL_CACHE_TTL && (data.rosterData && data.rosterData.length > 0)) {
             setLoading(false);
             return;
@@ -521,9 +519,16 @@ export const GuildProvider = ({ children, initialData }) => {
       const bidsData = bidsRes.ok ? await bidsRes.json() : [];
       let auctionSessionsData = await auctionSessionsRes.json();
 
+      // SMART MERGE: If server returns empty for auctions but we have them in state (from cache),
+      // it means they are likely pending sync or were just created. Preserve them.
+      if (auctionSessionsData.length === 0 && liveAuctionRef.current.auctionSessions.length > 0) {
+        console.warn("Supabase returned empty auctions, preserving local cache state.");
+        auctionSessionsData = liveAuctionRef.current.auctionSessions;
+      }
+
       setHasMoreEvents(eventsData.length >= 10);
 
-      // RECOVERY LOGIC: If the migration script dropped the data, restore from the user's local v3 cache before it's gone
+      // RECOVERY LOGIC
       if (auctionSessionsData.length === 0) {
         try {
           const oldCache = sessionStorage.getItem("global_guild_data_v3");
@@ -534,7 +539,6 @@ export const GuildProvider = ({ children, initialData }) => {
             
             if (recoveredSessions.length > 0) {
               console.warn("Recovering lost auction sessions from local v3 cache!");
-              // Post them back to the new table to save them
               await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
                 method: 'POST',
                 headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
@@ -1259,16 +1263,11 @@ export const GuildProvider = ({ children, initialData }) => {
   }, []);
 
 
-  // Auto-save to Supabase â€” smart dirty tracking
-  useEffect(() => {
-    // Only Staff/Architects should attempt to auto-save global data.
-    // Regular members can only view, so we skip the sync logic for them.
-    if (!canSeeRequestData) return;
-    if (!currentUser || authLoading || loading || syncStatus === "offline") return;
-    if (members.length === 0 && events.length === 0) return;
-    
-      const saveToSupabase = async () => {
-      // HARD SAFEGUARD: Never save if roster or events are empty when they weren't before
+  // Auto-save to Supabase — smart dirty tracking
+  const saveToSupabase = useCallback(async () => {
+    if (loading || authLoading || !currentUser || !isOfficer) return;
+
+    // HARD SAFEGUARD: Never save if roster or events are empty when they weren't before
     const prevMemberCount = prevData.current.members?.length || 0;
     const prevEventCount = prevData.current.events?.length || 0;
 
@@ -1284,294 +1283,270 @@ export const GuildProvider = ({ children, initialData }) => {
       return;
     }
 
-    // Additional check: Don't allow saving if count dropped by more than 20% suddenly (unless intentional)
-    if (prevMemberCount > 10 && members.length < prevMemberCount * 0.8) {
-       console.warn("[SAFEGUARD] Large data drop detected. Verifying before save...");
-       // For now, we allow it but log it. In a stricter mode, we could block it.
-    }
-
     setSyncStatus("saving");
       
-      // Prevent saving if attendance/performance state just "vanished" (potential fetch error)
-      if (attendance.length === 0 && (prevData.current.attendance?.length || 0) > 0) {
-        console.error("[SAFEGUARD] Aborting save: Attendance records vanished from state!");
-        return;
-      }
-      if (performance.length === 0 && (prevData.current.performance?.length || 0) > 0) {
-        console.error("[SAFEGUARD] Aborting save: Performance records vanished from state!");
-        return;
-      }
+    // Prevent saving if attendance/performance state just "vanished"
+    if (attendance.length === 0 && (prevData.current.attendance?.length || 0) > 0) {
+      console.error("[SAFEGUARD] Aborting save: Attendance records vanished from state!");
+      return;
+    }
+    if (performance.length === 0 && (prevData.current.performance?.length || 0) > 0) {
+      console.error("[SAFEGUARD] Aborting save: Performance records vanished from state!");
+      return;
+    }
 
-      setSyncStatus("saving");
-      try {
-        const headers = getAuthHeaders();
+    try {
+      const headers = getAuthHeaders();
 
-        // --- 1. Roster ---
-        const prevMemberMap = new Map(
-          (prevData.current.members || []).map(m => [m.memberId, JSON.stringify({
-            memberId: m.memberId,
-            ign: m.ign,
-            class: m.class,
-            role: m.role || 'DPS',
-            discord: m.discord || '',
-            guildRank: m.guildRank,
-            status: m.status || 'active',
-            level: Number(m.level || 0),
-            cp: Number(m.cp || 0)
-          })])
-        );
-        const dirtyMembers = members.filter(m => {
-          const currentStr = JSON.stringify({
-            memberId: m.memberId,
-            ign: m.ign,
-            class: m.class,
-            role: m.role || 'DPS',
-            discord: m.discord || '',
-            guildRank: m.guildRank,
-            status: m.status || 'active',
-            level: Number(m.level || 0),
-            cp: Number(m.cp || 0)
-          });
-          return currentStr !== prevMemberMap.get(m.memberId);
+      // --- 1. Roster ---
+      const prevMemberMap = new Map(
+        (prevData.current.members || []).map(m => [m.memberId, JSON.stringify({
+          memberId: m.memberId,
+          ign: m.ign,
+          class: m.class,
+          role: m.role || 'DPS',
+          discord: m.discord || '',
+          guildRank: m.guildRank,
+          status: m.status || 'active',
+          level: Number(m.level || 0),
+          cp: Number(m.cp || 0)
+        })])
+      );
+      const dirtyMembers = members.filter(m => {
+        const currentStr = JSON.stringify({
+          memberId: m.memberId,
+          ign: m.ign,
+          class: m.class,
+          role: m.role || 'DPS',
+          discord: m.discord || '',
+          guildRank: m.guildRank,
+          status: m.status || 'active',
+          level: Number(m.level || 0),
+          cp: Number(m.cp || 0)
         });
+        return currentStr !== prevMemberMap.get(m.memberId);
+      });
 
-        if (dirtyMembers.length > 0) {
-          const payload = dirtyMembers.map(m => ({
-            member_id: m.memberId,
-            ign: m.ign,
-            class: m.class,
-            role: m.role || 'DPS',
-            discord: m.discord || '',
-            guild_rank: m.guildRank,
-            status: m.status || 'active',
-            level: Number(m.level || 0),
-            cp: Number(m.cp || 0),
-            metadata: m
-          }));
-
-
-          const res = await fetch(`${supabaseUrl}/rest/v1/roster`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(`Roster Save Failed: ${res.status}`);
-          prevData.current.members = [...members];
-        } else {
-          // Always update cache
-          prevData.current.members = [...members];
-        }
-
-        // --- 2. Metadata ---
-        const auctionMetaData = { auctionTemplates, resourceCategories }; // removed auctionSessions from here
-        if (JSON.stringify(auctionMetaData) !== JSON.stringify(prevData.current.auctionMetaData)) {
-          const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify({ key: 'auction', data: auctionMetaData, updated_at: new Date().toISOString() })
-          });
-          if (!res.ok) throw new Error(`Auction Metadata Save Failed: ${res.status}`);
-          prevData.current.auctionMetaData = { ...auctionMetaData };
-        }
-
-        // --- 2.1 Auction Sessions (Individual Rows) ---
-        const prevAuctionMap = new Map(
-          (prevData.current.auctionSessions || []).map(s => [s.id, JSON.stringify({
-            id: s.id,
-            name: s.name,
-            date: s.date,
-            columns: s.columns || [],
-            members: s.members || [],
-            cells: s.cells || {}
-          })])
-        );
-        const dirtyAuctions = auctionSessions.filter(s => {
-          const currentStr = JSON.stringify({
-            id: s.id,
-            name: s.name,
-            date: s.date,
-            columns: s.columns || [],
-            members: s.members || [],
-            cells: s.cells || {}
-          });
-          return currentStr !== prevAuctionMap.get(s.id);
-        });
-
-        if (dirtyAuctions.length > 0) {
-          const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(dirtyAuctions)
-          });
-          if (!res.ok) throw new Error(`Auction Sessions Save Failed: ${res.status}`);
-          prevData.current.auctionSessions = [...auctionSessions];
-        } else {
-          // Always update cache to match current state
-          prevData.current.auctionSessions = [...auctionSessions];
-        }
-
-        if (JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordData)) {
-          const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify({ key: 'discord', data: { discord: discordConfig }, updated_at: new Date().toISOString() })
-          });
-          if (!res.ok) throw new Error(`Discord Save Failed: ${res.status}`);
-          prevData.current.discordData = { ...discordConfig };
-        }
-
-        // --- 3. Events ---
-        const attByEvent = {};
-        attendance.forEach(a => {
-          if (!attByEvent[a.eventId]) attByEvent[a.eventId] = {};
-          attByEvent[a.eventId][a.memberId] = a.status;
-        });
-        const perfByEvent = {};
-        performance.forEach(p => {
-          if (!perfByEvent[p.eventId]) perfByEvent[p.eventId] = {};
-          // eslint-disable-next-line no-unused-vars
-          const { eventId, memberId, ...rest } = p;
-          perfByEvent[p.eventId][memberId] = rest;
-        });
-        const eoByEvent = {};
-        eoRatings.forEach(r => {
-          if (!eoByEvent[r.eventId]) eoByEvent[r.eventId] = {};
-          eoByEvent[r.eventId][r.memberId] = r.rating;
-        });
-
-        const mappedEvents = events.map(e => ({
-          ...e,
-          attendanceData: attByEvent[e.eventId] || {},
-          performanceData: perfByEvent[e.eventId] || {},
-          eoRatingsData: eoByEvent[e.eventId] || {}
+      if (dirtyMembers.length > 0) {
+        const payload = dirtyMembers.map(m => ({
+          member_id: m.memberId,
+          ign: m.ign,
+          class: m.class,
+          role: m.role || 'DPS',
+          discord: m.discord || '',
+          guild_rank: m.guildRank,
+          status: m.status || 'active',
+          level: Number(m.level || 0),
+          cp: Number(m.cp || 0),
+          metadata: m
         }));
 
-        const prevEventMap = new Map(
-          (prevData.current.events || []).map(e => [e.eventId, JSON.stringify({
-            eventId: e.eventId,
-            eventDate: e.eventDate,
-            eventType: e.eventType || e.type,
-            title: e.title || '',
-            glMode: e.glMode || 'vale',
-            battlelogAudit: e.battlelogAudit || null,
-            attendanceData: e.attendanceData || {},
-            performanceData: e.performanceData || {},
-            eoRatingsData: e.eoRatingsData || {}
-          })])
-        );
-
-        const dirtyEvents = mappedEvents.filter(e => {
-          const currentStr = JSON.stringify({
-            eventId: e.eventId,
-            eventDate: e.eventDate,
-            eventType: e.eventType || e.type,
-            title: e.title || '',
-            glMode: e.glMode || 'vale',
-            battlelogAudit: e.battlelogAudit || null,
-            attendanceData: e.attendanceData || {},
-            performanceData: e.performanceData || {},
-            eoRatingsData: e.eoRatingsData || {}
-          });
-          return currentStr !== prevEventMap.get(e.eventId);
+        const res = await fetch(`${supabaseUrl}/rest/v1/roster`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(payload)
         });
-
-        if (dirtyEvents.length > 0) {
-          const payload = dirtyEvents.map(e => ({
-            event_id: e.eventId,
-            event_date: e.eventDate,
-            type: e.eventType || e.type,
-            title: e.title || '',
-            auditor: e.battlelogAudit?.assignedIgn || e.auditor || '',
-            gl_mode: e.glMode || 'vale',
-            battlelog_audit: e.battlelogAudit || null,
-            digest_meta: e.digestMeta || null,
-            attendance_data: e.attendanceData || {},
-            performance_data: e.performanceData || {},
-            eo_ratings_data: e.eoRatingsData || {},
-            created_at: e.createdAt || new Date().toISOString()
-          }));
-
-          const res = await fetch(`${supabaseUrl}/rest/v1/events`, {
-            method: 'POST',
-            headers: { 
-              ...headers,
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(`Events Save Failed: ${res.status}`);
-          prevData.current.events = [...mappedEvents];
-        } else {
-          prevData.current.events = [...mappedEvents];
-        }
-
-        // --- 4. Absences ---
-        const prevAbsenceMap = new Map(
-          (prevData.current.absences || []).map(a => [a.id, JSON.stringify(a)])
-        );
-        const dirtyAbsences = absences.filter(a =>
-          a.id && JSON.stringify(a) !== prevAbsenceMap.get(a.id)
-        );
-        if (dirtyAbsences.length > 0) {
-          const payload = dirtyAbsences.map(a => ({
-            id: a.id,
-            member_id: a.memberId,
-            event_type: a.eventType,
-            event_date: a.eventDate,
-            start_date: a.eventDate,
-            end_date: a.eventDate,
-            reason: a.reason,
-            online_status: a.onlineStatus,
-            status: a.status || 'pending'
-          }));
-
-          const res = await fetch(`${supabaseUrl}/rest/v1/absences`, {
-            method: 'POST',
-            headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(`Absences Save Failed: ${res.status}`);
-          prevData.current.absences = [...absences];
-        }
-
-        setSyncStatus("synced");
-
-        // Update local cache after successful save to ensure freshness on refresh
-        sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
-          data: { 
-            rosterData: members.map(m => ({ member_id: m.memberId, ign: m.ign, class: m.class, guild_rank: m.guildRank, status: m.status, level: m.level, cp: m.cp, metadata: m })), 
-            eventsData: mappedEvents.map(e => ({ event_id: e.eventId, event_date: e.eventDate, type: e.eventType || e.type, title: e.title, auditor: e.auditor, gl_mode: e.glMode, battlelog_audit: e.battlelogAudit, digest_meta: e.digestMeta, attendance_data: e.attendanceData, performance_data: e.performanceData, eo_ratings_data: e.eoRatingsData })),
-            absenceData: absences.map(a => ({ id: a.id, member_id: a.memberId, start_date: a.eventDate, end_date: a.eventDate, event_date: a.eventDate, event_type: a.eventType, reason: a.reason, status: a.status, online_status: a.onlineStatus })),
-            metaData: [{ key: 'auction', data: { auctionTemplates, resourceCategories } }, { key: 'discord', data: { discord: discordConfig } }],
-            bidsData: auctionWishlist.map(b => ({ member_id: b.member_id, bids: b.bids, updated_at: b.updated_at })),
-            auctionSessionsData: auctionSessions,
-            attendanceData: attendance,
-            performanceData: performance,
-            eoRatingsData: eoRatings
-          },
-          fetchedAt: Date.now()
-        }));
-      } catch (err) {
-        console.error("Supabase save error:", err);
-        setSyncStatus("error");
+        if (!res.ok) throw new Error(`Roster Save Failed: ${res.status}`);
+        prevData.current.members = [...members];
+      } else {
+        prevData.current.members = [...members];
       }
-    };
 
+      // --- 2. Metadata ---
+      const auctionMetaData = { auctionTemplates, resourceCategories };
+      if (JSON.stringify(auctionMetaData) !== JSON.stringify(prevData.current.auctionMetaData)) {
+        const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify({ key: 'auction', data: auctionMetaData, updated_at: new Date().toISOString() })
+        });
+        if (!res.ok) throw new Error(`Auction Metadata Save Failed: ${res.status}`);
+        prevData.current.auctionMetaData = { ...auctionMetaData };
+      }
+
+      // --- 2.1 Auction Sessions (Individual Rows) ---
+      const prevAuctionMap = new Map(
+        (prevData.current.auctionSessions || []).map(s => [s.id, JSON.stringify({
+          id: s.id,
+          name: s.name,
+          date: s.date,
+          columns: s.columns || [],
+          members: s.members || [],
+          cells: s.cells || {}
+        })])
+      );
+      const dirtyAuctions = auctionSessions.filter(s => {
+        const currentStr = JSON.stringify({
+          id: s.id,
+          name: s.name,
+          date: s.date,
+          columns: s.columns || [],
+          members: s.members || [],
+          cells: s.cells || {}
+        });
+        return currentStr !== prevAuctionMap.get(s.id);
+      });
+
+      if (dirtyAuctions.length > 0) {
+        const res = await fetch(`${supabaseUrl}/rest/v1/auction_sessions`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(dirtyAuctions)
+        });
+        if (!res.ok) throw new Error(`Auction Sessions Save Failed: ${res.status}`);
+        prevData.current.auctionSessions = [...auctionSessions];
+      } else {
+        prevData.current.auctionSessions = [...auctionSessions];
+      }
+
+      if (JSON.stringify(discordConfig) !== JSON.stringify(prevData.current.discordData)) {
+        const res = await fetch(`${supabaseUrl}/rest/v1/metadata`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify({ key: 'discord', data: { discord: discordConfig }, updated_at: new Date().toISOString() })
+        });
+        if (!res.ok) throw new Error(`Discord Save Failed: ${res.status}`);
+        prevData.current.discordData = { ...discordConfig };
+      }
+
+      // --- 3. Events ---
+      const attByEvent = {};
+      attendance.forEach(a => {
+        if (!attByEvent[a.eventId]) attByEvent[a.eventId] = {};
+        attByEvent[a.eventId][a.memberId] = a.status;
+      });
+      const perfByEvent = {};
+      performance.forEach(p => {
+        if (!perfByEvent[p.eventId]) perfByEvent[p.eventId] = {};
+        const { eventId: _eventId, memberId, ...rest } = p;
+        perfByEvent[p.eventId][memberId] = rest;
+      });
+      const eoByEvent = {};
+      eoRatings.forEach(r => {
+        if (!eoByEvent[r.eventId]) eoByEvent[r.eventId] = {};
+        eoByEvent[r.eventId][r.memberId] = r.rating;
+      });
+
+      const mappedEvents = events.map(e => ({
+        ...e,
+        attendanceData: attByEvent[e.eventId] || {},
+        performanceData: perfByEvent[e.eventId] || {},
+        eoRatingsData: eoByEvent[e.eventId] || {}
+      }));
+
+      const prevEventMap = new Map(
+        (prevData.current.events || []).map(e => [e.eventId, JSON.stringify({
+          eventId: e.eventId,
+          eventDate: e.eventDate,
+          eventType: e.eventType || e.type,
+          title: e.title || '',
+          glMode: e.glMode || 'vale',
+          battlelogAudit: e.battlelogAudit || null,
+          attendanceData: e.attendanceData || {},
+          performanceData: e.performanceData || {},
+          eoRatingsData: e.eoRatingsData || {}
+        })])
+      );
+
+      const dirtyEvents = mappedEvents.filter(e => {
+        const currentStr = JSON.stringify({
+          eventId: e.eventId,
+          eventDate: e.eventDate,
+          eventType: e.eventType || e.type,
+          title: e.title || '',
+          glMode: e.glMode || 'vale',
+          battlelogAudit: e.battlelogAudit || null,
+          attendanceData: e.attendanceData || {},
+          performanceData: e.performanceData || {},
+          eoRatingsData: e.eoRatingsData || {}
+        });
+        return currentStr !== prevEventMap.get(e.eventId);
+      });
+
+      if (dirtyEvents.length > 0) {
+        const payload = dirtyEvents.map(e => ({
+          event_id: e.eventId,
+          event_date: e.eventDate,
+          type: e.eventType || e.type,
+          title: e.title || '',
+          auditor: e.battlelogAudit?.assignedIgn || e.auditor || '',
+          gl_mode: e.gl_mode || 'vale',
+          battlelog_audit: e.battlelogAudit || null,
+          digest_meta: e.digestMeta || null,
+          attendance_data: e.attendanceData || {},
+          performance_data: e.performanceData || {},
+          eo_ratings_data: e.eoRatingsData || {},
+          created_at: e.createdAt || new Date().toISOString()
+        }));
+
+        const res = await fetch(`${supabaseUrl}/rest/v1/events`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`Events Save Failed: ${res.status}`);
+        prevData.current.events = [...mappedEvents];
+      } else {
+        prevData.current.events = [...mappedEvents];
+      }
+
+      // --- 4. Absences ---
+      const prevAbsenceMap = new Map(
+        (prevData.current.absences || []).map(a => [a.id, JSON.stringify(a)])
+      );
+      const dirtyAbsences = absences.filter(a =>
+        a.id && JSON.stringify(a) !== prevAbsenceMap.get(a.id)
+      );
+      if (dirtyAbsences.length > 0) {
+        const payload = dirtyAbsences.map(a => ({
+          id: a.id,
+          member_id: a.memberId,
+          event_type: a.eventType,
+          event_date: a.eventDate,
+          start_date: a.eventDate,
+          end_date: a.eventDate,
+          reason: a.reason,
+          online_status: a.onlineStatus,
+          status: a.status || 'pending'
+        }));
+
+        const res = await fetch(`${supabaseUrl}/rest/v1/absences`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`Absences Save Failed: ${res.status}`);
+        prevData.current.absences = [...absences];
+      }
+
+      setSyncStatus("synced");
+
+      sessionStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify({
+        data: { 
+          rosterData: members.map(m => ({ member_id: m.memberId, ign: m.ign, class: m.class, guild_rank: m.guildRank, status: m.status, level: m.level, cp: m.cp, metadata: m })), 
+          eventsData: mappedEvents.map(e => ({ event_id: e.eventId, event_date: e.eventDate, type: e.eventType || e.type, title: e.title, auditor: e.auditor, gl_mode: e.glMode, battlelog_audit: e.battlelogAudit, digest_meta: e.digestMeta, attendance_data: e.attendanceData, performance_data: e.performanceData, eo_ratings_data: e.eoRatingsData })),
+          absenceData: absences.map(a => ({ id: a.id, member_id: a.memberId, start_date: a.eventDate, end_date: a.eventDate, event_date: a.eventDate, event_type: a.eventType, reason: a.reason, status: a.status, online_status: a.onlineStatus })),
+          metaData: [{ key: 'auction', data: { auctionTemplates, resourceCategories } }, { key: 'discord', data: { discord: discordConfig } }],
+          bidsData: auctionWishlist.map(b => ({ member_id: b.member_id, bids: b.bids, updated_at: b.updated_at })),
+          auctionSessionsData: auctionSessions,
+          attendanceData: attendance,
+          performanceData: performance,
+          eoRatingsData: eoRatings
+        },
+        fetchedAt: Date.now()
+      }));
+    } catch (err) {
+      console.error("Supabase save error:", err);
+      setSyncStatus("error");
+    }
+  }, [loading, authLoading, currentUser, isOfficer, members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings, getAuthHeaders, auctionWishlist, GLOBAL_CACHE_KEY]);
+
+  // --- Background Batch Synchronization Trigger ---
+  useEffect(() => {
+    if (loading || authLoading || !currentUser || !isOfficer) return;
     const timer = setTimeout(saveToSupabase, 8000);
     return () => clearTimeout(timer);
-  }, [members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings]);
+  }, [saveToSupabase, members, events, absences, auctionSessions, auctionTemplates, resourceCategories, discordConfig, attendance, performance, eoRatings, loading, authLoading, currentUser, isOfficer]);
 
 
   // --- Optimistic Local Persistence ---
@@ -2602,7 +2577,7 @@ export const GuildProvider = ({ children, initialData }) => {
     discordConfig, setDiscordConfig, sendDiscordEmbed, sendDiscordImage,
     battlelogConfig, setBattlelogConfig,
     resourceCategories, setResourceCategories,
-    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry,
+    metadataNotice, setMetadataNotice, metadataActivity, pendingAuctionConflict, resolveAuctionConflict, syncStatus, triggerSyncRetry, saveToSupabase,
     resetMonthlyScores,
     memberLootStats, auctionWishlist, submitWishlistRequest, removeWishlistRequest, updateWishlistMetadata,
     historicalEvents, historicalAttendance, historicalPerformance, historicalEoRatings, isLoadingHistory, fetchHistoricalData,
@@ -2624,7 +2599,7 @@ export const GuildProvider = ({ children, initialData }) => {
     deleteEvent, deleteAuctionSession, deleteMember, updateMemberStatus,
     approveJoinRequest, approveRequest, clearProcessedRequests, deleteJoinRequest, deleteRequest, markNotifRead, rejectJoinRequest, rejectRequest, removeWishlistRequest, resetMonthlyScores, resolveAuctionConflict, sendDiscordEmbed, sendDiscordImage, sendNotification, submitJoinRequest, submitReactivationRequest, submitRequest, submitWishlistRequest, triggerSyncRetry, updateWishlistMetadata,
     officerActivities, broadcastActivity, broadcastStateSync, submitAbsence, removeAbsence,
-    channelStatus
+    channelStatus, saveToSupabase
   ]);
 
   return (
