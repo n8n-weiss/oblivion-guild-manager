@@ -254,16 +254,17 @@ export const GuildProvider = ({ children, initialData }) => {
     discordConfig: {},
     battlelogConfig: {}
   });
-  const liveAuctionRef = useRef({ auctionSessions: [], auctionTemplates: [], resourceCategories: [] });
+  const liveDataRef = useRef({ auctionSessions: [], members: [], events: [], absences: [] });
   const saveBurstRef = useRef({ lastAt: 0, count: 0 });
-  const roleFetchedRef = useRef(false); // Prevents duplicate user_roles queries on login
+  const roleFetchedRef = useRef(false);
 
   const showToast = useCallback((message, type = "success", action = null) => {
     setToast({ message, type, action, key: Date.now() });
   }, []);
+
   useEffect(() => {
-    liveAuctionRef.current = { auctionSessions, auctionTemplates, resourceCategories };
-  }, [auctionSessions, auctionTemplates, resourceCategories]);
+    liveDataRef.current = { auctionSessions, members, events, absences };
+  }, [auctionSessions, members, events, absences]);
   useEffect(() => {
     // Track rapid edit bursts so we can coalesce save writes.
     const now = Date.now();
@@ -371,7 +372,7 @@ export const GuildProvider = ({ children, initialData }) => {
           eventType: e.type,
           title: e.title,
           auditor: e.auditor,
-          glMode: e.gl_mode || e.metadata?.glMode || 'vale',
+          glMode: e.gl_mode || e.glMode || e.metadata?.glMode || 'vale',
           battlelogAudit: e.battlelog_audit || e.metadata?.battlelogAudit || null,
           digestMeta: e.digest_meta || e.metadata?.digestMeta || null,
           attendanceData: e.attendance_data || {},
@@ -488,9 +489,7 @@ export const GuildProvider = ({ children, initialData }) => {
     try {
       prevData.current.isFetching = true;
       // Only show loading status if we don't have cached data yet
-      if (syncStatus !== "synced") {
-        setSyncStatus("loading");
-      }
+      setSyncStatus(prev => prev !== "synced" ? "loading" : prev);
       const headers = getAuthHeaders();
       // Optimization: Initial load only gets last 60 days to keep app snappy
       const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -519,11 +518,16 @@ export const GuildProvider = ({ children, initialData }) => {
       const bidsData = bidsRes.ok ? await bidsRes.json() : [];
       let auctionSessionsData = await auctionSessionsRes.json();
 
-      // SMART MERGE: If server returns empty for auctions but we have them in state (from cache),
-      // it means they are likely pending sync or were just created. Preserve them.
-      if (auctionSessionsData.length === 0 && liveAuctionRef.current.auctionSessions.length > 0) {
+      // SMART MERGE: If server returns empty but we have local state, preserve it.
+      // This prevents background sync from wiping unsaved work during network blips.
+      if (auctionSessionsData.length === 0 && liveDataRef.current.auctionSessions.length > 0) {
         console.warn("Supabase returned empty auctions, preserving local cache state.");
-        auctionSessionsData = liveAuctionRef.current.auctionSessions;
+        auctionSessionsData = liveDataRef.current.auctionSessions;
+      }
+      if (rosterData.length === 0 && liveDataRef.current.members.length > 0) {
+        console.warn("Supabase returned empty roster, preserving local state.");
+        // We keep the local ones but they'll be re-mapped in processFetchedData
+        rosterData.push(...liveDataRef.current.members.map(m => ({ ...m, member_id: m.memberId, guild_rank: m.guildRank, metadata: m })));
       }
 
       setHasMoreEvents(eventsData.length >= 10);
@@ -568,7 +572,7 @@ export const GuildProvider = ({ children, initialData }) => {
       setLoading(false);
       prevData.current.isFetching = false;
     }
-  }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL, syncStatus]);
+  }, [showToast, getAuthHeaders, currentUser, processFetchedData, GLOBAL_CACHE_TTL]);
 
   const fetchFullHistory = useCallback(async () => {
     if (loadingHistory || !hasMoreEvents) return;
@@ -1470,7 +1474,7 @@ export const GuildProvider = ({ children, initialData }) => {
           type: e.eventType || e.type,
           title: e.title || '',
           auditor: e.battlelogAudit?.assignedIgn || e.auditor || '',
-          gl_mode: e.gl_mode || 'vale',
+          gl_mode: e.glMode || e.gl_mode || 'vale',
           battlelog_audit: e.battlelogAudit || null,
           digest_meta: e.digestMeta || null,
           attendance_data: e.attendanceData || {},
