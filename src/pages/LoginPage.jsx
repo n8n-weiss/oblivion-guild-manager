@@ -35,7 +35,7 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const uidHintOk = !email || /@oblivion\.com$/i.test(email.trim());
-  const normalizeDiscord = (value = "") => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalizeDiscord = (value = "") => value.toLowerCase().trim();
   const buildOblUid = (raw = "") => {
     let clean = String(raw || "").toUpperCase().replace(/\s/g, "");
     if (clean.startsWith("OBL")) clean = clean.substring(3);
@@ -120,7 +120,7 @@ function LoginPage() {
 
 
       if (rosterMatch) {
-        const discordHandle = (rosterMatch.discord || rosterMatch.ign || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const discordHandle = (rosterMatch.discord || rosterMatch.ign || "").toLowerCase().trim();
         const calculatedEmail = `${discordHandle}@oblivion.com`;
         
         const isStaff = ["Admin", "Officer", "Commander", "Vice Guild Master", "Guild Master", "System Architect (Creator)"].includes(rosterMatch.guild_rank);

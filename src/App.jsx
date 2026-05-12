@@ -371,7 +371,7 @@ export default function App() {
             <PageErrorBoundary>
               <React.Suspense fallback={<DashboardSkeleton />}>
                 {effectivePage === "dashboard" && <PageWrapper id="dashboard"><Dashboard /></PageWrapper>}
-                {effectivePage === "members" && <PageWrapper id="members"><MembersPage /></PageWrapper>}
+                {effectivePage === "members" && <PageWrapper id="members"><MembersPage onViewProfile={(m) => setProfileMember(m.memberId)} /></PageWrapper>}
                 {effectivePage === "member-profile" && (
                   <PageWrapper id="profile">
                     <MemberProfilePage 

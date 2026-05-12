@@ -47,7 +47,7 @@ function MembersPage({ onViewProfile }) {
   });
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ memberId: "", ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
+  const [form, setForm] = useState({ memberId: "", ign: "", discord: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] });
   const [memberEdits, setMemberEdits] = useState({}); // Tracking bulk changes
 
   const RANK_ORDER = {
@@ -80,7 +80,7 @@ function MembersPage({ onViewProfile }) {
 
   const openAdd = () => {
     const nextNum = (members.length + 1).toString().padStart(3, "0");
-    const fresh = { memberId: `OBL${nextNum}`, ign: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] };
+    const fresh = { memberId: `OBL${nextNum}`, ign: "", discord: "", class: "", role: "DPS", guildRank: "Member", joinDate: new Date().toISOString().split("T")[0] };
     let nextForm = fresh;
     try {
       const raw = localStorage.getItem(MEMBER_DRAFT_KEY);
@@ -574,6 +574,10 @@ function MembersPage({ onViewProfile }) {
             <div className="form-group">
               <label className="form-label">IGN</label>
               <input className="form-input" placeholder="In-game name" value={form.ign} onChange={e => setForm(f => ({ ...f, ign: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Discord Handle</label>
+              <input className="form-input" placeholder="e.g. reaper" value={form.discord || ""} onChange={e => setForm(f => ({ ...f, discord: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Class</label>
